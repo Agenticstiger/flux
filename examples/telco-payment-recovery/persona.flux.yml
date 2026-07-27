@@ -1,0 +1,14 @@
+fluxVersion: "0.3.0"
+kind: Persona
+id: persona-pragmatic-family
+name: Pragmatic Family Subscriber
+metadata:
+  owner:
+    team: growth-lab
+spec:
+  demographics: { ageBand: "35-44", household: family }
+  traits: { digitalFluency: 0.6, financialLiteracy: 0.4 }
+  worldview:
+    riskTolerance: low
+    trustInInstitutions: 0.55
+    trendFollowing: 0.3

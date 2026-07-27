@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validator dependencies
+        run: pip install jsonschema pyyaml rfc3339-validator
+      - name: Schema is itself valid (2020-12)
+        run: python -c "import json, jsonschema; jsonschema.Draft202012Validator.check_schema(json.load(open('schema/flux-schema-0.3.0.json')))"
+      - name: latest alias matches current release
+        run: cmp schema/flux-schema-0.3.0.json schema/flux-schema-latest.json
+      - name: Validate example bundles (schema + cross-refs + FLUID seam)
+        run: python scripts/validate.py
+      - name: Regression suite (0.2.0 false-passes must fail)
+        run: python tests/test_regression.py

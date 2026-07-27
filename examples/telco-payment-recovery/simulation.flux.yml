@@ -1,0 +1,37 @@
+fluxVersion: "0.3.0"
+kind: Simulation
+id: sim-payment-recovery
+name: Payment Recovery Simulation
+metadata:
+  owner:
+    team: growth-lab
+agentPolicy:
+  allowedModels: [local-sovereign-8b]
+  tokenBudget: 200000
+  allowedUseCases: [persona_variation]
+  purposeLimitation: true
+skills:
+  - name: journey-improviser
+    skillRef: flux.skills.journey_improviser
+    purpose: persona_variation
+    model: local-sovereign-8b
+    tokenBudget: 50000
+spec:
+  worldRef: q3-retention-world
+  fidelity: deterministic
+  seed: 42
+  golden:
+    baselineDigest: "sha256:9f2c1a0b1e4d5c6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f"
+  timeBounds:
+    start: "2026-07-01T00:00:00Z"
+    end: "2026-09-30T23:59:59Z"
+  personaRefs: [persona-pragmatic-family]
+  segmentRefs: [seg-atrisk-tv]
+  signalRefs: [sig-payment-aborted]
+  campaignRefs: [cam-payment-recovery]
+  experimentRefs: [exp-recovery-ab]
+  moduleRefs: [module-payment-recovery]
+  emits:
+    - productRef: telco.gold.payment_recovery_moment
+      exposeId: payment_recovery_moment
+      fluidVersion: "0.7.5"

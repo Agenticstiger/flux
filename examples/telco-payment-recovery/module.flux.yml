@@ -1,0 +1,12 @@
+fluxVersion: "0.3.0"
+kind: Module
+id: module-payment-recovery
+name: Payment Recovery Module
+metadata:
+  owner:
+    team: growth-lab
+spec:
+  resources: [sig-payment-aborted, det-payment-aborted-burst, jr-payment-recovery, cam-payment-recovery]
+  binds:
+    - { port: event-envelope, config: { spec: cloudevents/1.0 } }
+    - { port: fluid-contract }
