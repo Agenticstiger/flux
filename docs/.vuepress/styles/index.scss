@@ -121,6 +121,22 @@ body {
   -webkit-text-fill-color: transparent;
   color: transparent;
   animation: ff-grad-flow 9s linear infinite;
+
+  // The backronym, set small under the wordmark. Resets the gradient
+  // text-clip the h1 applies so the pseudo-element renders in muted ink.
+  &::after {
+    content: "Flow Language for Universe eXperimentation";
+    display: block;
+    margin-top: 0.9rem;
+    background: none;
+    -webkit-text-fill-color: var(--vp-c-text-mute);
+    color: var(--vp-c-text-mute);
+    font-family: var(--ff-font-mono);
+    font-size: clamp(0.74rem, 1.3vw, 0.95rem);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    line-height: 1.5;
+  }
 }
 
 .vp-hero-description {
