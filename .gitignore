@@ -3,3 +3,8 @@ __pycache__/
 .DS_Store
 node_modules/
 .venv/
+docs/.vuepress/dist/
+docs/.vuepress/.cache/
+docs/.vuepress/.temp/
+docs/.vuepress/public/schema/
+docs/.vuepress/public/schema-diffs/

@@ -1,0 +1,42 @@
+{
+  "name": "flux-docs",
+  "version": "0.3.0",
+  "description": "FLUX — the open, declarative standard for governed synthetic customer universes.",
+  "homepage": "https://agenticstiger.github.io/flux/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Agenticstiger/flux.git"
+  },
+  "scripts": {
+    "sync:assets": "node scripts/sync-public-assets.mjs",
+    "docs:dev": "npm run sync:assets && vuepress dev docs",
+    "docs:build": "npm run sync:assets && vuepress build docs",
+    "docs:preview": "vuepress preview docs"
+  },
+  "keywords": [
+    "flux",
+    "fluid",
+    "digital-twin",
+    "synthetic-data",
+    "simulation",
+    "data-products",
+    "declarative",
+    "json-schema"
+  ],
+  "author": "Agenticstiger",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@fontsource-variable/geist": "^5.2.9",
+    "@fontsource-variable/geist-mono": "^5.2.8",
+    "@vuepress/bundler-vite": "2.0.0-rc.30",
+    "@vuepress/client": "2.0.0-rc.30",
+    "@vuepress/plugin-copy-code": "2.0.0-rc.130",
+    "@vuepress/plugin-markdown-chart": "2.0.0-rc.130",
+    "@vuepress/plugin-search": "2.0.0-rc.130",
+    "@vuepress/plugin-sitemap": "2.0.0-rc.130",
+    "@vuepress/theme-default": "2.0.0-rc.130",
+    "mermaid": "^11.16.0",
+    "sass-embedded": "^1.99.0",
+    "vuepress": "2.0.0-rc.30"
+  }
+}
