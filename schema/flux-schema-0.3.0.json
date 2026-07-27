@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenticstiger.github.io/flux-spec/schema/flux-schema-0.3.0.json",
+  "$id": "https://agenticstiger.github.io/flux/schema/flux-schema-0.3.0.json",
   "title": "FLUX Document Schema",
   "description": "Open standard JSON Schema for the FLUX v0.3.0 declarative specification. A FLUX document declares one of nineteen kinds; the discovery-side sibling of the FLUID data-product contract standard. Cross-document checks (reference resolution, weight sums, state membership, FLUID seam conformance) are enforced by the offline reference validator, not by this schema alone.",
   "type": "object",
@@ -166,6 +166,7 @@
               },
               "worldview": {
                 "type": "object",
+                "minProperties": 1,
                 "additionalProperties": false,
                 "properties": {
                   "riskTolerance": { "type": "string", "enum": ["low", "medium", "high"] },
@@ -268,7 +269,7 @@
               "type": {
                 "anyOf": [
                   { "type": "string", "enum": ["sms", "email", "push", "api_gateway", "in_app"] },
-                  { "type": "string", "pattern": "^x-[a-z][a-z0-9_]*$" }
+                  { "type": "string", "pattern": "^x-[a-z][a-z0-9_.-]*$" }
                 ],
                 "description": "Well-known channel type, or an x- prefixed extension type."
               },
@@ -404,6 +405,7 @@
               "personaReactions": {
                 "type": "object",
                 "minProperties": 1,
+                "propertyNames": { "$ref": "#/$defs/ref" },
                 "additionalProperties": {
                   "type": "object",
                   "required": ["successProbability"],
@@ -463,8 +465,8 @@
               "source": { "type": "string", "minLength": 1, "description": "CloudEvents 'source' context attribute." },
               "type": {
                 "type": "string",
-                "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)+$",
-                "description": "CloudEvents 'type' context attribute, reverse-DNS style, e.g. com.example.payment.aborted."
+                "pattern": "^[A-Za-z0-9]+([._-][A-Za-z0-9]+)*$",
+                "description": "CloudEvents 'type' context attribute. Reverse-DNS style is recommended (e.g. com.telco.payment.aborted) but any CE-legal dotted token is accepted, including single-label and mixed-case producer types like Microsoft.Storage.BlobCreated."
               },
               "dataschema": {
                 "type": "string",
@@ -735,6 +737,7 @@
               "emits": {
                 "type": "array",
                 "minItems": 1,
+                "uniqueItems": true,
                 "items": {
                   "type": "object",
                   "required": ["productRef", "exposeId", "fluidVersion"],
@@ -767,13 +770,13 @@
   "$defs": {
     "identifier": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]*$",
-      "description": "Lowercase alphanumeric with dots, underscores and hyphens; aligned with FLUID's identifier convention."
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9_]$|^[A-Za-z0-9_]$",
+      "description": "Identifier grammar, byte-identical to FLUID's $defs/identifier: alphanumerics and underscore, with dots/hyphens allowed inside but not at either end. Any legal FLUID product id is a legal FLUX ref and vice versa."
     },
     "ref": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9._-]*$",
-      "description": "A reference to the id of another document in the same bundle. Kind-correctness and resolution are enforced by the offline validator: a well-formed universe has no dangling links."
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*[A-Za-z0-9_]$|^[A-Za-z0-9_]$",
+      "description": "A reference to the id of another document in the same bundle (same grammar as identifier). Kind-correctness and resolution are enforced by the offline validator: a well-formed universe has no dangling links."
     },
     "refList": {
       "type": "array",
@@ -789,8 +792,8 @@
     "rfc3339": {
       "type": "string",
       "format": "date-time",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
-      "description": "RFC 3339 timestamp. The pattern enforces mechanically what format alone only annotates."
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])[Tt]([01]\\d|2[0-3]):[0-5]\\d:([0-5]\\d|60)(\\.\\d+)?([Zz]|[+-]([01]\\d|2[0-3]):[0-5]\\d)$",
+      "description": "RFC 3339 timestamp (lowercase t/z permitted, per the RFC). The pattern bounds every field lexically (month 01-12, day 01-31, hour 00-23, leap second allowed); per-month day validity (e.g. Feb 30) is left to format-asserting tooling."
     },
     "currencyCode": {
       "type": "string",

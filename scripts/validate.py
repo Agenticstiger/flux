@@ -5,7 +5,7 @@ Validates FLUX document bundles: every document against the FLUX JSON Schema,
 then the cross-document guarantees the schema alone cannot express:
 
   * every *Ref resolves to a document of the expected kind (no dangling links)
-  * document ids are unique within a bundle
+  * document ids are unique within a bundle (across .flux.yml AND .fluid.yml)
   * World.lifecycleMix and Experiment variant weights sum to 1
   * Experiment variant names are unique
   * JourneyTaxonomy transitions and Blueprint edges stay within their node sets
@@ -14,9 +14,19 @@ then the cross-document guarantees the schema alone cannot express:
   * Simulation.timeBounds.start < end
   * skills bindings respect the document's agentPolicy (model allow-list,
     per-skill token budget)
+  * every .fluid.yml in the bundle validates against the vendored FLUID schema
+    for its declared fluidVersion (referenced or not)
   * the FLUID seam: Simulation.emits[].productRef resolves to a .fluid.yml in
-    the bundle, that document validates against the vendored FLUID schema for
-    the pinned fluidVersion, and exposeId is a member of its exposes[]
+    the bundle, the pinned fluidVersion matches the document's declaration,
+    and exposeId is a member of its exposes[]
+  * consent strictness at the seam: an emitted contract's expose
+    policy.agentPolicy must not allow a use case denied by any ConsentProfile
+    gating the Simulation's campaigns, and (when both enumerate allow-lists)
+    must not allow more than the profile allows
+
+Cross-document checks run only on documents that passed schema validation, so
+malformed input yields error messages, never tracebacks. Unquoted YAML
+timestamps are loaded as strings, matching the schema's RFC 3339 grammar.
 
 Usage:
     python3 scripts/validate.py [bundle_dir ...]
@@ -35,7 +45,7 @@ try:
     import yaml
     from jsonschema import Draft202012Validator, FormatChecker
 except ImportError:  # pragma: no cover
-    sys.exit("validate.py requires: pip install jsonschema pyyaml rfc3339-validator")
+    sys.exit("validate.py requires: pip install jsonschema pyyaml")
 
 REPO = Path(__file__).resolve().parent.parent
 FLUX_SCHEMA_PATH = REPO / "schema" / "flux-schema-0.3.0.json"
@@ -70,9 +80,29 @@ FREE_FORM_KEYS = {"payloadTemplate", "config", "demographics", "attributes", "an
 SUM_TOLERANCE = 1e-9
 
 
+class _StringTimestampLoader(yaml.SafeLoader):
+    """SafeLoader that keeps unquoted timestamps as plain strings.
+
+    PyYAML would otherwise coerce `start: 2026-07-01T00:00:00Z` to a
+    datetime object, which the schema (correctly) rejects as "not a string"
+    with a confusing Python-typed error message.
+    """
+
+
+_StringTimestampLoader.add_constructor(
+    "tag:yaml.org,2002:timestamp",
+    lambda loader, node: loader.construct_scalar(node),
+)
+
+
 def load_yaml_docs(path: Path):
-    with path.open() as fh:
-        return [d for d in yaml.safe_load_all(fh) if d is not None]
+    """Load YAML documents; returns (docs, error_message_or_None)."""
+    try:
+        with path.open() as fh:
+            docs = list(yaml.load_all(fh, Loader=_StringTimestampLoader))
+    except (yaml.YAMLError, OSError) as exc:
+        return [], f"unreadable YAML: {str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__}"
+    return [d for d in docs if d is not None], None
 
 
 def walk_refs(node, field_path, out):
@@ -98,30 +128,64 @@ class Bundle:
         self.dir = directory
         self.flux_validator = flux_validator
         self.errors: list[str] = []
-        self.flux_docs: dict[str, dict] = {}
+        self.flux_docs: dict[str, dict] = {}   # schema-VALID flux docs only
         self.fluid_docs: dict[str, tuple[Path, dict]] = {}
+        self._fluid_validators: dict[str, Draft202012Validator | None] = {}
 
     def err(self, source, message):
         self.errors.append(f"{source}: {message}")
 
+    # ---- loading ---------------------------------------------------------
+
     def load(self):
         for path in sorted(self.dir.glob("*.flux.yml")) + sorted(self.dir.glob("*.flux.yaml")):
-            for doc in load_yaml_docs(path):
+            docs, load_error = load_yaml_docs(path)
+            if load_error:
+                self.err(path.name, load_error)
+                continue
+            for doc in docs:
+                if not isinstance(doc, dict):
+                    self.err(path.name, f"document is not a mapping (got {type(doc).__name__})")
+                    continue
                 schema_errors = sorted(self.flux_validator.iter_errors(doc), key=lambda e: e.json_path)
                 for e in schema_errors:
                     self.err(path.name, f"schema: {e.json_path}: {e.message}")
-                doc_id = doc.get("id")
-                if not isinstance(doc_id, str):
-                    continue
+                if schema_errors:
+                    continue  # cross-checks assume schema-valid shapes
+                doc_id = doc["id"]
                 if doc_id in self.flux_docs:
                     self.err(path.name, f"duplicate document id '{doc_id}'")
                 else:
                     self.flux_docs[doc_id] = doc
         for path in sorted(self.dir.glob("*.fluid.yml")) + sorted(self.dir.glob("*.fluid.yaml")):
-            for doc in load_yaml_docs(path):
+            docs, load_error = load_yaml_docs(path)
+            if load_error:
+                self.err(path.name, load_error)
+                continue
+            for doc in docs:
+                if not isinstance(doc, dict):
+                    self.err(path.name, f"document is not a mapping (got {type(doc).__name__})")
+                    continue
                 doc_id = doc.get("id")
-                if isinstance(doc_id, str):
+                if not isinstance(doc_id, str):
+                    self.err(path.name, "FLUID document has no string 'id'")
+                    continue
+                if doc_id in self.fluid_docs:
+                    self.err(path.name, f"duplicate FLUID document id '{doc_id}'")
+                elif doc_id in self.flux_docs:
+                    self.err(path.name, f"FLUID document id '{doc_id}' collides with a FLUX document id")
+                else:
                     self.fluid_docs[doc_id] = (path, doc)
+
+    def _fluid_validator(self, version):
+        if version not in self._fluid_validators:
+            schema_file = FLUID_VENDOR_DIR / f"fluid-schema-{version}.json"
+            self._fluid_validators[version] = (
+                Draft202012Validator(json.loads(schema_file.read_text()), format_checker=FormatChecker())
+                if schema_file.exists()
+                else None
+            )
+        return self._fluid_validators[version]
 
     # ---- cross-document checks -------------------------------------------
 
@@ -186,8 +250,8 @@ class Bundle:
     def check_agent_policy(self):
         for doc_id, doc in self.flux_docs.items():
             policy, skills = doc.get("agentPolicy"), doc.get("skills")
-            if not skills:
-                continue
+            if not skills or not isinstance(policy, dict):
+                continue  # schema already enforces skills => agentPolicy
             allowed = set(policy.get("allowedModels", []))
             budget = policy.get("tokenBudget", 0)
             for i, skill in enumerate(skills):
@@ -198,11 +262,22 @@ class Bundle:
                 if sb and sb > budget:
                     self.err(doc_id, f"skills[{i}].tokenBudget {sb} exceeds agentPolicy.tokenBudget {budget}")
 
+    def check_fluid_documents(self):
+        """Every .fluid.yml in the bundle must be valid FLUID — referenced or not."""
+        for doc_id, (path, doc) in self.fluid_docs.items():
+            declared = doc.get("fluidVersion")
+            validator = self._fluid_validator(declared) if isinstance(declared, str) else None
+            if validator is None:
+                self.err(path.name, f"declared fluidVersion '{declared}' has no vendored schema in vendor/fluid/")
+                continue
+            for e in sorted(validator.iter_errors(doc), key=lambda e: e.json_path)[:10]:
+                self.err(path.name, f"fails FLUID {declared}: {e.json_path}: {e.message}")
+
     def check_fluid_seam(self):
-        fluid_validators: dict[str, Draft202012Validator] = {}
         for doc_id, doc in self.flux_docs.items():
             if doc.get("kind") != "Simulation":
                 continue
+            gating_profiles = self._gating_consent_profiles(doc)
             for i, emit in enumerate(doc.get("spec", {}).get("emits", [])):
                 where = f"spec.emits[{i}]"
                 product_ref, expose_id = emit.get("productRef"), emit.get("exposeId")
@@ -212,40 +287,62 @@ class Bundle:
                     self.err(doc_id, f"{where}.productRef '{product_ref}' does not resolve to a .fluid.yml document in the bundle")
                     continue
                 fluid_path, fluid_doc = entry
-                if fluid_version not in fluid_validators:
-                    schema_file = FLUID_VENDOR_DIR / f"fluid-schema-{fluid_version}.json"
-                    if not schema_file.exists():
-                        self.err(doc_id, f"{where}.fluidVersion '{fluid_version}' has no vendored schema in vendor/fluid/")
-                        continue
-                    fluid_validators[fluid_version] = Draft202012Validator(
-                        json.loads(schema_file.read_text()), format_checker=FormatChecker()
-                    )
-                seam_errors = sorted(fluid_validators[fluid_version].iter_errors(fluid_doc), key=lambda e: e.json_path)
-                for e in seam_errors[:10]:
-                    self.err(doc_id, f"{where}: contract {fluid_path.name} fails FLUID {fluid_version}: {e.json_path}: {e.message}")
                 declared = fluid_doc.get("fluidVersion")
                 if declared != fluid_version:
                     self.err(doc_id, f"{where}: pinned fluidVersion {fluid_version} but {fluid_path.name} declares {declared}")
-                expose_ids = [e.get("exposeId") for e in fluid_doc.get("exposes", [])]
-                if expose_id not in expose_ids:
-                    self.err(doc_id, f"{where}.exposeId '{expose_id}' is not an expose of {product_ref} (has: {expose_ids})")
+                exposes = [e for e in fluid_doc.get("exposes", []) if isinstance(e, dict)]
+                expose = next((e for e in exposes if e.get("exposeId") == expose_id), None)
+                if expose is None:
+                    self.err(doc_id, f"{where}.exposeId '{expose_id}' is not an expose of {product_ref} (has: {[e.get('exposeId') for e in exposes]})")
+                    continue
+                self._check_consent_strictness(doc_id, where, expose, gating_profiles)
+
+    def _gating_consent_profiles(self, sim_doc):
+        """ConsentProfiles gating this Simulation via campaignRefs -> Campaign.consentRef."""
+        profiles = []
+        for campaign_ref in sim_doc.get("spec", {}).get("campaignRefs", []) or []:
+            campaign = self.flux_docs.get(campaign_ref)
+            if not campaign or campaign.get("kind") != "Campaign":
+                continue
+            profile = self.flux_docs.get(campaign.get("spec", {}).get("consentRef", ""))
+            if profile and profile.get("kind") == "ConsentProfile":
+                profiles.append(profile)
+        return profiles
+
+    def _check_consent_strictness(self, doc_id, where, expose, profiles):
+        """The emitted contract must be at least as strict as every gating ConsentProfile."""
+        policy = expose.get("policy", {}).get("agentPolicy", {}) if isinstance(expose.get("policy"), dict) else {}
+        contract_allowed = set(policy.get("allowedUseCases", []) or [])
+        for profile in profiles:
+            pid, pspec = profile.get("id"), profile.get("spec", {})
+            denied = set(pspec.get("deniedUseCases", []) or [])
+            violation = contract_allowed & denied
+            if violation:
+                self.err(doc_id, f"{where}: contract allows use cases denied by ConsentProfile {pid}: {sorted(violation)}")
+            profile_allowed = set(pspec.get("allowedUseCases", []) or [])
+            if profile_allowed and contract_allowed and not contract_allowed <= profile_allowed:
+                extra = contract_allowed - profile_allowed
+                self.err(doc_id, f"{where}: contract allows use cases outside ConsentProfile {pid}'s allow-list: {sorted(extra)}")
 
     def run(self) -> list[str]:
+        if not self.dir.is_dir():
+            self.err(str(self.dir), "bundle directory does not exist or is not a directory")
+            return self.errors
         self.load()
         if not self.flux_docs and not self.errors:
             self.err(str(self.dir), "bundle contains no .flux.yml documents")
         self.check_refs()
         self.check_sums_and_sets()
         self.check_agent_policy()
+        self.check_fluid_documents()
         self.check_fluid_seam()
         return self.errors
 
 
 def main(argv: list[str]) -> int:
-    flux_validator = Draft202012Validator(
-        json.loads(FLUX_SCHEMA_PATH.read_text()), format_checker=FormatChecker()
-    )
-    Draft202012Validator.check_schema(json.loads(FLUX_SCHEMA_PATH.read_text()))
+    flux_schema = json.loads(FLUX_SCHEMA_PATH.read_text())
+    Draft202012Validator.check_schema(flux_schema)
+    flux_validator = Draft202012Validator(flux_schema, format_checker=FormatChecker())
 
     if argv:
         bundle_dirs = [Path(a) for a in argv]

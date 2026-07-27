@@ -20,9 +20,10 @@ FLUX discovers.  FLUID delivers.  The seam is where the risk goes to die.
 ## Status
 
 **v0.3.0 — working draft.** Pre-1.0: minor versions may break; every release
-ships with a [schema diff](schema-diffs/) and a regression suite. The
-[position paper](docs/) documents the design; where the paper and this schema
-disagreed, [docs/reconciliation.md](docs/reconciliation.md) is the honest ledger.
+ships with a [schema diff](schema-diffs/) and a regression suite. The design
+is documented in the position paper *"FLUX and FLUID"* (distributed separately
+under CC BY 4.0); where the paper and this schema disagreed,
+[docs/reconciliation.md](docs/reconciliation.md) is the honest ledger.
 
 ## The nineteen kinds
 
@@ -79,7 +80,7 @@ contract file is wrapped around the real estate.
 ## Validate a bundle
 
 ```bash
-pip install jsonschema pyyaml rfc3339-validator
+pip install jsonschema pyyaml
 python3 scripts/validate.py examples/telco-payment-recovery
 ```
 
@@ -94,7 +95,7 @@ Two layers, both offline (no cloud, no running engine):
 Use the schema in your editor:
 
 ```yaml
-# yaml-language-server: $schema=https://agenticstiger.github.io/flux-spec/schema/flux-schema-0.3.0.json
+# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.3.0.json
 ```
 
 ## Example
@@ -112,7 +113,7 @@ examples/        validated bundles (CI-enforced)
 vendor/fluid/    vendored FLUID schemas the seam validates against
 scripts/         the offline reference validator
 tests/           regression suite pinning every closed validation gap
-docs/            reconciliation ledger and spec notes
+docs/            reconciliation ledger
 ```
 
 ## Relationship to FLUID

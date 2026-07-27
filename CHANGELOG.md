@@ -20,7 +20,7 @@ Highlights:
   on every kind, `sovereignty`, Simulation composition refs, fidelity modes,
   golden-regression anchor, CloudEvents attributes on Signal, `Module.binds`
   ports, Playback calibration + drift.
-- **Offline reference validator** (`scripts/validate.py`) and a 42-check
+- **Offline reference validator** (`scripts/validate.py`) and a 61-check
   regression suite pinning every closed gap.
 
 ## 0.2.0 — pre-release draft

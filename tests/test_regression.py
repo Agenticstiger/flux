@@ -46,9 +46,28 @@ WORLD_SPEC = {
     "population": {"size": 25000, "lifecycleMix": {"active": 0.8, "churned": 0.2}},
 }
 
+sim_fluid_style_ref = envelope(
+    "Simulation",
+    worldRef="q3-retention-world",
+    emits=[{"productRef": "PaymentRecovery_V1", "exposeId": "x", "fluidVersion": "0.7.5"}],
+)
+sim_lowercase_tz = envelope(
+    "Simulation",
+    worldRef="w",
+    timeBounds={"start": "2026-07-01t00:00:00z", "end": "2026-09-30t23:59:59z"},
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5"}],
+)
+
 CASES_PASS = {
     "baseline world": envelope("World", **copy.deepcopy(WORLD_SPEC)),
     "channel extension type x-whatsapp": envelope("Channel", type="x-whatsapp"),
+    "hyphenated channel extension type": envelope("Channel", type="x-whatsapp-business"),
+    "FLUID-grammar productRef at seam (uppercase/underscore)": sim_fluid_style_ref,
+    "single-label CloudEvents type": envelope("Signal", source="urn:x", type="payment"),
+    "mixed-case producer CloudEvents type": envelope(
+        "Signal", source="urn:x", type="Microsoft.Storage.BlobCreated"
+    ),
+    "lowercase t/z RFC3339 timestamps": sim_lowercase_tz,
 }
 
 # --- documents that 0.2.0 wrongly accepted; 0.3.0 must reject -------------
@@ -136,6 +155,25 @@ CASES_REJECT = {
     "metadata without owner": {
         **envelope("Segment", query="x"), "metadata": {"annotations": {"a": "b"}}
     },
+    "impossible calendar date (month 13, hour 25)": {
+        **envelope("Segment", query="x"),
+        "metadata": {"owner": {"team": "qa"}, "createdAt": "2026-13-45T25:61:61Z"},
+    },
+    "trailing-separator id (illegal in FLUID grammar)": envelope("Segment", "recovery-", query="x"),
+    "duplicate seam entries in emits": envelope(
+        "Simulation",
+        worldRef="w",
+        emits=[
+            {"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5"},
+            {"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5"},
+        ],
+    ),
+    "empty-string personaReactions key": envelope(
+        "Journey",
+        trigger={"signalRef": "s"},
+        personaReactions={"": {"successProbability": 0.5}},
+    ),
+    "zero-information Persona spec ({'worldview': {}})": envelope("Persona", worldview={}),
 }
 
 # --- bundle mutations the schema cannot see; validator must catch ----------
@@ -191,6 +229,11 @@ def _payload_with_reflike_keys(d):
     d["spec"]["payloadTemplate"]["nodes"] = ["decoy"]
 
 
+def _consent_violation(d):
+    # contract expose allows a use case the gating ConsentProfile denies
+    d["exposes"][0]["policy"] = {"agentPolicy": {"allowedUseCases": ["advertising", "payment_recovery"]}}
+
+
 VALIDATOR_REJECTS = {
     "dangling treatmentRef": ("campaign.flux.yml", _dangling_ref, "dangling reference"),
     "ref resolving to wrong kind": ("campaign.flux.yml", _wrong_kind_ref, "expected ConsentProfile"),
@@ -201,6 +244,63 @@ VALIDATOR_REJECTS = {
     "FLUID doc invalid at seam": ("payment-recovery.fluid.yml", _break_fluid, "fails FLUID 0.7.5"),
     "skill model outside agentPolicy": ("simulation.flux.yml", _bad_skill_model, "not in agentPolicy.allowedModels"),
     "timeBounds start after end": ("simulation.flux.yml", _bad_time_order, "must precede"),
+    "contract laxer than gating ConsentProfile": ("payment-recovery.fluid.yml", _consent_violation, "denied by ConsentProfile"),
+}
+
+
+# --- malformed input must produce clean error strings, never tracebacks ----
+
+
+def _setup_malformed_yaml(bundle: Path):
+    (bundle / "broken.flux.yml").write_text("kind: [unclosed\n  - {")
+
+
+def _setup_non_mapping_doc(bundle: Path):
+    (bundle / "scalar.flux.yml").write_text("just a string, not a document\n")
+
+
+def _setup_dup_fluid_ids(bundle: Path):
+    src = (bundle / "payment-recovery.fluid.yml").read_text()
+    (bundle / "copy.fluid.yml").write_text(src)
+
+
+def _setup_flux_fluid_collision(bundle: Path):
+    doc = yaml.safe_load((bundle / "payment-recovery.fluid.yml").read_text())
+    doc["id"] = "q3-retention-world"  # collides with the World flux doc
+    (bundle / "collide.fluid.yml").write_text(yaml.safe_dump(doc, sort_keys=False))
+
+
+def _setup_orphan_invalid_fluid(bundle: Path):
+    (bundle / "orphan.fluid.yml").write_text(
+        'fluidVersion: "0.7.5"\nkind: DataProduct\nid: orphan.broken\nname: Orphan\n'
+    )
+
+
+def _setup_schema_invalid_no_crash(bundle: Path):
+    # the exact shapes that crashed the pre-review validator: skills without
+    # agentPolicy, string tokenBudget, string lifecycleMix value, scalar timeBounds
+    (bundle / "crashers.flux.yml").write_text(
+        "\n---\n".join(
+            [
+                'fluxVersion: "0.3.0"\nkind: Persona\nid: crash-a\nname: A\nmetadata: {owner: {team: qa}}\n'
+                "skills:\n  - {name: s, skillRef: r, purpose: p}\nspec: {traits: {x: 0.5}}",
+                'fluxVersion: "0.3.0"\nkind: World\nid: crash-b\nname: B\nmetadata: {owner: {team: qa}}\n'
+                "spec:\n  seed: 1\n  population: {size: 10, lifecycleMix: {active: banana}}",
+                'fluxVersion: "0.3.0"\nkind: Simulation\nid: crash-c\nname: C\nmetadata: {owner: {team: qa}}\n'
+                'spec:\n  worldRef: q3-retention-world\n  timeBounds: "2026"\n'
+                '  emits: [{productRef: telco.gold.payment_recovery_moment, exposeId: payment_recovery_moment, fluidVersion: "0.7.5"}]',
+            ]
+        )
+    )
+
+
+VALIDATOR_ROBUSTNESS = {
+    "malformed YAML": (_setup_malformed_yaml, "unreadable YAML"),
+    "non-mapping document": (_setup_non_mapping_doc, "not a mapping"),
+    "duplicate FLUID ids": (_setup_dup_fluid_ids, "duplicate FLUID document id"),
+    "flux/fluid id collision": (_setup_flux_fluid_collision, "collides with"),
+    "orphan invalid .fluid.yml still validated": (_setup_orphan_invalid_fluid, "fails FLUID 0.7.5"),
+    "schema-invalid shapes yield errors, not tracebacks": (_setup_schema_invalid_no_crash, "schema:"),
 }
 
 
@@ -251,7 +351,41 @@ def main() -> int:
         if errors:
             failures.append(f"[validator] free-form payload keys wrongly treated as refs: {errors[:3]}")
 
-    total = len(CASES_PASS) + len(CASES_REJECT) + 1 + len(VALIDATOR_REJECTS) + 2
+    # malformed input: clean bundle errors, never an exception
+    for label, (setup, expected_fragment) in VALIDATOR_ROBUSTNESS.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            shutil.copytree(EXAMPLES, bundle)
+            setup(bundle)
+            try:
+                errors = Bundle(bundle, flux_validator).run()
+            except Exception as exc:  # noqa: BLE001 — the whole point of the test
+                failures.append(f"[validator] CRASHED ({type(exc).__name__}: {exc}) — {label}")
+                continue
+            if not any(expected_fragment in e for e in errors):
+                failures.append(f"[validator] expected error containing '{expected_fragment}' — {label}; got: {errors[:3]}")
+
+    # unquoted YAML timestamps load as strings and validate green
+    with tempfile.TemporaryDirectory() as tmp:
+        bundle = Path(tmp) / "bundle"
+        shutil.copytree(EXAMPLES, bundle)
+        sim = (bundle / "simulation.flux.yml").read_text()
+        sim = sim.replace('start: "2026-07-01T00:00:00Z"', "start: 2026-07-01T00:00:00Z")
+        sim = sim.replace('end: "2026-09-30T23:59:59Z"', "end: 2026-09-30T23:59:59Z")
+        (bundle / "simulation.flux.yml").write_text(sim)
+        errors = Bundle(bundle, flux_validator).run()
+        if errors:
+            failures.append(f"[validator] unquoted timestamps should be green: {errors[:3]}")
+
+    # nonexistent bundle dir: clear message, no glob-silence
+    missing_errors = Bundle(Path("/nonexistent/bundle-dir"), flux_validator).run()
+    if not any("does not exist" in e for e in missing_errors):
+        failures.append(f"[validator] nonexistent dir should say so; got: {missing_errors}")
+
+    total = (
+        len(CASES_PASS) + len(CASES_REJECT) + 1
+        + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 4
+    )
     if failures:
         print(f"FAIL — {len(failures)}/{total} checks failed")
         for f in failures:

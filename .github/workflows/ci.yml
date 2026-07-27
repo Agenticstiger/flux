@@ -14,9 +14,17 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install validator dependencies
-        run: pip install jsonschema pyyaml rfc3339-validator
-      - name: Schema is itself valid (2020-12)
-        run: python -c "import json, jsonschema; jsonschema.Draft202012Validator.check_schema(json.load(open('schema/flux-schema-0.3.0.json')))"
+        run: pip install jsonschema pyyaml
+      - name: All published and vendored schemas are valid
+        run: |
+          python - <<'EOF'
+          import json, pathlib
+          from jsonschema import validators
+          for p in sorted(pathlib.Path("schema").glob("*.json")) + sorted(pathlib.Path("vendor/fluid").glob("*.json")):
+              s = json.loads(p.read_text())
+              validators.validator_for(s).check_schema(s)
+              print(f"ok  {p}")
+          EOF
       - name: latest alias matches current release
         run: cmp schema/flux-schema-0.3.0.json schema/flux-schema-latest.json
       - name: Validate example bundles (schema + cross-refs + FLUID seam)

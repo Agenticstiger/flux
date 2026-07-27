@@ -42,7 +42,10 @@ matching FLUID's conventions.
 - `ConsentProfile` can no longer be empty, and its vocabulary
   (`allowedUseCases`/`deniedUseCases`) matches FLUID's, so seam-crossing policy
   comparison is field-to-field. The "contract must be at least as strict as the
-  gating ConsentProfile" rule is a reference-validator check.
+  gating ConsentProfile" rule is enforced by the reference validator at the
+  seam: an emitted expose's `policy.agentPolicy` may not allow a use case a
+  gating profile denies, nor exceed its allow-list (`scripts/validate.py`,
+  regression-tested).
 
 ## The four seams (paper §3.4)
 
