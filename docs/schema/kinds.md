@@ -25,7 +25,7 @@ same bundle — enforced by the [offline validator](/flux/schema/anatomy#the-off
 | `population` | `object` | **yes** |  |  |
 | `population.size` | `integer` | **yes** | min 1 |  |
 | `population.lifecycleMix` | `object` | **yes** | minProperties 1 | Fractions per lifecycle state |
-| `population.markets` | array of `string` | no | minItems 1; unique | Named markets/operating companies the population is distributed across (formerly 'natcos' in 0.2.0 examples) |
+| `population.markets` | array of `string` | no | minItems 1; unique | Named operating markets the population is distributed across (e.g |
 | `temperature` | `object` | no | minProperties 1 | Per-dial stochastic temperature (0 = frozen, 1 = maximally variable), e.g |
 
 ### Persona

@@ -14,7 +14,7 @@ and what remains roadmap.
 | "Eighteen kinds, five families" (§3.1, glossary) | **Nineteen kinds, six families.** The paper's tables omit `Playback`, which the schema has always defined. We count it as its own *Calibration* family (§5.6 of the paper describes its role). |
 | "its eighteen JSON schemas" (Availability) | One mono-schema per version with per-kind branches (`schema/flux-schema-<version>.json`), matching FLUID's publishing convention. Per-kind views may be generated later; the mono-schema is normative. |
 | `Simulation.emits[].contract` embeds a FLUID document requiring a `promise` field (Listing 2 shape) | **`promise` never existed in FLUID.** 0.3.0 replaces the embedded stub with a reference seam: `{productRef, exposeId, fluidVersion}`. The referenced `.fluid.yml` is validated against the vendored FLUID schema for the pinned version — the seam *is* FLUID validation, and "the thing that ships is the thing that was proven" is byte-for-byte true. |
-| Listing 1 fields `natcos`, `temperature` | Now first-class and typed: `population.markets` (renamed from telco-jargon `natcos`; the kind is vertical-neutral) and `spec.temperature` (map of 0–1 dials). In 0.2.0 they passed only because unknown keys passed silently. |
+| Listing 1's extra population fields | Now first-class and typed: `population.markets` (renamed from the draft's vertical-specific field name; the kind is vertical-neutral) and `spec.temperature` (map of 0–1 dials). In 0.2.0 they passed only because unknown keys passed silently. |
 
 ## The three properties: delivered vs. roadmap
 

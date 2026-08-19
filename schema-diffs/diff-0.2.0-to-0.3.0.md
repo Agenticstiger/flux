@@ -44,7 +44,7 @@ membership. The proven contract and the shipped contract are the same file.
 - **Signal** carries CloudEvents context attributes (`envelope`, `source`, `type`, `dataschema`); 0.2.0 `payload_schema` → `dataschema`.
 - **Module.binds** over the four ports; **Experiment** gains `assignment` (largest_remainder) and `metrics[].ossieRef`.
 - **Playback** gains `worldRef` (required), `calibration`, `drift` (psi/kl/ks + threshold).
-- **World** gains `population.markets` (né `natcos`) and typed `temperature`.
+- **World** gains `population.markets` (renamed from the draft's vertical-specific field) and typed `temperature`.
 
 ## Renames
 

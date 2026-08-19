@@ -133,7 +133,7 @@
                     "minItems": 1,
                     "uniqueItems": true,
                     "items": { "type": "string", "minLength": 1 },
-                    "description": "Named markets/operating companies the population is distributed across (formerly 'natcos' in 0.2.0 examples)."
+                    "description": "Named operating markets the population is distributed across (e.g. regions or country markets)."
                   }
                 }
               },

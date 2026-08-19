@@ -78,7 +78,7 @@
         "population.markets": {
           "widget": "list",
           "required": false,
-          "help": "Named markets/operating companies the population is distributed across (formerly 'natcos' in 0.2.0 examples)."
+          "help": "Named operating markets the population is distributed across (e.g."
         },
         "temperature": {
           "widget": "group",
