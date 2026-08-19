@@ -1,7 +1,7 @@
 {
   "name": "flux-docs",
   "version": "0.4.0",
-  "description": "FLUX — the open, declarative standard for governed synthetic customer universes.",
+  "description": "FLUX \u2014 the open, declarative standard for governed synthetic customer universes.",
   "homepage": "https://agenticstiger.github.io/flux/",
   "repository": {
     "type": "git",
@@ -35,8 +35,16 @@
     "@vuepress/plugin-search": "2.0.0-rc.130",
     "@vuepress/plugin-sitemap": "2.0.0-rc.130",
     "@vuepress/theme-default": "2.0.0-rc.130",
-    "mermaid": "^11.16.0",
+    "mermaid": "^11.16.1",
     "sass-embedded": "^1.99.0",
     "vuepress": "2.0.0-rc.30"
+  },
+  "overrides": {
+    "gray-matter": {
+      "js-yaml": "3.15.1"
+    },
+    "mermaid": {
+      "dompurify": "^3.4.13"
+    }
   }
 }
