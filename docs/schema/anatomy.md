@@ -9,7 +9,7 @@ the same dialect and conventions as FLUID 0.7.5.
 Every document, regardless of kind:
 
 ```yaml
-fluxVersion: "0.3.0"   # enum of the versions this schema file accepts
+fluxVersion: "0.4.0"   # enum of the versions this schema file accepts
 kind: World            # discriminator: one of nineteen
 id: q3-retention-world # $defs/identifier — the target other documents reference
 name: Q3 Retention World

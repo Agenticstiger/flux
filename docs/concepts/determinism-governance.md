@@ -80,6 +80,6 @@ contract-conformant, gate-checked artefact.
 
 Byte-for-byte replay, golden regression execution, and lineage capture are
 properties of a reference engine, not expressible in JSON Schema. The schema's
-job — done as of 0.3.0 — is to give the verify gate the anchors it needs:
+job — done as of 0.3.0, extended in 0.4.0 — is to give the verify gate the anchors it needs:
 seeds, fidelity modes, sweeps, digests, and assignment methods are all
 declared surface.

@@ -1,9 +1,10 @@
-# Paper ↔ Schema Reconciliation (v0.3.0)
+# Paper ↔ Schema Reconciliation
 
 The position paper *"FLUX and FLUID: A Declarative Substrate for Core-to-Customer
 Reinvention"* (Working Paper, July 2026, CC BY 4.0) describes FLUX v0.2.0. The
-schema published here is **v0.3.0**, which closes the gaps a pre-release review
-found between the paper's claims and what the 0.2.0 schema actually validated.
+gaps below were closed by **v0.3.0** (the first open-source release) after a
+pre-release review of what the 0.2.0 draft schema actually validated; v0.4.0
+builds on it additively (see the roadmap).
 This page is the honest ledger: what the paper promises, what 0.3.0 delivers,
 and what remains roadmap.
 

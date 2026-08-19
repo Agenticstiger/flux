@@ -78,7 +78,7 @@ flowchart TB
 Every kind shares the same envelope — aligned field-for-field with FLUID's:
 
 ```yaml
-fluxVersion: "0.3.0"     # pinned spec version
+fluxVersion: "0.4.0"     # pinned spec version
 kind: Persona            # one of the nineteen
 id: pragmatic-family     # unique in the bundle; the target of refs
 name: Pragmatic Family

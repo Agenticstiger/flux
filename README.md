@@ -3,6 +3,15 @@
 <p align="center"><strong>Flow Language for Universe eXperimentation</strong></p>
 <p align="center">The open, declarative standard for governed synthetic customer universes — the discovery-side sibling of <a href="https://github.com/open-data-protocol/fluid">FLUID</a>.</p>
 
+<p align="center">
+  <a href="https://agenticstiger.github.io/flux/">📖 Documentation</a> ·
+  <a href="https://agenticstiger.github.io/flux/guide/quickstart.html">🚀 Quickstart</a> ·
+  <a href="https://agenticstiger.github.io/flux/schema/kinds.html">🧭 The Nineteen Kinds</a> ·
+  <a href="https://agenticstiger.github.io/flux/concepts/seam.html">🔗 The FLUID Seam</a> ·
+  <a href="https://agenticstiger.github.io/flux/roadmap/">🗺️ Roadmap</a> ·
+  <a href="https://agenticstiger.github.io/flux/releases/0.4.0.html">✨ What's New</a>
+</p>
+
 ---
 
 FLUX describes **synthetic customer universes**: a governed digital twin in
