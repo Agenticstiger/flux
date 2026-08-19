@@ -68,8 +68,8 @@ export default defineUserConfig({
           { text: 'The Nineteen Kinds', link: '/schema/kinds' },
           { text: 'Versions', link: '/schema/versions' },
           { text: 'Changelog', link: '/schema/changelog' },
-          { text: 'JSON Schema 0.4.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json', target: '_blank' },
-          { text: 'UI Hints 0.4.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.4.0.json', target: '_blank' },
+          { text: 'JSON Schema 0.4.1 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json', target: '_blank' },
+          { text: 'UI Hints 0.4.1 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.4.1.json', target: '_blank' },
         ],
       },
       {
@@ -131,7 +131,7 @@ export default defineUserConfig({
       '/releases/': [
         {
           text: "What's New",
-          children: ['/releases/README.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
+          children: ['/releases/README.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
         },
       ],
       '/contributing/': [

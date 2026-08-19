@@ -101,7 +101,51 @@ exp_semantic = envelope_040(
 versioned_doc = envelope_040("Module", resources=["sig-x"])
 versioned_doc["version"] = "2.1.3"
 
+
+def envelope_041(kind, doc_id="doc-under-test", **spec):
+    d = envelope(kind, doc_id, **spec)
+    d["fluxVersion"] = "0.4.1"
+    return d
+
+
+PLAYBACK_BASE = {
+    "worldRef": "w",
+    "sourceStream": "kafka://events.v1",
+    "personaMapping": [{"behaviorPattern": "x >= 1", "mapToPersona": "p"}],
+}
+pb_scorecard = envelope_041("Playback", **PLAYBACK_BASE,
+    scorecard={"backtestWindow": "P90D", "grade": "B", "intervalCoverage": 0.92, "credibility": 0.78})
+pb_bad_grade = envelope_041("Playback", **PLAYBACK_BASE,
+    scorecard={"grade": "G", "credibility": 0.5})
+pb_no_credibility = envelope_041("Playback", **PLAYBACK_BASE,
+    scorecard={"grade": "A"})
+pb_bad_window = envelope_041("Playback", **PLAYBACK_BASE,
+    scorecard={"backtestWindow": "90days", "grade": "A", "credibility": 0.9})
+
+DIGEST64 = "sha256:" + "ab12" * 16
+sim_range_prov = envelope_041(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "^0.7.3",
+            "minCredibility": 0.7,
+            "provenance": {"contractDigest": DIGEST64, "outputDigest": DIGEST64}}],
+)
+sim_unvendored_exact = envelope_041(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.6"}],
+)
+sim_garbage_range = envelope_041(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "banana"}],
+)
+sim_bad_digest = envelope_041(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5",
+            "provenance": {"contractDigest": "sha256:short"}}],
+)
+
 CASES_PASS = {
+    "RFC-05: playback scorecard": pb_scorecard,
+    "RFC-06: seam range + provenance + minCredibility": sim_range_prov,
     "RFC-01: scalar + categorical + normal traits": persona_dists,
     "RFC-01: versioned document envelope": versioned_doc,
     "RFC-03: semver-ranged moduleRefs": sim_versioned_ref,
@@ -245,6 +289,12 @@ CASES_REJECT = {
         variants=[{"name": "a", "weight": 1.0, "treatmentRef": "t"}],
         metrics=[{"name": "m", "semanticRef": "no-slash"}],
     ),
+    "RFC-05: unknown grade letter": pb_bad_grade,
+    "RFC-05: scorecard without credibility": pb_no_credibility,
+    "RFC-05: non-ISO backtest window": pb_bad_window,
+    "RFC-06: unvendored exact fluidVersion": sim_unvendored_exact,
+    "RFC-06: garbage version range": sim_garbage_range,
+    "RFC-06: malformed provenance digest": sim_bad_digest,
 }
 
 # --- bundle mutations the schema cannot see; validator must catch ----------
@@ -330,6 +380,23 @@ def _unbind_semantic_port(d):
     d["spec"]["binds"] = [b for b in d["spec"]["binds"] if b.get("port") != "ossie-model"]
 
 
+def _raise_credibility_bar(d):
+    d["spec"]["emits"][0]["minCredibility"] = 0.95  # scorecard reports 0.78
+
+
+def _drop_scorecard(d):
+    del d["spec"]["scorecard"]
+
+
+def _unsatisfiable_fluid_range(d):
+    d["spec"]["emits"][0]["fluidVersion"] = "^0.8.0"
+
+
+def _contract_digest_drift(d):
+    # changing the contract must break the seam provenance binding
+    d["exposes"][0]["contract"]["schema"].append({"name": "smuggled_column", "type": "STRING"})
+
+
 VALIDATOR_REJECTS = {
     "dangling treatmentRef": ("campaign.flux.yml", _dangling_ref, "dangling reference"),
     "ref resolving to wrong kind": ("campaign.flux.yml", _wrong_kind_ref, "expected ConsentProfile"),
@@ -347,6 +414,10 @@ VALIDATOR_REJECTS = {
     "RFC-03: module content drift breaks digest": ("module.flux.yml", _digest_drift, "digest mismatch"),
     "RFC-07: measure not in bound model": ("experiment.flux.yml", _unknown_measure, "not declared"),
     "RFC-07: semantic port unbound": ("module.flux.yml", _unbind_semantic_port, "no Module binds the ossie-model port"),
+    "RFC-05: credibility below the seam gate": ("simulation.flux.yml", _raise_credibility_bar, "below the required minCredibility"),
+    "RFC-05: gate set but no scorecard": ("playback.flux.yml", _drop_scorecard, "no Playback scorecard calibrates"),
+    "RFC-06: range no vendored version satisfies": ("simulation.flux.yml", _unsatisfiable_fluid_range, "no vendored FLUID version satisfies"),
+    "RFC-06: contract drift breaks provenance": ("payment-recovery.fluid.yml", _contract_digest_drift, "contractDigest mismatch"),
 }
 
 

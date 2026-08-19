@@ -6,7 +6,8 @@ window** — the document versions it accepts.
 
 | Version | Status | Window | Schema |
 |---|---|---|---|
-| **0.4.0** | current | `0.3.0`, `0.4.0` | [flux-schema-0.4.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.4.0.json) |
+| **0.4.1** | current | `0.3.0`, `0.4.0`, `0.4.1` | [flux-schema-0.4.1.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.4.1.json) |
+| 0.4.0 | superseded (additively) | `0.3.0`, `0.4.0` | [flux-schema-0.4.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json) |
 | 0.3.0 | superseded (additively) | `0.3.0` | [flux-schema-0.3.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.3.0.json) |
 | 0.2.0 | pre-release draft, never shipped | `0.2.0` | [flux-schema-0.2.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.2.0.json) |
 

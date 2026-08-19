@@ -26,12 +26,12 @@ jobs:
               print(f"ok  {p}")
           EOF
       - name: latest alias matches current release
-        run: cmp schema/flux-schema-0.4.0.json schema/flux-schema-latest.json
+        run: cmp schema/flux-schema-0.4.1.json schema/flux-schema-latest.json
       - name: Generated artifacts are in sync (kinds doc + UI hints)
         run: |
           python scripts/generate-kinds-doc.py
           python scripts/generate-ui-hints.py
-          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.4.0.json
+          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.4.1.json
       - name: Validate example bundles (schema + cross-refs + FLUID seam)
         run: python scripts/validate.py
       - name: Regression suite (0.2.0 false-passes must fail)

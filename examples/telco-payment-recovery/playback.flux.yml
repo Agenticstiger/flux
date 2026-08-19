@@ -1,4 +1,4 @@
-fluxVersion: "0.3.0"
+fluxVersion: "0.4.1"
 kind: Playback
 id: pb-billing-history
 name: Billing History Calibration
@@ -16,3 +16,8 @@ spec:
     window: P90D
     method: mle
   drift: { metric: psi, threshold: 0.2, onBreach: warn }
+  scorecard:                       # RFC-05: the twin states its own trustworthiness
+    backtestWindow: P90D
+    grade: B
+    intervalCoverage: 0.92
+    credibility: 0.78

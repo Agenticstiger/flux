@@ -396,6 +396,9 @@ class Bundle:
             for e in sorted(validator.iter_errors(doc), key=lambda e: e.json_path)[:10]:
                 self.err(path.name, f"fails FLUID {declared}: {e.json_path}: {e.message}")
 
+    def _vendored_fluid_versions(self):
+        return sorted(p.stem.replace("fluid-schema-", "") for p in FLUID_VENDOR_DIR.glob("fluid-schema-*.json"))
+
     def check_fluid_seam(self):
         for doc_id, doc in self.flux_docs.items():
             if doc.get("kind") != "Simulation":
@@ -411,14 +414,49 @@ class Bundle:
                     continue
                 fluid_path, fluid_doc = entry
                 declared = fluid_doc.get("fluidVersion")
-                if declared != fluid_version:
+                if isinstance(fluid_version, str) and fluid_version[:1] in "^~":
+                    # RFC-06: a semver range, resolved against the vendored set
+                    rng = fluid_version
+                    if not any(semver_satisfies(v, rng) for v in self._vendored_fluid_versions()):
+                        self.err(doc_id, f"{where}: no vendored FLUID version satisfies range '{rng}' (vendored: {self._vendored_fluid_versions()})")
+                    if not (isinstance(declared, str) and semver_satisfies(declared, rng)):
+                        self.err(doc_id, f"{where}: {fluid_path.name} declares fluidVersion {declared}, which does not satisfy the pinned range '{rng}'")
+                elif declared != fluid_version:
                     self.err(doc_id, f"{where}: pinned fluidVersion {fluid_version} but {fluid_path.name} declares {declared}")
+                # RFC-06: provenance — the proven contract bytes are the shipped bytes
+                provenance = emit.get("provenance") or {}
+                contract_digest = provenance.get("contractDigest")
+                if contract_digest:
+                    actual = "sha256:" + canonical_digest(fluid_doc)
+                    if contract_digest != actual:
+                        self.err(doc_id, f"{where}: provenance.contractDigest mismatch — declared {contract_digest}, bundle contract is {actual}")
+                # RFC-05: seam gate on the twin's own credibility
+                min_credibility = emit.get("minCredibility")
+                if min_credibility is not None:
+                    self._check_seam_credibility(doc_id, where, doc, min_credibility)
                 exposes = [e for e in fluid_doc.get("exposes", []) if isinstance(e, dict)]
                 expose = next((e for e in exposes if e.get("exposeId") == expose_id), None)
                 if expose is None:
                     self.err(doc_id, f"{where}.exposeId '{expose_id}' is not an expose of {product_ref} (has: {[e.get('exposeId') for e in exposes]})")
                     continue
                 self._check_consent_strictness(doc_id, where, expose, gating_profiles)
+
+    def _check_seam_credibility(self, doc_id, where, sim_doc, min_credibility):
+        """RFC-05: a Playback scorecard calibrating this Simulation's world must
+        report at least the required credibility."""
+        world_ref = sim_doc.get("spec", {}).get("worldRef", "").split("@", 1)[0]
+        scores = [
+            p.get("spec", {}).get("scorecard", {}).get("credibility")
+            for p in self.flux_docs.values()
+            if p.get("kind") == "Playback"
+            and p.get("spec", {}).get("worldRef") == world_ref
+            and isinstance(p.get("spec", {}).get("scorecard"), dict)
+        ]
+        scores = [c for c in scores if isinstance(c, (int, float))]
+        if not scores:
+            self.err(doc_id, f"{where}: minCredibility {min_credibility} set but no Playback scorecard calibrates world '{world_ref}'")
+        elif max(scores) < min_credibility:
+            self.err(doc_id, f"{where}: twin credibility {max(scores)} is below the required minCredibility {min_credibility}")
 
     def _gating_consent_profiles(self, sim_doc):
         """ConsentProfiles gating this Simulation via campaignRefs -> Campaign.consentRef."""

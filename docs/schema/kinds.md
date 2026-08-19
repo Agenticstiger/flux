@@ -1,7 +1,7 @@
 # The Nineteen Kinds
 
 > Generated from
-> [`flux-schema-0.4.0.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json)
+> [`flux-schema-0.4.1.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json)
 > by `scripts/generate-kinds-doc.py` — do not edit by hand.
 
 Every kind shares the [common envelope](/flux/schema/anatomy#the-envelope);
@@ -207,6 +207,11 @@ same bundle — enforced by the [offline validator](/flux/schema/anatomy#the-off
 | `drift.metric` | enum | **yes** | `psi`, `kl`, `ks` |  |
 | `drift.threshold` | `number` | **yes** | > 0 |  |
 | `drift.onBreach` | enum | no | `warn`, `fail`; default `warn` |  |
+| `scorecard` | `object` | no |  | RFC-05: the twin states its own trustworthiness |
+| `scorecard.backtestWindow` | `string` | no |  | ISO-8601 duration of the backtest window, e.g |
+| `scorecard.grade` | enum | **yes** | `A`, `B`, `C`, `D`, `E`, `F` | Calibration grade derived from interval coverage and drift by the calibration engine |
+| `scorecard.intervalCoverage` | `unitInterval` | no | min 0; max 1 | Fraction of observed outcomes falling inside the twin's predicted intervals over the backtest window |
+| `scorecard.credibility` | `unitInterval` | **yes** | min 0; max 1 | The twin's overall trust score |
 
 ## Composition
 
@@ -239,7 +244,11 @@ same bundle — enforced by the [offline validator](/flux/schema/anatomy#the-off
 | `emits` | array of `object` | **yes** | minItems 1; unique | The FLUID contract handoff seam |
 | `emits[].productRef` | `ref` | **yes** |  | The id of the FLUID DataProduct document (.fluid.yml) proven by this simulation |
 | `emits[].exposeId` | `string` | **yes** | minLength 1 | Which expose of the referenced DataProduct this stream fulfils |
-| `emits[].fluidVersion` | enum | **yes** | `0.7.3`, `0.7.4`, `0.7.5` | FLUID schema version the referenced contract is validated against |
+| `emits[].fluidVersion` | anyOf | **yes** |  | RFC-06: an exact vendored FLUID version (as before) or a semver range (^0.7.3, ~0.7.4) resolved against the vendored compatibility set |
+| `emits[].minCredibility` | `unitInterval` | no | min 0; max 1 | RFC-05 seam gate: a Playback scorecard calibrating this Simulation's world must report at least this credibility (validator-enforced) |
+| `emits[].provenance` | `object` | no | minProperties 1 | RFC-06: cryptographic binding of the seam crossing |
+| `emits[].provenance.contractDigest` | `string` | no |  | Canonical-JSON sha256 of the referenced FLUID document |
+| `emits[].provenance.outputDigest` | `string` | no |  | Digest of the run output attested by the engine at emit time |
 
 ### Module
 

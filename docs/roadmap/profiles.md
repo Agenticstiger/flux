@@ -13,13 +13,13 @@ The 0.3.x bar. Any tool can hit it.
 - Deterministic under seed
 - No extensions required
 
-## Level 2 — Enterprise ◐ *three of five requirements shipped in 0.4.0*
+## Level 2 — Enterprise ◐ *four of five requirements shipped as of 0.4.1*
 
 Core, plus governance, semantics, and supply chain:
 
 - Extensions declared and typed (RFC-02 — *shipped in 0.4.0*)
 - Lockfile + pinned module refs (RFC-03 — *shipped in 0.4.0*)
-- Playback scorecard present (RFC-05)
+- Playback scorecard present (RFC-05 — *shipped in 0.4.1*)
 - Semantic-model port resolved (RFC-07 — *shipped in 0.4.0*)
 - Signed, attested bundle (RFC-09)
 
@@ -29,7 +29,7 @@ Enterprise, plus it actually runs and enforces:
 
 - Enforcement contract passes the conformance test vectors (RFC-04)
 - A live calibration loop feeds the scorecard
-- Seam provenance emitted per run (RFC-06)
+- Seam provenance emitted per run (RFC-06 — *schema surface + contract-digest check shipped in 0.4.1; per-run emission is engine work*)
 
 ## Why profiles change the calculus
 

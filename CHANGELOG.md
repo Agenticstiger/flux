@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.1 — 2026-08-20
+
+Additive; ships RFC-05 and RFC-06
+([schema-diffs/diff-0.4.0-to-0.4.1.md](schema-diffs/diff-0.4.0-to-0.4.1.md)):
+
+- **RFC-05 — credibility scorecard**: `Playback.spec.scorecard` (grade A–F,
+  interval coverage, required `credibility`) plus the seam gate
+  `emits[].minCredibility` — an untrustworthy twin cannot ship a contract.
+- **RFC-06 — seam ranges + provenance**: `fluidVersion` accepts semver ranges
+  resolved against the vendored set; `emits[].provenance.contractDigest`
+  binds the proven contract bytes to the shipped ones (validator-enforced),
+  `outputDigest` reserved for engine attestation.
+- `fluxVersion` window `["0.3.0", "0.4.0", "0.4.1"]`; regression suite grows
+  to 97 checks.
+
 ## 0.4.0 — 2026-08-19
 
 Additive; ships the first five vNext RFCs

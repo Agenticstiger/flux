@@ -29,7 +29,7 @@ landing across staged releases, governed by five principles.
 | Release | Scope | Status |
 |---|---|---|
 | **0.4.0** | RFC-01 trait distributions · RFC-02 extension port · RFC-03 module supply chain (`flux.lock`) · RFC-07 semantic-model port · RFC-08 UI hints — all additive, zero breakage | ✅ **shipped** |
-| 0.4.1 | RFC-05 credibility scorecard · RFC-06 seam version ranges + provenance | 📋 proposed |
+| **0.4.1** | RFC-05 credibility scorecard · RFC-06 seam version ranges + provenance — additive | ✅ **shipped** |
 | 0.5.0 | RFC-04 runtime enforcement contract · RFC-09 signed bundles — Level-3 Runtime becomes certifiable | 📋 proposed |
 
 Each release is independently adoptable, and each RFC lands the repo's way:
@@ -46,8 +46,8 @@ has zero losses. Under the full roadmap:
 | Dialect vocabulary, audit/retention fields | illegal — forces a fork | **kept** — RFC-02 extension port *(shipped)* |
 | Versioned modules & cross-bundle reuse | lost — flat in-bundle ids | **upgraded** — RFC-03 semver refs + lockfile *(shipped)* |
 | Runtime policy enforcement | dropped — validator only | **upgraded** — RFC-04 enforcement contract |
-| Closed-loop calibration verdicts | partial — drift only | **upgraded** — RFC-05 scorecard |
-| Contracts on older FLUID versions | stranded — frozen enum | **upgraded** — RFC-06 negotiated ranges |
+| Closed-loop calibration verdicts | partial — drift only | **upgraded** — RFC-05 scorecard *(shipped)* |
+| Contracts on older FLUID versions | stranded — frozen enum | **upgraded** — RFC-06 negotiated ranges *(shipped)* |
 | Semantic metric binding | opaque string | **kept** — RFC-07 semantic-model port *(shipped)* |
 | Form-based authoring tools | non-standard | **kept** — RFC-08 UI hints *(shipped)* |
 | Evidence packs | local pass/fail only | **upgraded** — RFC-09 signed bundles |

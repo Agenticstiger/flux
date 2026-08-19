@@ -1,4 +1,4 @@
-fluxVersion: "0.4.0"
+fluxVersion: "0.4.1"
 kind: Simulation
 id: sim-payment-recovery
 name: Payment Recovery Simulation
@@ -39,4 +39,7 @@ spec:
   emits:
     - productRef: telco.gold.payment_recovery_moment
       exposeId: payment_recovery_moment
-      fluidVersion: "0.7.5"
+      fluidVersion: "^0.7.3"       # RFC-06: range, resolved against the vendored set
+      minCredibility: 0.7          # RFC-05: seam gate on the twin's scorecard
+      provenance:                  # RFC-06: proven bytes are the shipped bytes
+        contractDigest: "sha256:762fdf58ed9d1d3f03e0d1502b287b314b6619c6b273d57270299440b9c853c1"

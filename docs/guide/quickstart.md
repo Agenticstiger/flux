@@ -19,7 +19,7 @@ python3 scripts/validate.py examples/telco-payment-recovery
 ```
 
 That one line just did two layers of work: every document against the
-[JSON Schema](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json),
+[JSON Schema](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json),
 then the cross-document checks — reference resolution, sums, state membership,
 agentPolicy bounds, and FLUID seam conformance.
 
@@ -113,7 +113,7 @@ Add this line to the top of any `.flux.yml` for instant validation and
 completion in VS Code (with the YAML extension) and friends:
 
 ```yaml
-# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json
+# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json
 ```
 
 ## Next

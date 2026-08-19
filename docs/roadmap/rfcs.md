@@ -78,15 +78,17 @@ useCase, purpose, tokens) → allow/deny + reason + audit record — plus a
 reference gate and a conformance test-vector suite. Policy you can prove was
 enforced, not just written.
 
-## RFC-05 — Playback → a credibility scorecard 📋
+## RFC-05 — Playback → a credibility scorecard ✅ shipped in 0.4.1
 
-*Calibration · Playback · target 0.4.1*
+*Calibration · Playback*
 
 **Gap:** `Playback` reports drift (PSI/KL/KS) but stops short of a verdict on
 the honest question: *should I trust this twin's uplift?*
 
-**Proposal:** a `scorecard` block — backtest window, calibration grade A–F,
-prediction-interval coverage, and a `credibility` 0..1 the seam can gate on.
+**Shipped:** a `scorecard` block — backtest window, calibration grade A–F,
+prediction-interval coverage, and a required `credibility` 0..1. The seam
+gates on it: `emits[].minCredibility` fails the bundle when the twin's own
+score is below the bar (validator-enforced).
 
 ```yaml
 scorecard:
@@ -96,24 +98,29 @@ scorecard:
   credibility: 0.78          # seam may require ≥ threshold
 ```
 
-## RFC-06 — Seam version negotiation + provenance 📋
+## RFC-06 — Seam version negotiation + provenance ✅ shipped in 0.4.1
 
-*Composition · Simulation · target 0.4.1*
+*Composition · Simulation*
 
 **Gap:** the seam pins `fluidVersion` to a frozen enum of vendored versions.
 A static enum ages badly and strands contracts on older FLUID releases.
 
-**Proposal:** `fluidVersion` becomes a semver **range** resolved against a
-vendored compatibility manifest, and each emit carries a `provenance` digest
-binding twin output to shipped contract:
+**Shipped:** `fluidVersion` accepts a semver **range** (`^0.7.3`, `~0.7.4`)
+resolved against the vendored compatibility set — the referenced document
+must satisfy it, and at least one vendored schema must too. Each emit may
+carry `provenance`: `contractDigest` is validator-enforced against the
+in-bundle contract (proven bytes are shipped bytes); `outputDigest` is the
+engine-attested run digest, verified at the Runtime profile (RFC-04):
 
 ```yaml
 emits:
   - productRef: telco.gold.payment_recovery_moment
     exposeId: payment_recovery_moment
     fluidVersion: "^0.7.3"           # range, not frozen point
+    minCredibility: 0.7              # RFC-05 gate on the twin's scorecard
     provenance:
-      outputDigest: "sha256:be91…"   # twin bytes == shipped bytes
+      contractDigest: "sha256:762f…" # validator-enforced: contract drift fails
+      outputDigest: "sha256:be91…"   # engine-attested at emit time
 ```
 
 ## RFC-07 — A semantic-model port ✅ shipped in 0.4.0
