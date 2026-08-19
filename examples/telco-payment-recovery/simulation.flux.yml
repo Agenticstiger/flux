@@ -1,4 +1,4 @@
-fluxVersion: "0.4.1"
+fluxVersion: "0.5.0"
 kind: Simulation
 id: sim-payment-recovery
 name: Payment Recovery Simulation

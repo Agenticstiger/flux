@@ -1,7 +1,8 @@
 # The Nine RFCs
 
 Each RFC closes a specific gap between the 0.3.x core and what the most
-advanced implementations already do. Status: ✅ shipped · ◐ partial · 📋 proposed.
+advanced implementations already do. **All nine are shipped as of 0.5.0**
+(RFC-08's LSP specification remains open). Status: ✅ shipped · ◐ partial.
 
 ## RFC-01 — Trait distributions as first-class sampling ✅ shipped in 0.4.0
 
@@ -65,18 +66,21 @@ moduleRefs:
 # flux.lock records: churn-detector@2.1.3 sha256:9f2c…
 ```
 
-## RFC-04 — A Runtime profile + reference enforcer 📋
+## RFC-04 — A Runtime profile + reference enforcer ✅ shipped in 0.5.0
 
-*Governance · runtime · target 0.5.0*
+*Governance · runtime*
 
 **Gap:** `agentPolicy` is declared and validator-checked, but nothing
 enforces it at call time — a conforming document can still make an
 off-policy call.
 
-**Proposal:** a normative **enforcement decision contract** — input (model,
-useCase, purpose, tokens) → allow/deny + reason + audit record — plus a
-reference gate and a conformance test-vector suite. Policy you can prove was
-enforced, not just written.
+**Shipped:** a normative **enforcement decision contract**
+([schema](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json))
+— input (model, useCase, purpose, tokens) → allow/deny + reason code +
+`policyDigest` audit anchor — with a fixed check order, fail-closed defaults,
+skill budget narrowing, the reference gate `scripts/enforce.py`, and 20
+published conformance vectors CI runs on every commit. See
+[Runtime & Evidence](/flux/concepts/runtime).
 
 ## RFC-05 — Playback → a credibility scorecard ✅ shipped in 0.4.1
 
@@ -149,12 +153,15 @@ generated from the schema, enough for any tool to render a form.
 **Remaining:** an LSP specification so Studio-class editors are portable
 across dialects.
 
-## RFC-09 — Signed bundles & evidence packs 📋
+## RFC-09 — Signed bundles & evidence packs ✅ shipped in 0.5.0
 
-*Governance · release · target 0.5.0*
+*Governance · release*
 
 **Gap:** validation is a local pass/fail; nothing travels as proof.
 
-**Proposal:** `flux bundle --sign` → deterministic archive + Merkle manifest
-+ attestation (schema version, conformance profile, scorecard grade, seam
-provenance). A regulator or partner verifies without the author's tooling.
+**Shipped:** `scripts/bundle.py pack|verify` — a deterministic archive, a
+[manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json)
+with per-file digests and a Merkle root, and an attestation (profile,
+validator status, scorecards, seam crossings) that `verify` recomputes from
+scratch. Signing is detached over the manifest bytes, so a regulator or
+partner verifies offline without the author's tooling.

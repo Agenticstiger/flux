@@ -1,4 +1,4 @@
-fluxVersion: "0.3.0"
+fluxVersion: "0.5.0"
 kind: Segment
 id: seg-atrisk-tv
 name: At-risk TV Subscribers

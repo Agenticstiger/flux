@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0 — 2026-08-20
+
+Additive; ships RFC-04 and RFC-09 — **all nine vNext RFCs are now shipped**
+([schema-diffs/diff-0.4.1-to-0.5.0.md](schema-diffs/diff-0.4.1-to-0.5.0.md)):
+
+- **RFC-04 — enforcement decision contract**: `schema/flux-enforcement-0.5.0.json`,
+  the reference gate `scripts/enforce.py`, and 34 published conformance
+  vectors pinning allow/reasonCode/policyDigest. Normative check order,
+  fail-closed defaults (off-spec policies are rejected, not reinterpreted),
+  JSON-semantic integers, NFC-normalised identifiers, skills that narrow but
+  never widen, and RFC 8785 (JCS) canonical digests. A meta-test asserts six
+  deliberately-broken gates fail the suite.
+- **RFC-09 — signed evidence bundles**: `schema/flux-manifest-0.5.0.json` and
+  `scripts/bundle.py`. Deterministic archives, per-file digests, a Merkle
+  root, and an attestation `verify` recomputes from scratch. Detached
+  signing over the manifest; offline bundlers never claim the runtime profile.
+- `fluxVersion` window `["0.3.0", "0.4.0", "0.4.1", "0.5.0"]`; regression
+  suite grows to 132 checks; CI runs the vectors and a bundle round-trip.
+- Prior art adopted rather than reinvented: RFC 6962 Merkle domain separation,
+  RFC 8785 canonical JSON, reproducible-builds.org archive recipe, in-toto
+  Statements, and Cedar's authorization model. New dependency: `rfc8785`.
+
 ## 0.4.1 — 2026-08-20
 
 Additive; ships RFC-05 and RFC-06

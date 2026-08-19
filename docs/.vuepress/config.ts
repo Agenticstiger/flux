@@ -59,6 +59,7 @@ export default defineUserConfig({
           { text: 'The Six Families', link: '/concepts/families' },
           { text: 'The FLUID Seam', link: '/concepts/seam' },
           { text: 'Deterministic & Governed', link: '/concepts/determinism-governance' },
+          { text: 'Runtime & Evidence', link: '/concepts/runtime' },
         ],
       },
       {
@@ -68,8 +69,10 @@ export default defineUserConfig({
           { text: 'The Nineteen Kinds', link: '/schema/kinds' },
           { text: 'Versions', link: '/schema/versions' },
           { text: 'Changelog', link: '/schema/changelog' },
-          { text: 'JSON Schema 0.4.1 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json', target: '_blank' },
-          { text: 'UI Hints 0.4.1 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.4.1.json', target: '_blank' },
+          { text: 'JSON Schema 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json', target: '_blank' },
+          { text: 'UI Hints 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.0.json', target: '_blank' },
+          { text: 'Enforcement Contract 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json', target: '_blank' },
+          { text: 'Bundle Manifest 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json', target: '_blank' },
         ],
       },
       {
@@ -101,6 +104,7 @@ export default defineUserConfig({
             '/concepts/families.md',
             '/concepts/seam.md',
             '/concepts/determinism-governance.md',
+            '/concepts/runtime.md',
           ],
         },
       ],
@@ -131,7 +135,7 @@ export default defineUserConfig({
       '/releases/': [
         {
           text: "What's New",
-          children: ['/releases/README.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
+          children: ['/releases/README.md', '/releases/0.5.0.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
         },
       ],
       '/contributing/': [

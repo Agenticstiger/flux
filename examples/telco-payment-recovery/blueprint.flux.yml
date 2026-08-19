@@ -1,4 +1,4 @@
-fluxVersion: "0.3.0"
+fluxVersion: "0.5.0"
 kind: Blueprint
 id: bp-telco-retention
 name: Telco Retention Blueprint

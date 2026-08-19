@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 SCHEMA = json.loads((REPO / "schema" / f"flux-schema-{VERSION}.json").read_text())
 OUT = REPO / "schema" / f"flux-ui-hints-{VERSION}.json"
 

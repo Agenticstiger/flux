@@ -42,10 +42,11 @@ import sys
 from pathlib import Path
 
 try:
+    import rfc8785
     import yaml
     from jsonschema import Draft202012Validator, FormatChecker
 except ImportError:  # pragma: no cover
-    sys.exit("validate.py requires: pip install jsonschema pyyaml")
+    sys.exit("validate.py requires: pip install jsonschema pyyaml rfc8785")
 
 REPO = Path(__file__).resolve().parent.parent
 FLUX_SCHEMA_PATH = REPO / "schema" / "flux-schema-latest.json"
@@ -82,11 +83,16 @@ SUM_TOLERANCE = 1e-9
 
 
 def canonical_digest(doc) -> str:
-    """RFC-03 content digest: sha256 over canonical JSON (sorted keys,
-    minimal separators) of the document."""
+    """Content digest for RFC-03 lockfiles and RFC-06 seam provenance.
+
+    sha256 over the RFC 8785 (JCS) canonicalisation. JCS — not merely sorted
+    keys — because a digest that two implementations compute differently is
+    not a digest: JCS also fixes number spelling (1000.0 and 1000 serialise
+    identically) and emits raw UTF-8 rather than backslash-u escapes, which
+    `json.dumps` does not.
+    """
     import hashlib
-    payload = json.dumps(doc, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(payload).hexdigest()
+    return hashlib.sha256(rfc8785.dumps(doc)).hexdigest()
 
 
 def semver_satisfies(version: str, rng: str) -> bool:

@@ -23,7 +23,7 @@ external contribution grows — see
 ```bash
 git clone https://github.com/Agenticstiger/flux.git
 cd flux
-pip install jsonschema pyyaml
+pip install jsonschema pyyaml rfc8785
 python3 scripts/validate.py && python3 tests/test_regression.py
 ```
 

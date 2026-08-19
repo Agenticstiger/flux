@@ -36,7 +36,7 @@ FLUX describes **synthetic customer universes**: governed digital twins in which
 ## The shape of a document
 
 ```yaml
-fluxVersion: "0.4.1"
+fluxVersion: "0.5.0"
 kind: World
 id: q3-retention-world
 name: Q3 Retention World

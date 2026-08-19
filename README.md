@@ -9,7 +9,7 @@
   <a href="https://agenticstiger.github.io/flux/schema/kinds.html">🧭 The Nineteen Kinds</a> ·
   <a href="https://agenticstiger.github.io/flux/concepts/seam.html">🔗 The FLUID Seam</a> ·
   <a href="https://agenticstiger.github.io/flux/roadmap/">🗺️ Roadmap</a> ·
-  <a href="https://agenticstiger.github.io/flux/releases/0.4.1.html">✨ What's New</a>
+  <a href="https://agenticstiger.github.io/flux/releases/0.5.0.html">✨ What's New</a>
 </p>
 
 ---
@@ -28,10 +28,10 @@ FLUX discovers.  FLUID delivers.  The seam is where the risk goes to die.
 
 ## Status
 
-**v0.4.1 — working draft.** Seven of the nine [vNext RFCs](docs/roadmap/rfcs.md)
-now shipped additively on the 0.3.0 core — trait distributions, extension
-port, module supply chain, semantic-model port, UI hints, the credibility
-scorecard, and seam version ranges + provenance. Pre-1.0: minor versions may break; every release
+**v0.5.0 — working draft.** All nine [vNext RFCs](docs/roadmap/rfcs.md) are
+shipped additively on the 0.3.0 core — the spec now carries a runtime
+enforcement contract with conformance vectors and portable, signable evidence
+bundles alongside the declarative core. Pre-1.0: minor versions may break; every release
 ships with a [schema diff](schema-diffs/) and a regression suite. The design
 is documented in the position paper *"FLUX and FLUID"* (distributed separately
 under CC BY 4.0); where the paper and this schema disagreed,
@@ -51,7 +51,7 @@ under CC BY 4.0); where the paper and this schema disagreed,
 Every document shares one envelope, aligned with FLUID's:
 
 ```yaml
-fluxVersion: "0.4.1"
+fluxVersion: "0.5.0"
 kind: World
 id: q3-retention-world
 name: Q3 Retention World
@@ -92,13 +92,15 @@ contract file is wrapped around the real estate.
 ## Validate a bundle
 
 ```bash
-pip install jsonschema pyyaml
-python3 scripts/validate.py examples/telco-payment-recovery
+pip install jsonschema pyyaml rfc8785
+python3 scripts/validate.py examples/telco-payment-recovery   # schema + cross-document
+python3 scripts/enforce.py                                    # RFC-04 conformance vectors
+python3 scripts/bundle.py pack examples/telco-payment-recovery -o dist/   # RFC-09 evidence bundle
 ```
 
 Two layers, both offline (no cloud, no running engine):
 
-1. **Schema** — every `*.flux.yml` against [`schema/flux-schema-0.4.1.json`](schema/flux-schema-0.4.1.json)
+1. **Schema** — every `*.flux.yml` against [`schema/flux-schema-0.5.0.json`](schema/flux-schema-0.5.0.json)
    (JSON Schema 2020-12, closed specs, typed everything).
 2. **Cross-document** — every reference resolves to the right kind (no
    dangling links), mixes and weights sum to 1, transitions stay inside their
@@ -107,7 +109,7 @@ Two layers, both offline (no cloud, no running engine):
 Use the schema in your editor:
 
 ```yaml
-# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json
+# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json
 ```
 
 ## Example
@@ -123,8 +125,8 @@ schema/          flux-schema-<version>.json (+ -latest alias) — normative
 schema-diffs/    one diff document per version pair
 examples/        validated bundles (CI-enforced)
 vendor/fluid/    vendored FLUID schemas the seam validates against
-scripts/         the offline reference validator
-tests/           regression suite pinning every closed validation gap
+scripts/         validate.py (references) · enforce.py (RFC-04 gate) · bundle.py (RFC-09)
+tests/           regression suite + published enforcement conformance vectors
 docs/            reconciliation ledger
 ```
 

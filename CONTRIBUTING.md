@@ -6,7 +6,7 @@ changes here — everything normative is validated by CI.
 ## Setup
 
 ```bash
-pip install jsonschema pyyaml
+pip install jsonschema pyyaml rfc8785
 python3 scripts/validate.py        # all example bundles must be green
 python3 tests/test_regression.py   # regression suite must be green
 ```

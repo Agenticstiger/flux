@@ -13,7 +13,7 @@ The 0.3.x bar. Any tool can hit it.
 - Deterministic under seed
 - No extensions required
 
-## Level 2 — Enterprise ◐ *four of five requirements shipped as of 0.4.1*
+## Level 2 — Enterprise ✅ *all requirements shipped as of 0.5.0*
 
 Core, plus governance, semantics, and supply chain:
 
@@ -21,13 +21,13 @@ Core, plus governance, semantics, and supply chain:
 - Lockfile + pinned module refs (RFC-03 — *shipped in 0.4.0*)
 - Playback scorecard present (RFC-05 — *shipped in 0.4.1*)
 - Semantic-model port resolved (RFC-07 — *shipped in 0.4.0*)
-- Signed, attested bundle (RFC-09)
+- Signed, attested bundle (RFC-09 — *shipped in 0.5.0*)
 
-## Level 3 — Runtime 📋 *lands with 0.5.0*
+## Level 3 — Runtime ◐ *contract + vectors shipped in 0.5.0; certification needs a live engine*
 
 Enterprise, plus it actually runs and enforces:
 
-- Enforcement contract passes the conformance test vectors (RFC-04)
+- Enforcement contract passes the conformance test vectors (RFC-04 — *contract, reference gate and vectors shipped in 0.5.0*)
 - A live calibration loop feeds the scorecard
 - Seam provenance emitted per run (RFC-06 — *schema surface + contract-digest check shipped in 0.4.1; per-run emission is engine work*)
 

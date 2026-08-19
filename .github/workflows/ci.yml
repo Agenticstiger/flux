@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install validator dependencies
-        run: pip install jsonschema pyyaml
+        run: pip install jsonschema pyyaml rfc8785
       - name: All published and vendored schemas are valid
         run: |
           python - <<'EOF'
@@ -26,13 +26,19 @@ jobs:
               print(f"ok  {p}")
           EOF
       - name: latest alias matches current release
-        run: cmp schema/flux-schema-0.4.1.json schema/flux-schema-latest.json
+        run: cmp schema/flux-schema-0.5.0.json schema/flux-schema-latest.json
       - name: Generated artifacts are in sync (kinds doc + UI hints)
         run: |
           python scripts/generate-kinds-doc.py
           python scripts/generate-ui-hints.py
-          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.4.1.json
+          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.5.0.json
       - name: Validate example bundles (schema + cross-refs + FLUID seam)
         run: python scripts/validate.py
+      - name: Enforcement conformance vectors (RFC-04)
+        run: python scripts/enforce.py
+      - name: Evidence bundle round-trip (RFC-09)
+        run: |
+          python scripts/bundle.py pack examples/telco-payment-recovery -o dist/
+          python scripts/bundle.py verify dist/telco-payment-recovery.flux.tgz
       - name: Regression suite (0.2.0 false-passes must fail)
         run: python tests/test_regression.py

@@ -1,7 +1,7 @@
 # The Nineteen Kinds
 
 > Generated from
-> [`flux-schema-0.4.1.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json)
+> [`flux-schema-0.5.0.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json)
 > by `scripts/generate-kinds-doc.py` — do not edit by hand.
 
 Every kind shares the [common envelope](/flux/schema/anatomy#the-envelope);

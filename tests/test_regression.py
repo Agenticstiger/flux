@@ -12,9 +12,11 @@ Run: python3 tests/test_regression.py   (exit 0 = green)
 from __future__ import annotations
 
 import copy
+import io
 import json
 import shutil
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
 
@@ -24,6 +26,8 @@ from jsonschema import Draft202012Validator, FormatChecker
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 from validate import Bundle  # noqa: E402
+import enforce  # noqa: E402
+import bundle as bundle_tool  # noqa: E402
 
 SCHEMA = json.loads((REPO / "schema" / "flux-schema-latest.json").read_text())
 VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
@@ -560,6 +564,254 @@ def main() -> int:
     if not any("does not exist" in e for e in missing_errors):
         failures.append(f"[validator] nonexistent dir should say so; got: {missing_errors}")
 
+    # ---- RFC-04: the reference gate matches every conformance vector -------
+    VECTORS = REPO / "tests" / "enforcement-vectors.json"
+    if enforce.main(["--vectors", str(VECTORS)]) != 0:
+        failures.append("[enforcement] conformance vectors did not all pass")
+
+    # every decision must satisfy the published decision contract
+    contract = json.loads((REPO / "schema" / "flux-enforcement-0.5.0.json").read_text())
+    decision_validator = Draft202012Validator({"$ref": "#/$defs/decision", "$defs": contract["$defs"]})
+    for v in json.loads(VECTORS.read_text())["vectors"]:
+        for e in decision_validator.iter_errors(enforce.decide(v["policy"], v["request"], v.get("skill"))):
+            failures.append(f"[enforcement] decision for {v['name']!r} violates the contract: {e.message}")
+            break
+    # the contract must reject a decision that contradicts itself
+    if decision_validator.is_valid({"allow": True, "reasonCode": "MODEL_NOT_ALLOWED",
+                                    "reason": "x", "policyDigest": "sha256:" + "0" * 64, "request": {}}):
+        failures.append("[enforcement] contract accepts allow=true with a deny reasonCode")
+
+    # THE meta-test: the vector suite must actually constrain conformance.
+    # Each gate below is the reference with one real defect; every one must FAIL.
+    def _broken(defect):
+        def gate(policy, request, skill=None):
+            if defect == "fail_open_purpose":       # purposeLimitation defaults to false
+                policy = {"purposeLimitation": False, **policy}
+            elif defect == "skill_replaces_budget":  # skill widens instead of narrowing
+                if skill and enforce.as_int(skill.get("tokenBudget")) is not None:
+                    policy = {**policy, "tokenBudget": skill["tokenBudget"]}
+                skill = None
+            elif defect == "native_int_budget":      # isinstance(x, int) instead of JSON integer
+                if isinstance(policy.get("tokenBudget"), float):
+                    policy = {k: v for k, v in policy.items() if k != "tokenBudget"}
+                    policy["tokenBudget"] = 10 ** 15
+            elif defect == "case_insensitive":       # folds case before matching
+                request = {**request, "useCase": str(request.get("useCase", "")).lower(),
+                           "model": str(request.get("model", "")).lower()}
+                policy = {**policy,
+                          "allowedModels": [m.lower() for m in policy.get("allowedModels", [])]}
+            elif defect == "lenient_policy":         # enforces off-spec policies instead of rejecting
+                if enforce.policy_problem(policy):
+                    policy = {"allowedModels": policy.get("allowedModels") or ["*"],
+                              "tokenBudget": 10 ** 15, "purposeLimitation": False}
+            d = enforce.decide(policy, request, skill)
+            if defect == "fake_digest":              # no real binding to the policy
+                d = {**d, "policyDigest": "sha256:" + "0" * 64}
+            return d
+        return gate
+
+    for defect in ("fail_open_purpose", "skill_replaces_budget", "native_int_budget",
+                   "case_insensitive", "lenient_policy", "fake_digest"):
+        broken, _ = enforce.run_vectors(VECTORS, gate=_broken(defect))
+        if broken == 0:
+            failures.append(f"[enforcement] a gate with defect {defect!r} passes the whole vector suite — "
+                            "the suite does not constrain conformance")
+
+    # canonicalisation (RFC 8785): spelling must not change the digest, content must
+    base = {"allowedModels": ["modèle-8b"], "tokenBudget": 1000, "purposeLimitation": False}
+    respelled = {"purposeLimitation": False, "tokenBudget": 1000.0, "allowedModels": ["modèle-8b"]}
+    if enforce.policy_digest(base) != enforce.policy_digest(respelled):
+        failures.append("[enforcement] policyDigest changes with key order / number spelling — not canonical")
+    if enforce.policy_digest(base) == enforce.policy_digest({**base, "tokenBudget": 1001}):
+        failures.append("[enforcement] policyDigest collides across different policies")
+    # a skill must not rewrite the digest: it is the DOCUMENT's policy that is attested
+    req = {"model": "modèle-8b", "useCase": "u", "tokens": 5}
+    with_skill = enforce.decide(base, req, {"name": "s", "tokenBudget": 10})
+    if with_skill["policyDigest"] != enforce.policy_digest(base):
+        failures.append("[enforcement] policyDigest under a skill does not match the document policy")
+    if with_skill.get("effectiveBudget") != 10 or with_skill.get("skillRef") != "s":
+        failures.append("[enforcement] narrowing is not recorded as effectiveBudget/skillRef")
+
+    # ---- RFC-09: pack -> verify round-trip, determinism, tamper detection --
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        if bundle_tool.pack(work, out, flux_validator) != 0:
+            failures.append("[bundle] packing the example bundle failed")
+        archive = out / f"{work.name}.flux.tgz"
+        first = archive.read_bytes()
+        if bundle_tool.verify(archive, flux_validator) != 0:
+            failures.append("[bundle] verify rejected a freshly packed bundle")
+        bundle_tool.pack(work, out, flux_validator)
+        if archive.read_bytes() != first:
+            failures.append("[bundle] archives are not byte-identical across repacks")
+
+        manifest = json.loads((work / "flux-manifest.json").read_text())
+        if manifest["attestation"]["profile"] != "enterprise":
+            failures.append(f"[bundle] expected enterprise profile, got {manifest['attestation']['profile']}")
+        if bundle_tool.merkle_root(manifest["files"]) != manifest["merkleRoot"]:
+            failures.append("[bundle] merkle root does not match the manifest file list")
+        tweaked = dict(manifest["files"])
+        first_key = sorted(tweaked)[0]
+        tweaked[first_key] = "sha256:" + "0" * 64
+        if bundle_tool.merkle_root(tweaked) == manifest["merkleRoot"]:
+            failures.append("[bundle] merkle root is insensitive to a changed file digest")
+
+    # tampering with any file inside a packed archive must fail verification
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        bundle_tool.pack(work, out, flux_validator)
+        archive = out / f"{work.name}.flux.tgz"
+        tampered = out / "tampered.flux.tgz"
+        with tarfile.open(archive, "r:gz") as src, tarfile.open(tampered, "w:gz") as dst:
+            for member in src.getmembers():
+                data = src.extractfile(member).read()
+                if member.name.endswith("world.flux.yml"):
+                    data = data.replace(b"size: 25000", b"size: 999999")
+                info = tarfile.TarInfo(member.name)
+                info.size, info.mtime, info.mode = len(data), 0, 0o644
+                dst.addfile(info, io.BytesIO(data))
+        if bundle_tool.verify(tampered, flux_validator) == 0:
+            failures.append("[bundle] verify accepted a tampered archive")
+
+    # a .sig file smuggled into an archive must be reported as unmanifested
+    # (detached signatures belong beside the archive, never inside it)
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        bundle_tool.pack(work, out, flux_validator)
+        archive, smuggled = out / f"{work.name}.flux.tgz", out / "smuggled.flux.tgz"
+        with tarfile.open(archive, "r:gz") as src, tarfile.open(smuggled, "w:gz") as dst:
+            for member in src.getmembers():
+                data = src.extractfile(member).read()
+                info = tarfile.TarInfo(member.name)
+                info.size, info.mtime, info.mode = len(data), 0, 0o644
+                dst.addfile(info, io.BytesIO(data))
+            payload = b"arbitrary unmanifested content"
+            info = tarfile.TarInfo(f"{work.name}/payload.sig")
+            info.size, info.mtime, info.mode = len(payload), 0, 0o644
+            dst.addfile(info, io.BytesIO(payload))
+        if bundle_tool.verify(smuggled, flux_validator) == 0:
+            failures.append("[bundle] verify accepted an archive with an unmanifested .sig payload")
+
+    # the in-toto Statement must describe the archive it was emitted beside
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        bundle_tool.pack(work, out, flux_validator)
+        archive = out / f"{work.name}.flux.tgz"
+        statement = json.loads((out / f"{work.name}{bundle_tool.STATEMENT_SUFFIX}").read_text())
+        if statement.get("_type") != "https://in-toto.io/Statement/v1":
+            failures.append(f"[bundle] statement _type is not in-toto v1: {statement.get('_type')}")
+        subject = (statement.get("subject") or [{}])[0]
+        if subject.get("digest", {}).get("sha256") != bundle_tool.sha256_file(archive):
+            failures.append("[bundle] in-toto subject digest does not match the archive")
+        if not statement.get("predicateType", "").startswith("https://"):
+            failures.append("[bundle] in-toto predicateType is not a URI")
+
+    # RFC 6962 domain separation: an interior hash must not be replayable as a leaf
+    two = {"a.yml": "sha256:" + "11" * 32, "b.yml": "sha256:" + "22" * 32}
+    root_two = bundle_tool.merkle_root(two)
+    if bundle_tool.merkle_root({"a.yml": "sha256:" + "11" * 32}) == root_two:
+        failures.append("[bundle] merkle root ignores the second entry")
+    swapped = {"a.yml": two["b.yml"], "b.yml": two["a.yml"]}
+    if bundle_tool.merkle_root(swapped) == root_two:
+        failures.append("[bundle] merkle root is blind to swapping two files' digests")
+
+    # ---- RFC-09 negative fixtures: every attack yields [FAIL], never a traceback
+    def _repack(work: Path, out: Path, mutate):
+        """Rebuild a packed archive, applying `mutate(members) -> members`."""
+        bundle_tool.pack(work, out, flux_validator)
+        src_path = out / f"{work.name}.flux.tgz"
+        entries = []
+        with tarfile.open(src_path, "r:gz") as src:
+            for m in src.getmembers():
+                entries.append((m.name, src.extractfile(m).read()))
+        entries = mutate(entries)
+        attacked = out / "attacked.flux.tgz"
+        with tarfile.open(attacked, "w:gz") as dst:
+            for name, data in entries:
+                info = tarfile.TarInfo(name)
+                info.size, info.mtime, info.mode = len(data), 0, 0o644
+                dst.addfile(info, io.BytesIO(data))
+        return attacked
+
+    def _edit_manifest(entries, fn):
+        out = []
+        for name, data in entries:
+            if name.endswith(bundle_tool.MANIFEST_NAME):
+                doc = json.loads(data)
+                fn(doc)
+                data = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
+            out.append((name, data))
+        return out
+
+    def _lie(field, value):
+        return lambda entries: _edit_manifest(entries, lambda m: m.__setitem__(field, value))
+
+    BUNDLE_ATTACKS = {
+        "file smuggled outside the bundle directory":
+            (lambda e: e + [("stray-payload.bin", b"undeclared")], "one bundle directory"),
+        "manifest lies about fluxVersions":
+            (_lie("fluxVersions", ["9.9.9"]), "does not match the documents"),
+        "manifest lies about schemaId":
+            (_lie("schemaId", "https://evil.example/never-published.json"), "not this toolchain's schema"),
+        "manifest claims the unclaimable runtime profile":
+            (lambda e: _edit_manifest(e, lambda m: m["attestation"].__setitem__("profile", "runtime")),
+             "violates the manifest schema"),
+        "manifest is not valid JSON":
+            (lambda e: [(n, b"{not json" if n.endswith(bundle_tool.MANIFEST_NAME) else d) for n, d in e],
+             "not valid JSON"),
+        "duplicate archive entries":
+            (lambda e: e + [e[0]], "duplicate archive entry"),
+    }
+    for label, (mutate, expected) in BUNDLE_ATTACKS.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+            shutil.copytree(EXAMPLES, work)
+            try:
+                attacked = _repack(work, out, mutate)
+                rc = bundle_tool.verify(attacked, flux_validator)
+            except Exception as exc:  # noqa: BLE001 — a traceback IS the failure
+                failures.append(f"[bundle] CRASHED ({type(exc).__name__}: {exc}) — {label}")
+                continue
+            if rc == 0:
+                failures.append(f"[bundle] verify accepted an archive where: {label}")
+
+    # malformed inputs that never reach the manifest at all
+    with tempfile.TemporaryDirectory() as tmp:
+        junk = Path(tmp) / "not-an-archive.flux.tgz"
+        junk.write_bytes(b"this is not a gzip stream")
+        for label, target in {"non-existent archive": Path(tmp) / "missing.tgz",
+                              "non-gzip file": junk}.items():
+            try:
+                if bundle_tool.verify(target, flux_validator) == 0:
+                    failures.append(f"[bundle] verify accepted a {label}")
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"[bundle] CRASHED on {label} ({type(exc).__name__}: {exc})")
+
+    # a declared-size bomb must be refused before anything is written to disk
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        bomb = _repack(work, out, lambda e: e + [("bundle/bomb.bin", b"\0" * (2 * 1024 * 1024))])
+        original_cap = bundle_tool.MAX_BUNDLE_BYTES
+        bundle_tool.MAX_BUNDLE_BYTES = 1024 * 1024
+        try:
+            if bundle_tool.verify(bomb, flux_validator) == 0:
+                failures.append("[bundle] verify accepted an archive above the size cap")
+        finally:
+            bundle_tool.MAX_BUNDLE_BYTES = original_cap
+
+    # a bundle that does not validate must never be packed
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        mutate_yaml(work, "campaign.flux.yml", _dangling_ref)
+        if bundle_tool.pack(work, out, flux_validator) == 0:
+            failures.append("[bundle] packed a bundle that fails validation")
+
     # version-window pinning: released schema files are immutable, so a 0.4.0
     # document (extensions or not) must FAIL the 0.3.0 schema file
     old_schema = Draft202012Validator(
@@ -577,6 +829,10 @@ def main() -> int:
     total = (
         len(CASES_PASS) + len(CASES_REJECT) + 1
         + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 6
+        + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
+        + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
+        + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
+        + 9   # RFC-09 negative fixtures: 6 archive attacks + 2 malformed inputs + size cap
     )
     if failures:
         print(f"FAIL — {len(failures)}/{total} checks failed")
