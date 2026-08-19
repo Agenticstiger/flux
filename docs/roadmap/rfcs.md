@@ -78,8 +78,14 @@ off-policy call.
 ([schema](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json))
 — input (model, useCase, purpose, tokens) → allow/deny + reason code +
 `policyDigest` audit anchor — with a fixed check order, fail-closed defaults,
-skill budget narrowing, the reference gate `scripts/enforce.py`, and 20
-published conformance vectors CI runs on every commit. See
+skill budget narrowing, the reference gate `scripts/enforce.py`, and 34
+published conformance vectors CI runs on every commit — pinning `allow`,
+`reasonCode` and `policyDigest`, the last canonicalised per
+[RFC 8785 (JCS)](https://datatracker.ietf.org/doc/rfc8785/) so gates in
+different languages agree byte-for-byte. Integers follow JSON semantics
+(`200000.0` is `200000`), identifiers are NFC-normalised before comparison,
+and an off-spec policy is `INVALID_POLICY` rather than a lenient reading. A
+meta-test asserts six deliberately-broken gates **fail** the suite. See
 [Runtime & Evidence](/flux/concepts/runtime).
 
 ## RFC-05 — Playback → a credibility scorecard ✅ shipped in 0.4.1
@@ -159,9 +165,15 @@ across dialects.
 
 **Gap:** validation is a local pass/fail; nothing travels as proof.
 
-**Shipped:** `scripts/bundle.py pack|verify` — a deterministic archive, a
+**Shipped:** `scripts/bundle.py pack|verify` — a deterministic archive built
+to the [reproducible-builds.org](https://reproducible-builds.org/docs/archives/)
+recipe, a
 [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json)
-with per-file digests and a Merkle root, and an attestation (profile,
-validator status, scorecards, seam crossings) that `verify` recomputes from
-scratch. Signing is detached over the manifest bytes, so a regulator or
+with per-file digests and an [RFC 6962](https://datatracker.ietf.org/doc/html/rfc6962#section-2.1)
+Merkle root, and an attestation (profile, validator status, scorecards, seam
+crossings) that `verify` recomputes from scratch — along with `schemaId` and
+`fluxVersions`, so nothing the manifest asserts is taken on trust. Each pack
+also emits an [in-toto Statement v1](https://github.com/in-toto/attestation),
+so cosign and other supply-chain tooling can carry and sign FLUX evidence
+natively. Signing is detached over the manifest bytes, so a regulator or
 partner verifies offline without the author's tooling.
