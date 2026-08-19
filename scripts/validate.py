@@ -48,7 +48,7 @@ except ImportError:  # pragma: no cover
     sys.exit("validate.py requires: pip install jsonschema pyyaml")
 
 REPO = Path(__file__).resolve().parent.parent
-FLUX_SCHEMA_PATH = REPO / "schema" / "flux-schema-0.3.0.json"
+FLUX_SCHEMA_PATH = REPO / "schema" / "flux-schema-latest.json"
 FLUID_VENDOR_DIR = REPO / "vendor" / "fluid"
 
 # *Ref field -> kind it must resolve to (None = any kind)
@@ -74,10 +74,41 @@ REF_KINDS = {
 }
 
 # free-form payload objects the ref-walker must not descend into: keys inside
-# them are user data, not references
-FREE_FORM_KEYS = {"payloadTemplate", "config", "demographics", "attributes", "annotations", "labels"}
+# them are user data, not references. "extensions" (RFC-02) is envelope-level
+# and namespace-owned — its contents are never core refs.
+FREE_FORM_KEYS = {"payloadTemplate", "config", "demographics", "attributes", "annotations", "labels", "extensions"}
 
 SUM_TOLERANCE = 1e-9
+
+
+def canonical_digest(doc) -> str:
+    """RFC-03 content digest: sha256 over canonical JSON (sorted keys,
+    minimal separators) of the document."""
+    import hashlib
+    payload = json.dumps(doc, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def semver_satisfies(version: str, rng: str) -> bool:
+    """Minimal semver-range check for RFC-03: exact 'x.y.z', caret '^x.y[.z]'
+    (same major, >= floor), tilde '~x.y[.z]' (same major.minor, >= floor)."""
+    def parse(v):
+        parts = v.split(".")
+        if len(parts) < 3:
+            parts += ["0"] * (3 - len(parts))
+        return tuple(int(p) for p in parts[:3])
+
+    try:
+        got = parse(version)
+        if rng.startswith("^"):
+            floor = parse(rng[1:])
+            return got[0] == floor[0] and got >= floor
+        if rng.startswith("~"):
+            floor = parse(rng[1:])
+            return got[:2] == floor[:2] and got >= floor
+        return got == parse(rng)
+    except ValueError:
+        return False
 
 
 class _StringTimestampLoader(yaml.SafeLoader):
@@ -195,11 +226,12 @@ class Bundle:
             walk_refs(doc.get("spec", {}), "spec", refs)
             for field, value, path in refs:
                 expected_kind = REF_KINDS[field]
-                target = self.flux_docs.get(value)
+                name = value.split("@", 1)[0]  # RFC-03: strip a semver range
+                target = self.flux_docs.get(name)
                 if target is None:
-                    self.err(doc_id, f"dangling reference {path} -> '{value}' (no such document in bundle)")
+                    self.err(doc_id, f"dangling reference {path} -> '{name}' (no such document in bundle)")
                 elif expected_kind and target.get("kind") != expected_kind:
-                    self.err(doc_id, f"{path} -> '{value}' resolves to kind {target.get('kind')}, expected {expected_kind}")
+                    self.err(doc_id, f"{path} -> '{name}' resolves to kind {target.get('kind')}, expected {expected_kind}")
 
     def check_sums_and_sets(self):
         for doc_id, doc in self.flux_docs.items():
@@ -246,6 +278,97 @@ class Bundle:
                 tb = spec.get("timeBounds")
                 if tb and tb.get("start", "") >= tb.get("end", ""):
                     self.err(doc_id, f"timeBounds.start {tb.get('start')} must precede end {tb.get('end')}")
+
+    def check_traits(self):
+        """RFC-01: categorical levels sum to 1; bounded normal has min < max."""
+        for doc_id, doc in self.flux_docs.items():
+            if doc.get("kind") != "Persona":
+                continue
+            for name, trait in (doc.get("spec", {}).get("traits", {}) or {}).items():
+                if not isinstance(trait, dict):
+                    continue
+                if trait.get("dist") == "categorical":
+                    total = sum(v for v in trait.get("levels", {}).values() if isinstance(v, (int, float)))
+                    if abs(total - 1.0) > SUM_TOLERANCE:
+                        self.err(doc_id, f"traits.{name}.levels sums to {total}, expected 1.0")
+                elif trait.get("dist") == "normal":
+                    lo, hi = trait.get("min"), trait.get("max")
+                    if lo is not None and hi is not None and lo >= hi:
+                        self.err(doc_id, f"traits.{name}: min {lo} must be below max {hi}")
+
+    def _versioned_refs(self):
+        """Yield (doc_id, path, name, range) for every RFC-03 versioned ref."""
+        for doc_id, doc in self.flux_docs.items():
+            spec = doc.get("spec", {})
+            for field in ("moduleRefs", "modules"):
+                for i, value in enumerate(spec.get(field, []) or []):
+                    if isinstance(value, str) and "@" in value:
+                        name, rng = value.split("@", 1)
+                        yield doc_id, f"spec.{field}[{i}]", name, rng
+
+    def check_supply_chain(self):
+        """RFC-03: every versioned ref resolves through flux.lock to an exact
+        version and a content digest of the in-bundle document."""
+        versioned = list(self._versioned_refs())
+        lock_path = self.dir / "flux.lock"
+        if not versioned:
+            return
+        if not lock_path.exists():
+            self.err("flux.lock", "versioned refs are used but the bundle has no flux.lock")
+            return
+        lock_docs, load_error = load_yaml_docs(lock_path)
+        lock = lock_docs[0] if lock_docs and isinstance(lock_docs[0], dict) else None
+        if load_error or lock is None:
+            self.err("flux.lock", load_error or "lockfile is not a mapping")
+            return
+        entries = lock.get("modules", {}) if isinstance(lock.get("modules"), dict) else {}
+        for doc_id, path, name, rng in versioned:
+            entry = entries.get(name)
+            if not isinstance(entry, dict):
+                self.err(doc_id, f"{path}: '{name}@{rng}' has no flux.lock entry")
+                continue
+            pinned = entry.get("version")
+            if not isinstance(pinned, str) or not semver_satisfies(pinned, rng):
+                self.err(doc_id, f"{path}: locked version {pinned} does not satisfy range '{rng}'")
+            target = self.flux_docs.get(name)
+            if target is None:
+                continue  # dangling ref already reported by check_refs
+            declared = target.get("version")
+            if declared != pinned:
+                self.err(doc_id, f"{path}: {name} declares version {declared} but flux.lock pins {pinned}")
+            digest = entry.get("digest")
+            actual = "sha256:" + canonical_digest(target)
+            if digest != actual:
+                self.err(doc_id, f"{path}: {name} content digest mismatch — flux.lock has {digest}, bundle has {actual}")
+
+    def check_semantics(self):
+        """RFC-07: every semanticRef resolves to a measure declared by a
+        Module binding the ossie-model port."""
+        measures = set()
+        bound = False
+        for doc in self.flux_docs.values():
+            if doc.get("kind") != "Module":
+                continue
+            for bind in doc.get("spec", {}).get("binds", []) or []:
+                if bind.get("port") == "ossie-model":
+                    bound = True
+                    for m in (bind.get("config", {}) or {}).get("measures", []) or []:
+                        if isinstance(m, str):
+                            measures.add(m)
+                        elif isinstance(m, dict) and isinstance(m.get("name"), str):
+                            measures.add(m["name"])
+        for doc_id, doc in self.flux_docs.items():
+            if doc.get("kind") != "Experiment":
+                continue
+            for i, metric in enumerate(doc.get("spec", {}).get("metrics", []) or []):
+                sref = metric.get("semanticRef")
+                if not sref:
+                    continue
+                measure = sref.split("/", 1)[1]
+                if not bound:
+                    self.err(doc_id, f"spec.metrics[{i}].semanticRef '{sref}' used but no Module binds the ossie-model port")
+                elif measure not in measures:
+                    self.err(doc_id, f"spec.metrics[{i}].semanticRef '{sref}': measure '{measure}' is not declared by the bound semantic model (has: {sorted(measures)})")
 
     def check_agent_policy(self):
         for doc_id, doc in self.flux_docs.items():
@@ -333,6 +456,9 @@ class Bundle:
             self.err(str(self.dir), "bundle contains no .flux.yml documents")
         self.check_refs()
         self.check_sums_and_sets()
+        self.check_traits()
+        self.check_supply_chain()
+        self.check_semantics()
         self.check_agent_policy()
         self.check_fluid_documents()
         self.check_fluid_seam()

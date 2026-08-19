@@ -25,7 +25,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 from validate import Bundle  # noqa: E402
 
-SCHEMA = json.loads((REPO / "schema" / "flux-schema-0.3.0.json").read_text())
+SCHEMA = json.loads((REPO / "schema" / "flux-schema-latest.json").read_text())
 VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
 EXAMPLES = REPO / "examples" / "telco-payment-recovery"
 
@@ -58,7 +58,56 @@ sim_lowercase_tz = envelope(
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5"}],
 )
 
+def envelope_040(kind, doc_id="doc-under-test", **spec):
+    d = envelope(kind, doc_id, **spec)
+    d["fluxVersion"] = "0.4.0"
+    return d
+
+
+ext_ns = envelope_040("Segment", query="x")
+ext_ns["extensions"] = {
+    "com.acme.flux/1": {"semanticRef": "semantic/customer-360", "audit": {"retentionDays": 365}}
+}
+ext_vendor = envelope_040("Segment", query="x")
+ext_vendor["extensions"] = {"x-acme": {"anything": True}}
+
+ext_bad_key = envelope_040("Segment", query="x")
+ext_bad_key["extensions"] = {"acme": {"no": "namespace-version"}}
+ext_scalar = envelope_040("Segment", query="x")
+ext_scalar["extensions"] = {"com.acme.flux/1": "not-an-object"}
+ext_empty = envelope_040("Segment", query="x")
+ext_empty["extensions"] = {}
+
+persona_dists = envelope_040(
+    "Persona",
+    traits={
+        "digitalFluency": 0.7,
+        "priceSensitivity": {"dist": "categorical", "levels": {"low": 0.2, "medium": 0.5, "high": 0.3}},
+        "monthlySpend": {"dist": "normal", "mean": 42.0, "stddev": 11.0, "min": 0},
+    },
+)
+sim_versioned_ref = envelope_040(
+    "Simulation",
+    worldRef="w",
+    moduleRefs=["churn-detector@^2.1", "retention-treatment@3.0.4"],
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5"}],
+)
+exp_semantic = envelope_040(
+    "Experiment",
+    variants=[{"name": "a", "weight": 1.0, "treatmentRef": "t"}],
+    metrics=[{"name": "saved_customers", "semanticRef": "telco/saved_customers"}],
+)
+
+versioned_doc = envelope_040("Module", resources=["sig-x"])
+versioned_doc["version"] = "2.1.3"
+
 CASES_PASS = {
+    "RFC-01: scalar + categorical + normal traits": persona_dists,
+    "RFC-01: versioned document envelope": versioned_doc,
+    "RFC-03: semver-ranged moduleRefs": sim_versioned_ref,
+    "RFC-07: semanticRef on experiment metric": exp_semantic,
+    "RFC-02: namespaced extensions on a 0.4.0 doc": ext_ns,
+    "RFC-02: x-vendor extensions key": ext_vendor,
     "baseline world": envelope("World", **copy.deepcopy(WORLD_SPEC)),
     "channel extension type x-whatsapp": envelope("Channel", type="x-whatsapp"),
     "hyphenated channel extension type": envelope("Channel", type="x-whatsapp-business"),
@@ -174,6 +223,28 @@ CASES_REJECT = {
         personaReactions={"": {"successProbability": 0.5}},
     ),
     "zero-information Persona spec ({'worldview': {}})": envelope("Persona", worldview={}),
+    "RFC-02: extension key without namespace/version": ext_bad_key,
+    "RFC-02: non-object extension value": ext_scalar,
+    "RFC-02: empty extensions object": ext_empty,
+    "RFC-01: unknown dist name": envelope_040(
+        "Persona", traits={"x": {"dist": "poisson", "lambda": 3}}
+    ),
+    "RFC-01: categorical level above 1": envelope_040(
+        "Persona", traits={"x": {"dist": "categorical", "levels": {"a": 1.5}}}
+    ),
+    "RFC-01: normal missing stddev": envelope_040(
+        "Persona", traits={"x": {"dist": "normal", "mean": 5}}
+    ),
+    "RFC-03: garbage version range": envelope_040(
+        "Simulation", worldRef="w", moduleRefs=["mod@banana"],
+        emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5"}],
+    ),
+    "RFC-03: malformed envelope version": {**versioned_doc, "version": "2.1"},
+    "RFC-07: semanticRef without model/measure shape": envelope_040(
+        "Experiment",
+        variants=[{"name": "a", "weight": 1.0, "treatmentRef": "t"}],
+        metrics=[{"name": "m", "semanticRef": "no-slash"}],
+    ),
 }
 
 # --- bundle mutations the schema cannot see; validator must catch ----------
@@ -234,6 +305,31 @@ def _consent_violation(d):
     d["exposes"][0]["policy"] = {"agentPolicy": {"allowedUseCases": ["advertising", "payment_recovery"]}}
 
 
+def _bad_levels_sum(d):
+    d["spec"]["traits"]["priceSensitivity"]["levels"] = {"low": 0.5, "high": 0.4}
+
+
+def _bad_normal_bounds(d):
+    d["spec"]["traits"]["monthlySpend"]["max"] = -5
+
+
+def _unsatisfied_range(d):
+    d["spec"]["moduleRefs"] = ["module-payment-recovery@^9.9"]
+
+
+def _digest_drift(d):
+    # changing the module's content must break the lock digest
+    d["spec"]["resources"].append("offer-sport-pack")
+
+
+def _unknown_measure(d):
+    d["spec"]["metrics"][0]["semanticRef"] = "telco/invented_metric"
+
+
+def _unbind_semantic_port(d):
+    d["spec"]["binds"] = [b for b in d["spec"]["binds"] if b.get("port") != "ossie-model"]
+
+
 VALIDATOR_REJECTS = {
     "dangling treatmentRef": ("campaign.flux.yml", _dangling_ref, "dangling reference"),
     "ref resolving to wrong kind": ("campaign.flux.yml", _wrong_kind_ref, "expected ConsentProfile"),
@@ -245,7 +341,17 @@ VALIDATOR_REJECTS = {
     "skill model outside agentPolicy": ("simulation.flux.yml", _bad_skill_model, "not in agentPolicy.allowedModels"),
     "timeBounds start after end": ("simulation.flux.yml", _bad_time_order, "must precede"),
     "contract laxer than gating ConsentProfile": ("payment-recovery.fluid.yml", _consent_violation, "denied by ConsentProfile"),
+    "RFC-01: categorical levels sum 0.9": ("persona.flux.yml", _bad_levels_sum, "levels sums"),
+    "RFC-01: normal min above max": ("persona.flux.yml", _bad_normal_bounds, "must be below max"),
+    "RFC-03: locked version outside range": ("simulation.flux.yml", _unsatisfied_range, "does not satisfy"),
+    "RFC-03: module content drift breaks digest": ("module.flux.yml", _digest_drift, "digest mismatch"),
+    "RFC-07: measure not in bound model": ("experiment.flux.yml", _unknown_measure, "not declared"),
+    "RFC-07: semantic port unbound": ("module.flux.yml", _unbind_semantic_port, "no Module binds the ossie-model port"),
 }
+
+
+def _setup_missing_lock(bundle: Path):
+    (bundle / "flux.lock").unlink()
 
 
 # --- malformed input must produce clean error strings, never tracebacks ----
@@ -301,6 +407,7 @@ VALIDATOR_ROBUSTNESS = {
     "flux/fluid id collision": (_setup_flux_fluid_collision, "collides with"),
     "orphan invalid .fluid.yml still validated": (_setup_orphan_invalid_fluid, "fails FLUID 0.7.5"),
     "schema-invalid shapes yield errors, not tracebacks": (_setup_schema_invalid_no_crash, "schema:"),
+    "RFC-03: versioned refs without a lockfile": (_setup_missing_lock, "no flux.lock"),
 }
 
 
@@ -382,9 +489,23 @@ def main() -> int:
     if not any("does not exist" in e for e in missing_errors):
         failures.append(f"[validator] nonexistent dir should say so; got: {missing_errors}")
 
+    # version-window pinning: released schema files are immutable, so a 0.4.0
+    # document (extensions or not) must FAIL the 0.3.0 schema file
+    old_schema = Draft202012Validator(
+        json.loads((REPO / "schema" / "flux-schema-0.3.0.json").read_text()),
+        format_checker=FormatChecker(),
+    )
+    if not list(old_schema.iter_errors(envelope_040("Segment", query="x"))):
+        failures.append("[schema] a 0.4.0 document should fail the immutable 0.3.0 schema (fluxVersion window)")
+    # additivity (P1): every 0.3.0-pinned document in the example bundle stays
+    # valid under the current release — covered by the pristine-bundle check
+    # above, asserted here against the old schema too for the reverse direction
+    if list(old_schema.iter_errors(envelope("Segment", query="x"))):
+        failures.append("[schema] a plain 0.3.0 document should still pass the 0.3.0 schema")
+
     total = (
         len(CASES_PASS) + len(CASES_REJECT) + 1
-        + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 4
+        + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 6
     )
     if failures:
         print(f"FAIL — {len(failures)}/{total} checks failed")

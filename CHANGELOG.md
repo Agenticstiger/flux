@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 — 2026-08-19
+
+Additive; ships the first five vNext RFCs
+([schema-diffs/diff-0.3.0-to-0.4.0.md](schema-diffs/diff-0.3.0-to-0.4.0.md)):
+
+- **RFC-01 — trait distributions**: Persona traits are scalars or typed
+  categorical / bounded-normal distributions, validator sum- and bounds-checked.
+- **RFC-02 — versioned extension port**: optional `extensions` envelope
+  object keyed by `<reverse-dns>/<major>` namespaces (or `x-*`); dialects
+  extend legally while the core stays closed.
+- **RFC-03 — module supply chain**: `ref@semver-range` on moduleRefs/modules,
+  envelope `version`, and a `flux.lock` binding every versioned ref to an
+  exact version + content digest (validator-enforced).
+- **RFC-07 — semantic-model port**: `semanticRef` on Experiment metrics,
+  resolved against measures declared by a Module binding `ossie-model`.
+- **RFC-08 — UI hints**: generated `schema/flux-ui-hints-0.4.0.json` for
+  form-based authoring tools.
+- `fluxVersion` window `["0.3.0", "0.4.0"]` — every 0.3.0 document stays
+  valid; regression suite grows to 85 checks.
+
 ## 0.3.0 — 2026-07-27
 
 First open-source release (Apache 2.0). Breaking rework of the pre-release

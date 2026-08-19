@@ -1,7 +1,7 @@
 # The Nineteen Kinds
 
 > Generated from
-> [`flux-schema-0.3.0.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.3.0.json)
+> [`flux-schema-0.4.0.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json)
 > by `scripts/generate-kinds-doc.py` — do not edit by hand.
 
 Every kind shares the [common envelope](/flux/schema/anatomy#the-envelope);
@@ -35,7 +35,7 @@ same bundle — enforced by the [offline validator](/flux/schema/anatomy#the-off
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `demographics` | `scalarMap` | no |  |  |
-| `traits` | `object` | no | minProperties 1 | Named 0..1 proficiency scores (e.g |
+| `traits` | `object` | no | minProperties 1 | Named traits: scalar 0..1 or an RFC-01 distribution (categorical / bounded normal) |
 | `worldview` | `object` | no | minProperties 1 |  |
 | `worldview.riskTolerance` | enum | no | `low`, `medium`, `high` |  |
 | `worldview.trustInInstitutions` | `unitInterval` | no | min 0; max 1 |  |
@@ -183,7 +183,8 @@ same bundle — enforced by the [offline validator](/flux/schema/anatomy#the-off
 | `assignment.seed` | `integer` | no |  |  |
 | `metrics` | array of `object` | no | minItems 1 |  |
 | `metrics[].name` | `string` | **yes** | minLength 1 |  |
-| `metrics[].ossieRef` | `string` | no | minLength 1 | Reference into the governed Ossie semantic model (the ossie-model port) |
+| `metrics[].ossieRef` | `string` | no | minLength 1 | Deprecated in 0.4.0 — use semanticRef (RFC-07) |
+| `metrics[].semanticRef` | `semanticRef` | no |  | RFC-07: model/measure into the bundle's bound semantic model (a Module binding the ossie-model port declaring config.measures) |
 
 ## Calibration
 
@@ -234,7 +235,7 @@ same bundle — enforced by the [offline validator](/flux/schema/anatomy#the-off
 | `signalRefs` | `refList` | no | minItems 1; unique |  |
 | `campaignRefs` | `refList` | no | minItems 1; unique |  |
 | `experimentRefs` | `refList` | no | minItems 1; unique |  |
-| `moduleRefs` | `refList` | no | minItems 1; unique |  |
+| `moduleRefs` | array of `versionedRef` | no | minItems 1; unique |  |
 | `emits` | array of `object` | **yes** | minItems 1; unique | The FLUID contract handoff seam |
 | `emits[].productRef` | `ref` | **yes** |  | The id of the FLUID DataProduct document (.fluid.yml) proven by this simulation |
 | `emits[].exposeId` | `string` | **yes** | minLength 1 | Which expose of the referenced DataProduct this stream fulfils |
@@ -270,5 +271,5 @@ same bundle — enforced by the [offline validator](/flux/schema/anatomy#the-off
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `industry` | `string` | **yes** | minLength 1 |  |
-| `modules` | array of `ref` | **yes** | minItems 1; unique |  |
+| `modules` | array of `versionedRef` | **yes** | minItems 1; unique |  |
 

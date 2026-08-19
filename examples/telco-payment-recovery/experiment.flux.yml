@@ -11,4 +11,4 @@ spec:
     - { name: fast-recovery, weight: 0.5, treatmentRef: tr-fast-recovery }
   assignment: { method: largest_remainder, seed: 7 }
   metrics:
-    - { name: saved_customers, ossieRef: "ossie://telco/metrics/saved_customers" }
+    - { name: saved_customers, semanticRef: telco/saved_customers }   # RFC-07

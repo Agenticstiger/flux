@@ -1,10 +1,15 @@
-fluxVersion: "0.3.0"
+fluxVersion: "0.4.0"
 kind: Simulation
 id: sim-payment-recovery
 name: Payment Recovery Simulation
 metadata:
   owner:
     team: growth-lab
+# RFC-02: dialect fields live under a versioned namespace — the core stays closed
+extensions:
+  com.example.flux/1:
+    semanticRef: semantic/telco-payment-recovery
+    audit: { required: true, retentionDays: 365 }
 agentPolicy:
   allowedModels: [local-sovereign-8b]
   tokenBudget: 200000
@@ -30,7 +35,7 @@ spec:
   signalRefs: [sig-payment-aborted]
   campaignRefs: [cam-payment-recovery]
   experimentRefs: [exp-recovery-ab]
-  moduleRefs: [module-payment-recovery]
+  moduleRefs: [module-payment-recovery@^2.1]   # RFC-03: locked in flux.lock
   emits:
     - productRef: telco.gold.payment_recovery_moment
       exposeId: payment_recovery_moment

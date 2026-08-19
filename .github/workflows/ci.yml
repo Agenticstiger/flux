@@ -20,13 +20,18 @@ jobs:
           python - <<'EOF'
           import json, pathlib
           from jsonschema import validators
-          for p in sorted(pathlib.Path("schema").glob("*.json")) + sorted(pathlib.Path("vendor/fluid").glob("*.json")):
+          for p in sorted(pathlib.Path("schema").glob("flux-schema-*.json")) + sorted(pathlib.Path("vendor/fluid").glob("*.json")):
               s = json.loads(p.read_text())
               validators.validator_for(s).check_schema(s)
               print(f"ok  {p}")
           EOF
       - name: latest alias matches current release
-        run: cmp schema/flux-schema-0.3.0.json schema/flux-schema-latest.json
+        run: cmp schema/flux-schema-0.4.0.json schema/flux-schema-latest.json
+      - name: Generated artifacts are in sync (kinds doc + UI hints)
+        run: |
+          python scripts/generate-kinds-doc.py
+          python scripts/generate-ui-hints.py
+          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.4.0.json
       - name: Validate example bundles (schema + cross-refs + FLUID seam)
         run: python scripts/validate.py
       - name: Regression suite (0.2.0 false-passes must fail)
