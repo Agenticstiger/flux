@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flux-spec"
+version = "0.5.0"
+description = "FLUX reference validator, RFC-04 enforcement gate, and RFC-09 evidence bundler — the open, declarative standard for governed synthetic customer universes."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Agenticstiger" }]
+keywords = [
+  "flux",
+  "fluid",
+  "digital-twin",
+  "synthetic-data",
+  "simulation",
+  "data-products",
+  "declarative",
+  "json-schema",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+  "pyyaml",
+  "jsonschema",
+  "rfc8785",
+]
+
+[project.urls]
+Homepage = "https://agenticstiger.github.io/flux/"
+Repository = "https://github.com/Agenticstiger/flux"
+Documentation = "https://agenticstiger.github.io/flux/"
+Changelog = "https://github.com/Agenticstiger/flux/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+include = ["flux_spec*"]
+
+[tool.setuptools.package-data]
+flux_spec = [
+  "data/schema/*.json",
+  "data/vendor/fluid/*.json",
+  "data/vectors/*.json",
+]
