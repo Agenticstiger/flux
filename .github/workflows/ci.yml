@@ -38,6 +38,18 @@ jobs:
           python scripts/generate-kinds-doc.py
           python scripts/generate-ui-hints.py
           git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.5.0.json
+      # Placed AFTER the generated-artifact sync check above, so docs/schema/
+      # kinds.md is the freshly regenerated one by the time this reads it —
+      # and BEFORE the bundle validation below, so a vocabulary failure is not
+      # buried under a schema failure. Stdlib only, nothing to install.
+      # --self-test first: a corrupt registry must fail loudly rather than
+      # quietly bless the tree, and it verifies the vendored payload against
+      # its own content digest so a hand-edit fails here, offline.
+      - name: Product Guardrail (terminology)
+        run: |
+          python3 tools/product_guardrail/check.py --self-test
+          python3 tools/product_guardrail/check.py
+
       - name: Validate example bundles (schema + cross-refs + FLUID seam)
         run: python scripts/validate.py
       - name: Enforcement conformance vectors (RFC-04)

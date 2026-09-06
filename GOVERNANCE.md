@@ -13,7 +13,7 @@ FLUX is designed as an open standard, not a product surface. The maintainers'
 declared intent is that, as the specification gains external contributors and
 implementations, this repository moves to a vendor-neutral home — the natural
 candidate being [open-data-protocol](https://github.com/open-data-protocol),
-where the FLUID specification already lives, so both halves of the substrate
+where the FLUID Spec already lives, so both halves of the substrate
 share one neutral org. GitHub repository transfers leave permanent redirects,
 so this move costs adopters nothing. The trigger for revisiting: the first
 sustained external contributor, or the 1.0 cut, whichever comes first.
