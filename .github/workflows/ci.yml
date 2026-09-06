@@ -13,8 +13,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install flux_spec (editable)
+        run: pip install -e .
       - name: Install validator dependencies
         run: pip install jsonschema pyyaml rfc8785
+      - name: Package data is in sync (flux_spec/data mirrors schema/vendor/vectors)
+        run: |
+          python scripts/sync-package-data.py
+          git diff --exit-code flux_spec/data
       - name: All published and vendored schemas are valid
         run: |
           python - <<'EOF'
@@ -42,3 +48,30 @@ jobs:
           python scripts/bundle.py verify dist/telco-payment-recovery.flux.tgz
       - name: Regression suite (0.2.0 false-passes must fail)
         run: python tests/test_regression.py
+
+  package-smoke-test:
+    # Proves flux_spec works as a genuinely installed distribution, not just
+    # via `pip install -e .` against a checkout: build the wheel, install it
+    # into a venv that never sees this repo, and exercise it from outside
+    # the repo entirely (cwd=/tmp) so nothing accidentally resolves through
+    # a source-tree schema/vendor/tests path instead of the packaged data.
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the wheel
+        run: |
+          pip install build
+          python -m build
+      - name: Install the built wheel into a clean venv
+        run: |
+          python -m venv /tmp/flux-spec-wheel-venv
+          /tmp/flux-spec-wheel-venv/bin/pip install dist/*.whl
+      - name: Run flux_spec from the installed wheel only (repo not on sys.path)
+        working-directory: /tmp
+        run: |
+          /tmp/flux-spec-wheel-venv/bin/python -m flux_spec.enforce
+          /tmp/flux-spec-wheel-venv/bin/python -c "from flux_spec.validate import Bundle"

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **packaging**: `flux_spec` importable package; `scripts/validate.py`,
+  `scripts/enforce.py` and `scripts/bundle.py` become shims onto it. No
+  behaviour change.
+
 ## 0.5.0 — 2026-08-20
 
 Additive; ships RFC-04 and RFC-09 — **all nine vNext RFCs are now shipped**

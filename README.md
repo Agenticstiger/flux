@@ -112,6 +112,27 @@ Use the schema in your editor:
 # yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json
 ```
 
+## As a library
+
+`flux_spec` is also an installable Python package — the exact code behind
+`scripts/validate.py`, `scripts/enforce.py` and `scripts/bundle.py`, not a
+reimplementation; the three scripts are thin shims onto it. It is not yet on
+PyPI, so install it from source for now:
+
+```bash
+git clone https://github.com/Agenticstiger/flux.git && cd flux
+pip install .
+```
+
+```python
+from flux_spec.validate import Bundle
+from flux_spec.enforce import decide, run_vectors
+from flux_spec.bundle import pack, verify
+```
+
+`python3 scripts/validate.py ...` and `python3 -m flux_spec.validate ...`
+behave identically — same for `enforce` and `bundle`.
+
 ## Example
 
 [`examples/telco-payment-recovery/`](examples/telco-payment-recovery/) is the
@@ -125,7 +146,8 @@ schema/          flux-schema-<version>.json (+ -latest alias) — normative
 schema-diffs/    one diff document per version pair
 examples/        validated bundles (CI-enforced)
 vendor/fluid/    vendored FLUID schemas the seam validates against
-scripts/         validate.py (references) · enforce.py (RFC-04 gate) · bundle.py (RFC-09)
+flux_spec/       the flux-spec package: validate.py · enforce.py (RFC-04) · bundle.py (RFC-09)
+scripts/         validate.py / enforce.py / bundle.py — thin CLI shims onto flux_spec
 tests/           regression suite + published enforcement conformance vectors
 docs/            reconciliation ledger
 ```

@@ -1,5 +1,7 @@
 __pycache__/
 dist/
+build/
+*.egg-info/
 examples/**/flux-manifest.json
 *.pyc
 .DS_Store
