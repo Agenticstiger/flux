@@ -36,17 +36,74 @@ matching FLUID's conventions.
 
 ### Governed — delivered in schema, cross-checks in the validator
 - `agentPolicy` (root-level, all kinds): model allow-list, token budget,
-  use-case limits — vocabulary aligned with FLUID `exposes[].policy.agentPolicy`.
+  use-case limits. **Not** field-for-field with FLUID — see "The agentPolicy
+  divergence" below.
 - `skills` (root-level, all kinds): the uniform agentic extension point of
   paper §3.5. Declaring `skills` requires `agentPolicy` (schema-enforced).
 - `sovereignty` on `World` and `Simulation` (`allowedZones`, `enforcement: block|audit`).
-- `ConsentProfile` can no longer be empty, and its vocabulary
-  (`allowedUseCases`/`deniedUseCases`) matches FLUID's, so seam-crossing policy
-  comparison is field-to-field. The "contract must be at least as strict as the
-  gating ConsentProfile" rule is enforced by the reference validator at the
-  seam: an emitted expose's `policy.agentPolicy` may not allow a use case a
-  gating profile denies, nor exceed its allow-list (`scripts/validate.py`,
-  regression-tested).
+- `ConsentProfile` can no longer be empty. The "contract must be at least as
+  strict as the gating ConsentProfile" rule is enforced by the reference
+  validator at the seam: an emitted expose's `policy.agentPolicy` may not allow
+  a use case a gating profile denies, nor exceed its allow-list
+  (`scripts/validate.py`, regression-tested). **That enforcement is real, but
+  its reach is narrower than this document previously claimed** — see below.
+
+
+## The agentPolicy divergence
+
+This document previously said FLUX's `agentPolicy` vocabulary was "aligned with
+FLUID's" and that "seam-crossing policy comparison is field-to-field". Both
+statements were wrong, and the schema carried the same claim in its own
+`$defs/agentPolicy` description. They are corrected here rather than quietly
+dropped, because a false alignment claim is worse than a documented gap: it
+invites implementers to build a comparison that cannot work.
+
+Measured against `fluid-schema-0.7.5.json`:
+
+| | FLUX `agentPolicy` | FLUID `exposes[].policy.agentPolicy` |
+|---|---|---|
+| members | 5 | 13 |
+| token budget | `tokenBudget` (integer) | `maxTokensPerRequest` + `maxTokensPerDay` |
+| `purposeLimitation` | boolean | string |
+| use-case values | free strings (`minLength: 1`) | 12-value enum |
+| FLUID-only | — | `deniedModels`, `canReason`, `canStore`, `retentionPolicy`, `auditRequired`, `tags`, `labels` |
+
+Three members line up by name *and* type: `allowedModels`, `allowedUseCases`,
+`deniedUseCases`.
+
+### What this costs at the seam
+
+The use-case row is the one that bites. FLUX accepts any non-empty string;
+FLUID accepts twelve specific values. So a `ConsentProfile` can deny a use case
+that no FLUID contract is able to express, and the "at least as strict" check
+then has nothing to bind against on the FLUID side.
+
+This is not hypothetical. Of the eleven distinct use-case values appearing in
+FLUX's own 34 enforcement vectors — `advertising`, `persona_variation`,
+`journey_synthesis`, `pricing_optimisation`, `exfiltrate-pii` and the rest —
+**none** can be written into a FLUID contract. The seam comparison the previous
+wording described has never had a working example in this repository's test
+suite.
+
+What the validator does enforce is still worth having: within FLUX, a
+simulation's declared policy is checked against its gating profile, and that is
+regression-tested. What it cannot do is carry a FLUX use-case restriction
+across the seam into a FLUID contract.
+
+### Resolving it
+
+Two options, and this is an open decision, not a plan:
+
+1. **FLUX rebases onto FLUID's vocabulary** — `$ref` FLUID's published
+   `agentPolicy` `$id` instead of restating it. Cleanest, and it makes the seam
+   claim true. It is a breaking change to FLUX (`tokenBudget` splits in two,
+   `purposeLimitation` changes type, use-case values become constrained) and the
+   34 vectors would need rebasing. Cheapest while FLUX has no external
+   implementers.
+2. **FLUX keeps its own vocabulary** and this table stands as the permanent,
+   honest statement of what does and does not cross the seam.
+
+Either way the rule holds: no alignment claim without a CI gate that can fail.
 
 ## The four seams (paper §3.4)
 

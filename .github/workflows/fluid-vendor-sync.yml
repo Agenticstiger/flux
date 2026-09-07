@@ -1,0 +1,78 @@
+# The vendored FLUID schemas under vendor/fluid/ must match what FLUID publishes.
+#
+# FLUX does not own the FLUID schema; it references it across the seam. The copies
+# in vendor/fluid/ exist so the validator can resolve a referenced contract offline,
+# which means they are a cache — and an unguarded cache drifts.
+#
+# They are in sync today. Nothing enforced that, which is the actual gap: a claim
+# about another project's artefact is only true if the CI of the side making the
+# claim proves it. That is the rule this repository now applies to itself after
+# shipping a false "field-to-field aligned with FLUID" statement through several
+# releases (see docs/reconciliation.md).
+#
+# Comparison is on canonical JSON (sorted keys, no whitespace) so cosmetic
+# formatting differences do not fail the build — only a real content divergence does.
+
+name: fluid-vendor-sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "vendor/fluid/**"
+      - ".github/workflows/fluid-vendor-sync.yml"
+  pull_request:
+    paths:
+      - "vendor/fluid/**"
+      - ".github/workflows/fluid-vendor-sync.yml"
+  schedule:
+    # Weekly: FLUID can publish a new patch without FLUX touching anything, and a
+    # cache that silently ages is exactly what this guards against.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUID_RAW_BASE: https://raw.githubusercontent.com/open-data-protocol/fluid/main/schema
+
+jobs:
+  vendor-sync:
+    name: vendored FLUID schemas match upstream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: compare each vendored schema against the published one
+        run: |
+          set -euo pipefail
+          status=0
+          for path in vendor/fluid/fluid-schema-*.json; do
+            name="$(basename "$path")"
+            if ! curl -fsSL "${FLUID_RAW_BASE}/${name}" -o "/tmp/${name}"; then
+              echo "::error::${name} is vendored here but not published upstream."
+              echo "::error::Either it was withdrawn, or this copy was never a real FLUID release."
+              status=1
+              continue
+            fi
+            if python3 - "$path" "/tmp/${name}" <<'PY'
+          import json, sys
+          canon = lambda p: json.dumps(json.load(open(p)), sort_keys=True, separators=(",", ":"))
+          sys.exit(0 if canon(sys.argv[1]) == canon(sys.argv[2]) else 1)
+          PY
+            then
+              echo "✅ ${name} matches upstream"
+            else
+              echo "::error::${name} has drifted from the published FLUID schema."
+              echo "::error::Re-vendor it: curl -fsSL ${FLUID_RAW_BASE}/${name} -o ${path}"
+              echo "::error::then run: python3 scripts/sync-package-data.py"
+              diff <(python3 -m json.tool --sort-keys "$path") \
+                   <(python3 -m json.tool --sort-keys "/tmp/${name}") | head -40 || true
+              status=1
+            fi
+          done
+          exit $status
