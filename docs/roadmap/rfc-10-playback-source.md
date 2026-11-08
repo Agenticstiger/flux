@@ -104,9 +104,9 @@ calibration:
     outcome: paid_within_7d
 ```
 
-The profile side is a grouped profile: `groupBy: [variant, segment]` with `moments` on the outcome. Each cell then carries `n`, the sum and the sum of squares, which are the sufficient statistics experiment analysis works from (gbstats takes exactly these, plus a sum of products for ratio metrics). A binary outcome is a 0/1 column whose sum is the number of conversions.
+The profile side is a grouped profile: `groupBy: [variant, segment]` with `moments` on the outcome. Each cell then carries `n`, the sum and the sum of squares, which are the sufficient statistics experiment analysis works from (gbstats takes exactly these, plus a sum of products for ratio metrics). A binary outcome is a 0/1 column whose sum is the number of conversions, so FLUID's count rule for sums applies to it: a cell with fewer conversions, or fewer non-conversions, than the profile's minimum cell size publishes no sum.
 
-The validator requires `experimentRef` with the `response` target, requires it to resolve to an Experiment in the bundle, and requires the three roles. A cell or sum the profile suppressed (too few customers, or one customer dominating a sum) is missing data to the calibration, never zero. A segment with too few customers to publish simply does not constrain the fit, and the scorecard should say so rather than grade a fit on a cell that was never seen.
+The validator requires `experimentRef` with the `response` target, requires it to resolve to an Experiment in the bundle, and requires the three roles. A cell or sum the profile suppressed (too few customers, too few conversions or non-conversions, or one customer dominating a sum) is missing data to the calibration, never zero. A segment with too few customers to publish simply does not constrain the fit, and the scorecard should say so rather than grade a fit on a cell that was never seen.
 
 Which dials `response` moves is the calibration method's business, recorded by the calibration loop like the dials behind the four existing targets.
 
