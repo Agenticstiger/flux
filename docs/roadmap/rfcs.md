@@ -2,7 +2,7 @@
 
 Each RFC closes a specific gap between the 0.3.x core and what the most
 advanced implementations already do. **All nine are shipped as of 0.5.0**
-(RFC-08's LSP specification remains open). Status: ✅ shipped · ◐ partial.
+(RFC-08's LSP specification remains open). RFC-10, at the end of this page, is proposed. Status: ✅ shipped · ◐ partial.
 
 ## RFC-01 — Trait distributions as first-class sampling ✅ shipped in 0.4.0
 
@@ -177,3 +177,15 @@ also emits an [in-toto Statement v1](https://github.com/in-toto/attestation),
 so cosign and other supply-chain tooling can carry and sign FLUX evidence
 natively. Signing is detached over the manifest bytes, so a regulator or
 partner verifies offline without the author's tooling.
+
+## Proposed: RFC-10, Playback reads a FLUID data profile
+
+*Calibration · Playback · the FLUID seam*
+
+**Gap:** `Playback.spec.sourceStream` is a bare URI to raw telemetry. The
+validator cannot check what it points at, and fitting against it means the
+twin's builders need record access.
+
+**Proposed:** `spec.source`, a FLUID consumeRef to a `data_profile` expose,
+and a fifth calibration target, `response`. See
+[RFC-10](/flux/roadmap/rfc-10-playback-source).
