@@ -83,7 +83,7 @@ Each target says which profile families it reads. A new optional map, `calibrati
 
 `entity` here is the profile's own `entity`: the column that identifies a customer, which the profile counts and never publishes.
 
-A Playback reads one profile, and FLUID allows at most two `groupBy` columns. So `channelReach` and `response` share a Playback only when the channel column is also the segment column. Otherwise they need two Playbacks of the same World, each reading its own profile.
+A Playback reads one profile, and FLUID allows at most two `groupBy` columns. So `channelReach` and `response` share a Playback only when the channel column is also the variant or the segment column. Otherwise they need two Playbacks of the same World, each reading its own profile.
 
 `calibration.window` selects the profile states whose windows fall inside it. Families that add up (counts, histograms, moments, transitions, dwell) are summed across those states. `distinct` and quantile positions do not add up, so they are read from the newest state only: `population.size` is the newest state's entity count, and a profile meant for it should use a window as long as the population question.
 
@@ -126,7 +126,7 @@ Anything else is refused with a message naming the pattern and what the profile 
 
 ### Drift on declared edges
 
-`drift` keeps its fields. PSI and KL are computed on the profile's histograms, so for a range column their bins are the declared edges: pinned, and the same on both sides of the comparison. A bucket suppressed on either side is merged with its neighbor on both sides before comparing, never read as zero. A category column has no edges, so it is compared on the labels both sides publish, with everything else pooled. KS becomes the binned statistic over the edges, which is a lower bound on the true KS distance; the drift doc should say so.
+`drift` keeps its fields. PSI and KL are computed on the profile's histograms, so for a range column their bins are the declared edges: pinned, and the same on both sides of the comparison. They use only the buckets both sides publish, each side renormalized over those buckets; a bucket suppressed on either side is left out of both, never read as zero. A category column has no edges, so it is compared the same way on the labels both sides publish. KS becomes the binned statistic over the edges, which is a lower bound on the true KS distance; the drift doc should say so.
 
 ## The migrated example
 
