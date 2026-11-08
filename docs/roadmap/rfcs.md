@@ -188,4 +188,4 @@ twin's builders need record access.
 
 **Proposed:** `spec.source`, a FLUID consumeRef to a `data_profile` expose,
 and a fifth calibration target, `response`. See
-[RFC-10](/roadmap/rfc-10-playback-source).
+[RFC-10](/flux/roadmap/rfc-10-playback-source).
