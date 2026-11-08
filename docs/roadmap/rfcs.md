@@ -2,7 +2,7 @@
 
 Each RFC closes a specific gap between the 0.3.x core and what the most
 advanced implementations already do. **All nine are shipped as of 0.5.0**
-(RFC-08's LSP specification remains open). Status: ✅ shipped · ◐ partial.
+(RFC-08's LSP specification remains open). RFC-10, at the end of this page, is proposed. Status: ✅ shipped · ◐ partial.
 
 ## RFC-01 — Trait distributions as first-class sampling ✅ shipped in 0.4.0
 

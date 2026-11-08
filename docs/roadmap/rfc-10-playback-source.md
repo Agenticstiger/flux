@@ -28,7 +28,7 @@ The output side of the seam has been a reference to a FLUID contract since 0.3.0
 
 ### `spec.source`: a FLUID consumeRef
 
-`source` uses the field names and meaning of FLUID's `$defs.consumeRef`. FLUX defines its own closed copy, as the seam's dialect-boundary rule requires, with no `$ref` into the FLUID schema.
+`source` takes four fields from FLUID's `$defs.consumeRef`, with their names and meaning, and adds FLUX's own RFC-06 `provenance`. FLUX defines its own closed copy, as the seam's dialect-boundary rule requires, with no `$ref` into the FLUID schema. The product field is `productId` rather than the `productRef` that `emits[]` uses, because this is FLUID's consumeRef shape and FLUID calls it `productId`.
 
 ```yaml
 spec:
@@ -50,14 +50,14 @@ spec:
 | `requiredPolicies` | no | Policy identifiers the consumer requires, as in FLUID. |
 | `provenance.contractDigest` | no | The RFC-06 shape: canonical-JSON SHA-256 of the referenced contract. |
 
-`versionConstraint` is optional in FLUID and required here. A profile's bins change meaning across a major version (new edges are new buckets), and a twin that silently starts fitting against different bins is the failure this whole seam exists to prevent. Every valid `source` is still a valid FLUID consumeRef; the implementation PR pins that with a regression case.
+`versionConstraint` is optional in FLUID and required here. A profile's bins change meaning across a major version (new edges are new buckets), and a twin that silently starts fitting against different bins is the failure this whole seam exists to prevent. Without its `provenance` member, every valid `source` is a valid FLUID consumeRef; the implementation PR pins that with a regression case.
 
 The validator checks, offline as it does for `emits[]`:
 
 1. `productId` resolves to a `.fluid.yml` in the bundle. A dangling reference fails.
 2. That document validates against the vendored FLUID schema for its own `fluidVersion`, and that version must have the `data_profile` kind.
 3. `exposeId` names an expose of the product with `kind: data_profile`.
-4. The expose's `version` satisfies `versionConstraint`, with the range rules RFC-03 and RFC-06 already use.
+4. The expose's `version`, which FLUID requires on a profile, satisfies `versionConstraint`, with the range rules RFC-03 and RFC-06 already use.
 5. `provenance.contractDigest`, when set, matches the in-bundle contract. Contract drift after calibration fails the bundle, as it does on the output side.
 6. Every calibration target, persona mapping and drift setting can be answered from what the profile declares (below).
 
@@ -82,6 +82,10 @@ Each target says which profile families it reads. A new optional map, `calibrati
 | `response` (new) | `variant`, `segment`, `outcome` | `groupBy` containing the variant and segment columns, and `moments` on the outcome column |
 
 `entity` here is the profile's own `entity`: the column that identifies a customer, which the profile counts and never publishes.
+
+A Playback reads one profile, and FLUID allows at most two `groupBy` columns. So `channelReach` and `response` share a Playback only when the channel column is also the segment column. Otherwise they need two Playbacks of the same World, each reading its own profile.
+
+`calibration.window` selects the profile states whose windows fall inside it. Families that add up (counts, histograms, moments, transitions, dwell) are summed across those states. `distinct` and quantile positions do not add up, so they are read from the newest state only: `population.size` is the newest state's entity count, and a profile meant for it should use a window as long as the population question.
 
 A target whose role is missing from `calibration.columns`, a role that names a column the profile does not declare, or a missing family fails validation. The message names the target, the role and the family the profile has to add.
 
@@ -108,13 +112,13 @@ The profile side is a grouped profile: `groupBy: [variant, segment]` with `momen
 
 The validator requires `experimentRef` with the `response` target, requires it to resolve to an Experiment in the bundle, and requires the three roles. A cell or sum the profile suppressed (too few customers, too few conversions or non-conversions, or one customer dominating a sum) is missing data to the calibration, never zero. A segment with too few customers to publish simply does not constrain the fit, and the scorecard should say so rather than grade a fit on a cell that was never seen.
 
-Which dials `response` moves is the calibration method's business, recorded by the calibration loop like the dials behind the four existing targets.
+Which dials `response` moves is the calibration method's business, and a conforming engine should record them as it does the dials behind the four existing targets.
 
 ### Persona mapping on a profile
 
 `personaMapping[].behaviorPattern` is a flux-expr/1 predicate "over observed events". A twin that only sees aggregates cannot evaluate a predicate record by record, so with a profile source the predicate has to be answerable from the profile:
 
-- a comparison between one range column and a constant is answerable when the constant is one of the column's declared edges (`late_payment_count >= 2` needs an edge at 2);
+- a `>=` or `<` comparison between one range column and a constant is answerable when the constant is one of the column's declared edges other than the top one, because buckets are half-open (`late_payment_count >= 2` needs an edge at 2; `> 2` is not answerable this way, but `>= 3` is with an edge at 3);
 - an equality between a category column and a label is answerable from its histogram;
 - a conjunction over two or more columns is answerable when the profile groups by all but one of them.
 
@@ -122,7 +126,7 @@ Anything else is refused with a message naming the pattern and what the profile 
 
 ### Drift on declared edges
 
-`drift` keeps its fields. PSI and KL are computed on the profile's histograms, so their bins are the declared edges: pinned, and the same on both sides of the comparison. KS becomes the binned statistic over the edges, which is a lower bound on the true KS distance; the drift doc should say so.
+`drift` keeps its fields. PSI and KL are computed on the profile's histograms, so for a range column their bins are the declared edges: pinned, and the same on both sides of the comparison. A bucket suppressed on either side is merged with its neighbor on both sides before comparing, never read as zero. A category column has no edges, so it is compared on the labels both sides publish, with everything else pooled. KS becomes the binned statistic over the edges, which is a lower bound on the true KS distance; the drift doc should say so.
 
 ## The migrated example
 
@@ -173,16 +177,16 @@ The persona pattern compares against a declared edge, lifecycle mix reads the `l
 
 The change is staged so that no document breaks before it has had a release to move.
 
-1. Expand, in 0.6.0. `source`, `calibration.columns`, `calibration.experimentRef` and the `response` target are added. `sourceStream` becomes optional and deprecated, and a Playback must carry exactly one of `source` and `sourceStream` (validator-enforced). Nothing is required that was not required before and no constraint tightens, so every 0.5.0 document stays valid and the 0.6.0 window covers 0.3.0 to 0.6.0. The validator warns on every `sourceStream`.
+1. Expand, in 0.6.0. `source`, `calibration.columns`, `calibration.experimentRef` and the `response` target are added. `sourceStream` becomes optional and deprecated, and a Playback must carry exactly one of `source` and `sourceStream` (validator-enforced). Nothing is required that was not required before and no constraint tightens, so every 0.5.0 document stays valid and the 0.6.0 window covers 0.3.0 to 0.6.0. The schema marks `sourceStream` `deprecated` (a JSON Schema 2020-12 annotation), and the validator, which reports only errors today, gains a warning channel and warns on every `sourceStream`.
 2. Migrate. The telco example moves to `source`, as above, with the producer's contract added to the bundle.
 3. Verify. The regression suite pins both shapes through 0.6.x: an old Playback with `sourceStream` passes with a warning, a new one with `source` passes, one with both fails, one with neither fails.
-4. Contract, in a later minor. `sourceStream` is removed. That is breaking under VERSIONING.md, so it ships with a migration section in its diff, and not before at least one minor release has carried the deprecation warning.
+4. Contract, in a later minor. `sourceStream` is removed. That is breaking under VERSIONING.md, so it ships with its schema diff and regression tests, its compatibility window resets (documents that still use `sourceStream` stop validating), and it comes no earlier than one minor release after the deprecation warning.
 
 Rollback is cheap until step 4. If this RFC is withdrawn after 0.6.0, `source` stays optional and unused, and a Playback can switch back to `sourceStream` without any other change.
 
 ### The seam window
 
-The FLUID seam is jointly owned (GOVERNANCE.md, item 4), so this is checked against the current FLUID release. `data_profile` does not exist in any FLUID version vendored today (0.7.3 to 0.7.5). It is proposed for FLUID's open 0.7.7 preview. The implementation therefore has an order: FLUID ships the kind, FLUX vendors that FLUID version verbatim, and only then can rule 2 pass for any bundle. Vendoring a new FLUID version also widens `Simulation.emits[].fluidVersion`, which is additive under VERSIONING.md.
+The FLUID seam is jointly owned (GOVERNANCE.md, item 4), so this is checked against the current FLUID release. `data_profile` does not exist in any FLUID version vendored today (0.7.3 to 0.7.5). It is proposed for FLUID's open 0.7.7 preview. The implementation therefore has an order: FLUID ships the kind, FLUX vendors that FLUID version verbatim (VERSIONING.md vendors FLUID releases only, so whether a preview counts is open question 1), and only then can rule 2 pass for any bundle. Vendoring a new FLUID version also widens `Simulation.emits[].fluidVersion`, which is additive under VERSIONING.md.
 
 ## What the implementation PR carries
 
@@ -190,9 +194,9 @@ Per CONTRIBUTING.md, one PR after the issue for this RFC is agreed:
 
 - `schema/flux-schema-0.6.0.json` with the new fields and the deprecation, and `flux-schema-latest.json` moved to it;
 - `schema-diffs/diff-0.5.0-to-0.6.0.md`, including the seam window note;
-- the vendored FLUID version that has `data_profile`, and the package data re-synced;
-- the telco example migrated;
-- validator checks in `scripts/validate.py` with a regression case for each rule above, including the four shape cases in step 3;
+- the vendored FLUID version that has `data_profile`, and `flux_spec/data` re-synced;
+- the telco example migrated, with its `flux.lock` regenerated;
+- validator checks in `flux_spec/validate.py`, a warning channel beside its errors, and a regression case in `tests/test_regression.py` for each rule above, including the four shape cases in step 3;
 - the regenerated kinds doc and UI hints;
 - `docs/concepts/seam.md` describing the input side of the seam.
 
