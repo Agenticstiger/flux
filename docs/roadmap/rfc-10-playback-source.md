@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | Status | Proposed (2026-11-08) |
+| Tracking issue | [#8](https://github.com/Agenticstiger/flux/issues/8) |
 | Changes | `Playback.spec.sourceStream` is replaced by `Playback.spec.source`, a FLUID consumeRef. A fifth calibration target, `response`, joins the four existing ones. |
 | Depends on | FLUID's `data_profile` expose kind, proposed in [RFC-data-profile-port.md](https://github.com/Agenticstiger/forge-cli/blob/main/RFC-data-profile-port.md). |
 | Lands in | the next minor (0.6.0) adds and deprecates; a later minor removes `sourceStream`. |
