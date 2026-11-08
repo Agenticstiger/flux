@@ -80,6 +80,7 @@ export default defineUserConfig({
         children: [
           { text: 'The vNext Plan', link: '/roadmap/' },
           { text: 'The Nine RFCs', link: '/roadmap/rfcs' },
+          { text: 'RFC-10 (proposed)', link: '/roadmap/rfc-10-playback-source' },
           { text: 'Conformance Profiles', link: '/roadmap/profiles' },
         ],
       },
@@ -123,7 +124,12 @@ export default defineUserConfig({
       '/roadmap/': [
         {
           text: 'Roadmap',
-          children: ['/roadmap/README.md', '/roadmap/rfcs.md', '/roadmap/profiles.md'],
+          children: [
+            '/roadmap/README.md',
+            '/roadmap/rfcs.md',
+            '/roadmap/rfc-10-playback-source.md',
+            '/roadmap/profiles.md',
+          ],
         },
       ],
       '/examples/': [
