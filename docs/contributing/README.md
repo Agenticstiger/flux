@@ -22,6 +22,10 @@ bundles. The rest of this page is for changing the spec itself.
   [VERSIONING.md](https://github.com/Agenticstiger/flux/blob/main/VERSIONING.md).
 - **The seam is jointly owned**: changes to `Simulation.emits` or the vendored
   FLUID versions are checked against the current FLUID release.
+- **The engine pages are copies.** `docs/engine/` mirrors the engine's own
+  repository, [flux-engine](https://github.com/Agenticstiger/flux-engine), at a
+  pinned tag or commit (`scripts/engine-docs.ref`). Change those pages there, then
+  bump the pin and run `scripts/sync-engine-docs.sh`; CI fails if the copy differs.
 
 ## Start here
 

@@ -33,6 +33,17 @@ python3 tests/test_regression.py   # regression suite must be green
 - Checks JSON Schema cannot express belong in `scripts/validate.py`, with a
   matching case in `tests/test_regression.py`.
 
+## The engine pages are copies
+
+Everything under `docs/engine/` is copied from the engine's own repository,
+[Agenticstiger/flux-engine](https://github.com/Agenticstiger/flux-engine), at the
+tag or commit named in `scripts/engine-docs.ref`. Do not edit those pages here.
+Change them in the engine repository, then take the change by setting the new tag
+or commit in `scripts/engine-docs.ref`, running `scripts/sync-engine-docs.sh` and
+committing `docs/engine/` with it. A page the engine adds also needs an entry in
+the `/engine/` sidebar of `docs/.vuepress/config.ts`; the script warns when one
+is missing. CI re-creates the copy from the pin and fails if it differs.
+
 ## Licensing
 
 By contributing you agree your contributions are licensed under the
