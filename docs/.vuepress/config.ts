@@ -79,10 +79,10 @@ export default defineUserConfig({
           { text: 'The Nineteen Kinds', link: '/schema/kinds' },
           { text: 'Versions', link: '/schema/versions' },
           { text: 'Changelog', link: '/schema/changelog' },
-          { text: 'JSON Schema 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json', target: '_blank' },
-          { text: 'UI Hints 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.0.json', target: '_blank' },
-          { text: 'Enforcement Contract 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json', target: '_blank' },
-          { text: 'Bundle Manifest 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json', target: '_blank' },
+          { text: 'JSON Schema 0.5.0', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json', target: '_blank' },
+          { text: 'UI Hints 0.5.0', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.0.json', target: '_blank' },
+          { text: 'Enforcement Contract 0.5.0', link: 'https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json', target: '_blank' },
+          { text: 'Bundle Manifest 0.5.0', link: 'https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json', target: '_blank' },
         ],
       },
       {
@@ -109,8 +109,7 @@ export default defineUserConfig({
       },
       { text: 'Examples', link: '/examples/' },
       { text: "What's New", link: '/releases/' },
-      { text: 'FLUID ↗', link: 'https://open-data-protocol.github.io/fluid/' },
-      { text: 'GitHub', link: 'https://github.com/Agenticstiger/flux' },
+      { text: 'FLUID', link: 'https://open-data-protocol.github.io/fluid/' },
     ],
 
     sidebar: {

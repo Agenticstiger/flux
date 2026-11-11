@@ -256,6 +256,14 @@ body {
 .vp-sidebar {
   background: transparent;
 
+  // On a phone the sidebar slides in over the page rather than sitting beside
+  // it, so it needs the page colour behind it; transparent, the text of the
+  // page shows through the menu.
+  @media (max-width: 719px) {
+    background: var(--vp-c-bg);
+    box-shadow: 2px 0 12px rgb(0 0 0 / 35%);
+  }
+
   .sidebar-item.active {
     color: var(--vp-c-accent);
     font-weight: 600;
