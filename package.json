@@ -28,23 +28,23 @@
   "devDependencies": {
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource-variable/geist-mono": "^5.2.8",
-    "@vuepress/bundler-vite": "2.0.0-rc.30",
-    "@vuepress/client": "2.0.0-rc.30",
-    "@vuepress/plugin-copy-code": "2.0.0-rc.130",
-    "@vuepress/plugin-markdown-chart": "2.0.0-rc.130",
-    "@vuepress/plugin-search": "2.0.0-rc.130",
-    "@vuepress/plugin-sitemap": "2.0.0-rc.130",
-    "@vuepress/theme-default": "2.0.0-rc.130",
-    "mermaid": "^11.16.1",
+    "@vuepress/bundler-vite": "2.0.0-rc.31",
+    "@vuepress/client": "2.0.0-rc.31",
+    "@vuepress/plugin-copy-code": "2.0.0-rc.137",
+    "@vuepress/plugin-markdown-chart": "2.0.0-rc.137",
+    "@vuepress/plugin-search": "2.0.0-rc.137",
+    "@vuepress/plugin-sitemap": "2.0.0-rc.137",
+    "@vuepress/theme-default": "2.0.0-rc.137",
+    "mermaid": "^12.3.0",
     "sass-embedded": "^1.99.0",
-    "vuepress": "2.0.0-rc.30"
+    "vuepress": "2.0.0-rc.31"
   },
   "overrides": {
     "gray-matter": {
-      "js-yaml": "3.15.1"
+      "js-yaml": "^3.15.2"
     },
     "mermaid": {
-      "dompurify": "^3.4.13"
+      "dompurify": "^3.4.17"
     }
   }
 }
