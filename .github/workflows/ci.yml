@@ -89,3 +89,26 @@ jobs:
         run: |
           /tmp/flux-spec-wheel-venv/bin/python -m flux_spec.enforce
           /tmp/flux-spec-wheel-venv/bin/python -c "from flux_spec.validate import Bundle"
+
+  engine-docs-in-sync:
+    # docs/engine/ is a generated mirror of the engine's docs, pinned by
+    # scripts/engine-docs.ref (see scripts/sync-engine-docs.sh). Same shape as the
+    # package-data check in `validate`: re-create the copy and fail on any
+    # difference, so a hand edit, or a pin change that forgot to re-run the sync,
+    # fails here instead of reaching the site. A job of its own: release.yml
+    # requires `validate` to be green on the tagged commit, and a package release
+    # should not wait on another repository.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-create docs/engine from the pinned engine docs
+        run: bash scripts/sync-engine-docs.sh
+      - name: docs/engine is exactly what the pin says
+        run: |
+          git diff --exit-code docs/engine
+          untracked="$(git ls-files --others --exclude-standard docs/engine)"
+          if [ -n "$untracked" ]; then
+            echo "the sync creates pages that are not committed:"
+            echo "$untracked"
+            exit 1
+          fi
