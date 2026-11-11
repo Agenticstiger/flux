@@ -1,0 +1,202 @@
+name: Release
+
+# Publishes flux-spec to PyPI with Trusted Publishing, so no API token is stored
+# anywhere. A `vX.Y.Z` tag starts it. The version must equal the one in
+# pyproject.toml and in flux_spec/__init__.py (`__version__` and `SCHEMA_VERSION`)
+# and name a schema file that exists (release X.Y.Z publishes
+# schema/flux-schema-X.Y.Z.json, see VERSIONING.md); the tagged commit must be on
+# main and must have passed ci.yml.
+#
+# Tag the commit you mean to publish. The package version does not move between
+# commits, so the tag, not the version string, decides which commit PyPI gets.
+#
+# One-time setup, by a maintainer:
+#
+#   1. On pypi.org, open your account's Publishing page and add a pending
+#      publisher on the GitHub Actions tab:
+#        PyPI project name   flux-spec
+#        Owner               Agenticstiger
+#        Repository name     flux
+#        Workflow name       release.yml
+#        Environment name    pypi
+#      A pending publisher does not reserve the name, so register it before anyone
+#      else registers the project. It becomes an ordinary publisher on first use.
+#
+#   2. On GitHub, create the environment `pypi` (Settings, Environments), add
+#      yourself as a required reviewer so every upload waits for a human, and under
+#      deployment branches and tags allow only the tag pattern `v*`.
+#
+# The upload carries PEP 740 attestations; pypa/gh-action-pypi-publish turns them
+# on by default.
+on:
+  push:
+    tags: ["v*"]
+
+# Nothing by default. Every job below states what it needs.
+permissions: {}
+
+defaults:
+  run:
+    # Naming bash explicitly turns on `-o pipefail`.
+    shell: bash
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: The tag agrees with the tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The tag, pyproject.toml, the package constants and the schema file agree
+        id: meta
+        run: |
+          python3 - <<'PY'
+          import ast
+          import os
+          import pathlib
+          import re
+          import sys
+          import tomllib
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          match = re.fullmatch(r"v(\d+\.\d+\.\d+)", tag)
+          if not match:
+              sys.exit(f"REFUSED: {tag!r} is not a vX.Y.Z tag")
+          version = match.group(1)
+          declared = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          if declared != version:
+              sys.exit(f"REFUSED: the tag says {version} but pyproject.toml says {declared}")
+          schema = pathlib.Path(f"schema/flux-schema-{version}.json")
+          if not schema.is_file():
+              sys.exit(f"REFUSED: there is no {schema}")
+          # The package's own idea of its version must agree too. Nothing else checks
+          # it, and PyPI would accept a wheel whose flux_spec.__version__ is stale.
+          init = ast.parse(pathlib.Path("flux_spec/__init__.py").read_text())
+          constants = {
+              target.id: node.value.value
+              for node in init.body
+              if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
+              for target in node.targets
+              if isinstance(target, ast.Name)
+          }
+          for name in ("__version__", "SCHEMA_VERSION"):
+              if constants.get(name) != version:
+                  sys.exit(
+                      f"REFUSED: flux_spec/__init__.py has {name} = {constants.get(name)!r}, "
+                      f"not {version!r}"
+                  )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"version={version}\n")
+          print(f"releasing flux-spec {version}")
+          PY
+
+      - name: The tagged commit is on main
+        run: |
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "REFUSED: $GITHUB_SHA is not on main"
+            exit 1
+          }
+
+      # ci.yml does not run on tags, and the repository has no branch protection,
+      # so a commit on main can be red. The tagged commit's own `validate` and
+      # `package-smoke-test` jobs must have passed. PyPI versions are immutable: a
+      # stale schema shipped inside a wheel can only be superseded, never replaced.
+      # If a job in ci.yml is renamed, this check refuses until the names here follow.
+      - name: CI passed on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" --paginate \
+            --jq '.check_runs[] | select(.app.slug == "github-actions") | "\(.name)\t\(.conclusion)"' \
+            > "$RUNNER_TEMP/checks.tsv"
+          cat "$RUNNER_TEMP/checks.tsv"
+          for job in validate package-smoke-test; do
+            grep -Fxq "$job"$'\t'success "$RUNNER_TEMP/checks.tsv" || {
+              echo "REFUSED: no successful '$job' check on $GITHUB_SHA"
+              exit 1
+            }
+          done
+
+  build:
+    name: Build and smoke-test the distributions
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Build the sdist and the wheel
+        run: |
+          python -m pip install "build==1.6.1" "twine==7.0.0"
+          python -m build
+          twine check --strict dist/*
+
+      # Every file in dist/ is uploaded, so an unexpected one fails closed.
+      - name: Exactly one sdist and one wheel, both named for this version
+        run: |
+          ls -l dist
+          test -f "dist/flux_spec-$VERSION.tar.gz"
+          test -f "dist/flux_spec-$VERSION-py3-none-any.whl"
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 2
+
+      # The same proof ci.yml gives, on the exact files about to be uploaded: the
+      # wheel runs from a clean environment and a directory that is not the
+      # source tree, so nothing resolves through a checkout path by accident.
+      - name: The wheel runs from outside the source tree
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet dist/*.whl
+          cd "$RUNNER_TEMP"
+          ./venv/bin/python -m flux_spec.enforce
+          ./venv/bin/python -c "from flux_spec.validate import Bundle"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [guard, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/flux-spec/${{ needs.guard.outputs.version }}/
+    # Nothing but the OIDC token, so the step that talks to PyPI holds no other
+    # permission. It uploads what `build` made and builds nothing itself.
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
