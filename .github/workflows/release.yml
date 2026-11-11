@@ -22,8 +22,9 @@ name: Release
 #      A pending publisher does not reserve the name, so register it before anyone
 #      else registers the project. It becomes an ordinary publisher on first use.
 #
-#   2. On GitHub, create the environment `pypi` (Settings, Environments) and add
-#      yourself as a required reviewer, so every upload waits for a human.
+#   2. On GitHub, create the environment `pypi` (Settings, Environments), add
+#      yourself as a required reviewer so every upload waits for a human, and under
+#      deployment branches and tags allow only the tag pattern `v*`.
 #
 # The upload carries PEP 740 attestations; pypa/gh-action-pypi-publish turns them
 # on by default.
