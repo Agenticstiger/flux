@@ -8,6 +8,19 @@ matching versioned `$id`, and `schema/flux-schema-latest.json` is a
 byte-identical alias of the newest release (CI-enforced). Published schema
 files are immutable: a released file is never edited, only superseded.
 
+## Package re-releases
+
+The `flux-spec` package on PyPI follows the specification version, with one extra
+form. A packaging-only fix (corrected metadata, or a README that is out of date on
+the PyPI page) is republished as a PEP 440 post-release, `X.Y.Z.postN`, tagged
+`vX.Y.Z.postN`. It carries the same specification: `flux_spec.SCHEMA_VERSION` stays
+`X.Y.Z`, `schema/flux-schema-X.Y.Z.json` is still the schema, no document pins
+`fluxVersion: "X.Y.Z.postN"`, and there is no schema diff. The release workflow
+checks that the tag, `pyproject.toml` and `flux_spec.__version__` carry the full
+version, and that `SCHEMA_VERSION` and the schema file match the version without
+the `.postN`. Anything that changes a schema, the validator's behaviour or the
+enforcement contract is a specification release and takes a new `X.Y.Z`.
+
 ## Document pinning and compatibility windows
 
 Every FLUX document pins `fluxVersion`. Each schema file's `fluxVersion` enum

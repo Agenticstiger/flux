@@ -10,10 +10,11 @@ repo root remain the documented CLI entry points — they are thin shims onto
 this package, so command-line behaviour is unchanged.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.0.post1"
 
 # The FLUX schema version this package's vendored/packaged data matches
-# (schema/flux-schema-<SCHEMA_VERSION>.json, i.e. the current "latest").
+# (schema/flux-schema-<SCHEMA_VERSION>.json, i.e. the current "latest"). A `.postN`
+# package release keeps the SCHEMA_VERSION of the specification it republishes.
 SCHEMA_VERSION = "0.5.0"
 
 __all__ = ["__version__", "SCHEMA_VERSION"]
