@@ -39,6 +39,16 @@ export default defineUserConfig({
     ['meta', { name: 'keywords', content: 'flux, fluid, digital twin, synthetic data, simulation, data products, data contract, deterministic, governance, json schema' }],
   ],
 
+  // The pages under /engine/ are written in the engine's own repository and
+  // copied here unchanged. An "Edit this page" link from this repository would
+  // edit a copy that the next copy overwrites, and the error and command
+  // pages are generated from the code, so those links are switched off.
+  extendsPage: (page) => {
+    if (page.path.startsWith('/engine/')) {
+      page.frontmatter.editLink = false
+    }
+  },
+
   theme: defaultTheme({
     colorMode: 'dark',
     colorModeSwitch: true,
@@ -73,6 +83,19 @@ export default defineUserConfig({
           { text: 'UI Hints 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.0.json', target: '_blank' },
           { text: 'Enforcement Contract 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json', target: '_blank' },
           { text: 'Bundle Manifest 0.5.0 ↗', link: 'https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json', target: '_blank' },
+        ],
+      },
+      {
+        text: 'Engine',
+        children: [
+          { text: 'Overview', link: '/engine/' },
+          { text: 'Tutorial', link: '/engine/tutorial/' },
+          { text: 'How-to guides', link: '/engine/how-to/' },
+          { text: 'Reference', link: '/engine/reference/' },
+          { text: 'Explanation', link: '/engine/explanation/' },
+          { text: 'Command line', link: '/engine/reference/cli/' },
+          { text: 'Error codes', link: '/engine/reference/errors/' },
+          { text: 'Accuracy program', link: '/engine/accuracy/DESIGN' },
         ],
       },
       {
@@ -119,6 +142,75 @@ export default defineUserConfig({
             '/schema/versions.md',
             '/schema/changelog.md',
           ],
+        },
+      ],
+      // One address per page is a promise: the engine prints
+      // /engine/reference/errors/FLX-nnnn.html and /engine/reference/cli/<command>.html
+      // in its output, so these paths must not move.
+      '/engine/': [
+        '/engine/README.md',
+        {
+          text: 'Tutorial',
+          link: '/engine/tutorial/',
+          children: ['/engine/tutorial/first-evidence-pack.md'],
+        },
+        {
+          text: 'How-to guides',
+          link: '/engine/how-to/',
+          children: [
+            '/engine/how-to/model-customers.md',
+            '/engine/how-to/add-a-journey.md',
+            '/engine/how-to/use-the-fluid-seam.md',
+            '/engine/how-to/calibrate-from-aggregates.md',
+            '/engine/how-to/ship-with-evidence.md',
+          ],
+        },
+        {
+          text: 'Reference',
+          link: '/engine/reference/',
+          children: [
+            {
+              text: 'Command line',
+              link: '/engine/reference/cli/',
+              collapsible: true,
+              children: [
+                '/engine/reference/cli/init.md',
+                '/engine/reference/cli/validate.md',
+                '/engine/reference/cli/plan.md',
+                '/engine/reference/cli/apply.md',
+                '/engine/reference/cli/run.md',
+                '/engine/reference/cli/verify.md',
+                '/engine/reference/cli/ship.md',
+                '/engine/reference/cli/replay.md',
+                '/engine/reference/cli/calibrate.md',
+                '/engine/reference/cli/accuracy.md',
+                '/engine/reference/cli/gate.md',
+                '/engine/reference/cli/expr.md',
+                '/engine/reference/cli/describe.md',
+                '/engine/reference/cli/plugins.md',
+                '/engine/reference/cli/explain.md',
+              ],
+            },
+            // The index only: the code pages are reached from it, from the
+            // search box, and from the address the engine prints.
+            '/engine/reference/errors/README.md',
+            '/engine/reference/python-api.md',
+            '/engine/reference/schemas.md',
+          ],
+        },
+        {
+          text: 'Explanation',
+          link: '/engine/explanation/',
+          children: [
+            '/engine/explanation/the-six-step-loop.md',
+            '/engine/explanation/determinism-and-the-seed-tree.md',
+            '/engine/explanation/the-seam.md',
+            '/engine/explanation/the-evidence-pack.md',
+          ],
+        },
+        {
+          text: 'Accuracy program',
+          children: ['/engine/accuracy/DESIGN.md', '/engine/accuracy/REPORT.md'],
         },
       ],
       '/roadmap/': [
