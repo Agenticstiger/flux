@@ -92,11 +92,14 @@ contract file is wrapped around the real estate.
 ## Validate a bundle
 
 ```bash
-pip install jsonschema pyyaml rfc8785
-python3 scripts/validate.py examples/telco-payment-recovery   # schema + cross-document
-python3 scripts/enforce.py                                    # RFC-04 conformance vectors
-python3 scripts/bundle.py pack examples/telco-payment-recovery -o dist/   # RFC-09 evidence bundle
+pip install flux-spec
+git clone https://github.com/Agenticstiger/flux.git && cd flux    # the worked example lives here
+python3 -m flux_spec.validate examples/telco-payment-recovery     # schema + cross-document
+python3 -m flux_spec.enforce                                      # RFC-04 conformance vectors
+python3 -m flux_spec.bundle pack examples/telco-payment-recovery -o dist/   # RFC-09 evidence bundle
 ```
+
+Point the same commands at your own bundle directory; the clone is only for the example.
 
 Two layers, both offline (no cloud, no running engine):
 
@@ -116,12 +119,11 @@ Use the schema in your editor:
 
 `flux_spec` is also an installable Python package — the exact code behind
 `scripts/validate.py`, `scripts/enforce.py` and `scripts/bundle.py`, not a
-reimplementation; the three scripts are thin shims onto it. It is not yet on
-PyPI, so install it from source for now:
+reimplementation; the three scripts are thin shims onto it. It is on PyPI as
+[`flux-spec`](https://pypi.org/project/flux-spec/):
 
 ```bash
-git clone https://github.com/Agenticstiger/flux.git && cd flux
-pip install .
+pip install flux-spec
 ```
 
 ```python
@@ -131,7 +133,25 @@ from flux_spec.bundle import pack, verify
 ```
 
 `python3 scripts/validate.py ...` and `python3 -m flux_spec.validate ...`
-behave identically — same for `enforce` and `bundle`.
+behave identically — same for `enforce` and `bundle`. The scripts need a clone of
+this repository; the modules (`python3 -m flux_spec.validate`,
+`python3 -m flux_spec.enforce` and `python3 -m flux_spec.bundle`) run from the
+installed package anywhere.
+
+## Engine
+
+The [FLUX Simulation Engine](https://github.com/Agenticstiger/flux-engine) is the
+open-source runtime for FLUX bundles. It turns a bundle into synthetic rows that
+follow the FLUID contract, the same rows every time, with a report that says what
+the run does not show. It builds on `flux-spec`.
+
+```bash
+pip install flux-sim-engine
+fluxsim init demo && cd demo && fluxsim run . --verify --ship -o out
+```
+
+The command is `fluxsim`, and the engine needs Python 3.11 or newer. Documentation:
+[agenticstiger.github.io/flux/engine](https://agenticstiger.github.io/flux/engine/).
 
 ## Example
 
@@ -149,7 +169,9 @@ vendor/fluid/    vendored FLUID schemas the seam validates against
 flux_spec/       the flux-spec package: validate.py · enforce.py (RFC-04) · bundle.py (RFC-09)
 scripts/         validate.py / enforce.py / bundle.py — thin CLI shims onto flux_spec
 tests/           regression suite + published enforcement conformance vectors
-docs/            reconciliation ledger
+docs/            documentation site (VuePress): guide, concepts, schema, roadmap, releases,
+                 the reconciliation ledger, and engine/ (the engine's own docs, copied
+                 from its repository)
 ```
 
 ## Relationship to FLUID

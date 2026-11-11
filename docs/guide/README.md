@@ -47,6 +47,6 @@ envelope. See [The Six Families](/flux/concepts/families) and the
 
 ## Status
 
-FLUX is a **v0.3.0 working draft** under Apache 2.0. Pre-1.0, minor versions
+FLUX is a **v0.5.0 working draft** under Apache 2.0. Pre-1.0, minor versions
 may break; every release ships a schema diff and a regression suite. Start
 with the [Quickstart](/flux/guide/quickstart).

@@ -31,6 +31,9 @@ Enterprise, plus it actually runs and enforces:
 - A live calibration loop feeds the scorecard
 - Seam provenance emitted per run (RFC-06 — *schema surface + contract-digest check shipped in 0.4.1; per-run emission is engine work*)
 
+An open-source engine, the [FLUX Simulation Engine](https://github.com/Agenticstiger/flux-engine),
+runs the RFC-04 conformance vectors with `fluxsim gate conform`.
+
 ## Why profiles change the calculus
 
 Under a single bar, an advanced implementation is judged against a line it

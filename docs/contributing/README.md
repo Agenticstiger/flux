@@ -5,6 +5,11 @@ organization, with a declared intent to move to a vendor-neutral home as
 external contribution grows — see
 [GOVERNANCE.md](https://github.com/Agenticstiger/flux/blob/main/GOVERNANCE.md).
 
+Using FLUX rather than changing it? You do not need a clone: `pip install flux-spec`
+gives you the validator, the enforcement gate and the bundler, and the
+[engine](/flux/engine/) (`pip install flux-sim-engine`, Python 3.11 or newer) runs
+bundles. The rest of this page is for changing the spec itself.
+
 ## The short version
 
 - **Spec changes are code changes.** One PR carries the schema edit, the

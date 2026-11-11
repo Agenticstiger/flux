@@ -4,7 +4,12 @@
 
 - **packaging**: `flux_spec` importable package; `scripts/validate.py`,
   `scripts/enforce.py` and `scripts/bundle.py` become shims onto it. No
-  behaviour change.
+  behaviour change. It is on PyPI as `flux-spec` (0.5.0, uploaded 2026-11-11),
+  so `pip install flux-spec` replaces the install from source.
+- **docs**: an Engine section (`/engine/`) with the documentation of the FLUX
+  Simulation Engine, copied from its repository
+  (`Agenticstiger/flux-engine`). The README, the guide and the roadmap pages
+  now point at the published packages and the current version.
 
 ## 0.5.0 — 2026-08-20
 
