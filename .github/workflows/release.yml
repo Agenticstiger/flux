@@ -1,11 +1,12 @@
 name: Release
 
 # Publishes flux-spec to PyPI with Trusted Publishing, so no API token is stored
-# anywhere. A `vX.Y.Z` tag starts it. The version must equal the one in
-# pyproject.toml and in flux_spec/__init__.py (`__version__` and `SCHEMA_VERSION`)
-# and name a schema file that exists (release X.Y.Z publishes
-# schema/flux-schema-X.Y.Z.json, see VERSIONING.md); the tagged commit must be on
-# main and must have passed ci.yml.
+# anywhere. A `vX.Y.Z` or `vX.Y.Z.postN` tag starts it. The tag's version must
+# equal the one in pyproject.toml and `flux_spec.__version__`. Its X.Y.Z part must
+# equal `SCHEMA_VERSION` and name a schema file that exists (release X.Y.Z
+# publishes schema/flux-schema-X.Y.Z.json, see VERSIONING.md); a `.postN` release
+# republishes that same specification with corrected package metadata. The tagged
+# commit must be on main and must have passed ci.yml.
 #
 # Tag the commit you mean to publish. The package version does not move between
 # commits, so the tag, not the version string, decides which commit PyPI gets.
@@ -72,18 +73,22 @@ jobs:
           import tomllib
 
           tag = os.environ["GITHUB_REF_NAME"]
-          match = re.fullmatch(r"v(\d+\.\d+\.\d+)", tag)
+          # vX.Y.Z is a specification release. vX.Y.Z.postN republishes that same
+          # specification with corrected package metadata (see VERSIONING.md).
+          match = re.fullmatch(r"v(\d+\.\d+\.\d+)(\.post[1-9]\d*)?", tag)
           if not match:
-              sys.exit(f"REFUSED: {tag!r} is not a vX.Y.Z tag")
-          version = match.group(1)
+              sys.exit(f"REFUSED: {tag!r} is not a vX.Y.Z or vX.Y.Z.postN tag")
+          spec_version = match.group(1)
+          version = spec_version + (match.group(2) or "")
           declared = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
           if declared != version:
               sys.exit(f"REFUSED: the tag says {version} but pyproject.toml says {declared}")
-          schema = pathlib.Path(f"schema/flux-schema-{version}.json")
+          schema = pathlib.Path(f"schema/flux-schema-{spec_version}.json")
           if not schema.is_file():
               sys.exit(f"REFUSED: there is no {schema}")
           # The package's own idea of its version must agree too. Nothing else checks
           # it, and PyPI would accept a wheel whose flux_spec.__version__ is stale.
+          # SCHEMA_VERSION is the specification's version, so a post-release keeps it.
           init = ast.parse(pathlib.Path("flux_spec/__init__.py").read_text())
           constants = {
               target.id: node.value.value
@@ -92,11 +97,11 @@ jobs:
               for target in node.targets
               if isinstance(target, ast.Name)
           }
-          for name in ("__version__", "SCHEMA_VERSION"):
-              if constants.get(name) != version:
+          for name, expected in (("__version__", version), ("SCHEMA_VERSION", spec_version)):
+              if constants.get(name) != expected:
                   sys.exit(
                       f"REFUSED: flux_spec/__init__.py has {name} = {constants.get(name)!r}, "
-                      f"not {version!r}"
+                      f"not {expected!r}"
                   )
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
               out.write(f"version={version}\n")

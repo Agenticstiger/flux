@@ -60,6 +60,8 @@ jobs:
           python scripts/bundle.py verify dist/telco-payment-recovery.flux.tgz
       - name: Regression suite (0.2.0 false-passes must fail)
         run: python tests/test_regression.py
+      - name: Release guard accepts the tags it should and refuses the rest
+        run: python tests/test_release_guard.py
 
   package-smoke-test:
     # Proves flux_spec works as a genuinely installed distribution, not just
