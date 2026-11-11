@@ -3,18 +3,29 @@
 Author a minimal universe, validate it offline, and cross the FLUID seam — in
 about five minutes. No cloud, no running engine.
 
-## 1. Clone and install
+## 1. Install
+
+```bash
+pip install flux-spec
+```
+
+That gives you the offline validator, the enforcement gate and the evidence
+bundler (`python3 -m flux_spec.validate`, `python3 -m flux_spec.enforce` and
+`python3 -m flux_spec.bundle`). To run a bundle as well as validate it, install
+the [engine](/flux/engine/) instead (`pip install flux-sim-engine`, which needs
+Python 3.11 or newer); it brings `flux-spec` with it.
+
+The shipped example lives in this repository, so clone it for the next step:
 
 ```bash
 git clone https://github.com/Agenticstiger/flux.git
 cd flux
-pip install jsonschema pyyaml rfc8785
 ```
 
 ## 2. Validate the shipped example
 
 ```bash
-python3 scripts/validate.py examples/telco-payment-recovery
+python3 -m flux_spec.validate examples/telco-payment-recovery
 # [ok] examples/telco-payment-recovery
 ```
 
@@ -28,7 +39,7 @@ agentPolicy bounds, and FLUID seam conformance.
 Create `my-universe/world.flux.yml`:
 
 ```yaml
-fluxVersion: "0.4.0"
+fluxVersion: "0.5.0"
 kind: World
 id: hello-world
 name: Hello World
@@ -43,7 +54,7 @@ spec:
 ```
 
 ```bash
-python3 scripts/validate.py my-universe
+python3 -m flux_spec.validate my-universe
 # [ok] my-universe
 ```
 
@@ -82,7 +93,7 @@ exposes:
 …and a Simulation (`my-universe/sim.flux.yml`):
 
 ```yaml
-fluxVersion: "0.4.0"
+fluxVersion: "0.5.0"
 kind: Simulation
 id: hello-sim
 name: Hello Simulation
@@ -98,7 +109,7 @@ spec:
 ```
 
 ```bash
-python3 scripts/validate.py my-universe
+python3 -m flux_spec.validate my-universe
 # [ok] my-universe
 ```
 

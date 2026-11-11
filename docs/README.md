@@ -61,4 +61,5 @@ spec:
 - **[Concepts](/flux/concepts/)** — the two-spec substrate, the six families, the seam, and the three properties.
 - **[Schema Reference](/flux/schema/)** — the envelope, all nineteen kinds, versions and changelog.
 - **[Examples](/flux/examples/)** — the complete telco payment-recovery universe, all nineteen kinds green under CI.
+- **[Engine](/flux/engine/)**: the open-source runtime that runs a FLUX bundle (`pip install flux-sim-engine`, Python 3.11 or newer).
 - **[FLUID](https://open-data-protocol.github.io/fluid/)** — the delivery-side contract standard this spec emits into.

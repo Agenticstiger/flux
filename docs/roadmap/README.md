@@ -1,9 +1,10 @@
 # The vNext Roadmap
 
-FLUX 0.3.x is a rigorous core. The most advanced private implementations of
-this idea are already **ahead of it** in places — richer population models,
-versioned module reuse, runtime policy enforcement, graded calibration. The
-roadmap's bet:
+FLUX 0.5.0 is a rigorous core, and the nine RFCs have shipped, apart from
+RFC-08's LSP specification, which is still open. The roadmap began at 0.3.x,
+where the most advanced private implementations of this idea were already
+**ahead of it** in places — richer population models, versioned module reuse,
+runtime policy enforcement, graded calibration. The roadmap's bet:
 
 > **Make the open standard a strict superset.** An advanced implementation
 > should migrate because it loses nothing it values and gains everything the
