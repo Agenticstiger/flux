@@ -1,15 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.5.0.post1 - 2026-11-11
 
-- **packaging**: `flux_spec` importable package; `scripts/validate.py`,
-  `scripts/enforce.py` and `scripts/bundle.py` become shims onto it. No
-  behaviour change. It is on PyPI as `flux-spec` (0.5.0, uploaded 2026-11-11),
-  so `pip install flux-spec` replaces the install from source.
+Packaging only. The specification and the schema are unchanged:
+`flux_spec.SCHEMA_VERSION` stays `0.5.0` and `schema/flux-schema-0.5.0.json` is
+still the current schema. A `.postN` release republishes the same specification
+with corrected package metadata (see [VERSIONING.md](VERSIONING.md)).
+
+- **packaging**: the package page on PyPI now says `pip install flux-spec` and the
+  `python3 -m flux_spec.validate|enforce|bundle` modules, where 0.5.0 still said
+  "not yet on PyPI". `flux_spec` is the importable package behind
+  `scripts/validate.py`, `scripts/enforce.py` and `scripts/bundle.py` (thin shims,
+  no behaviour change); 0.5.0 was its first upload, on 2026-11-11.
+- **release**: the release workflow accepts a `vX.Y.Z.postN` tag. It checks the full
+  version against `pyproject.toml` and `flux_spec.__version__`, and the version
+  without `.postN` against `SCHEMA_VERSION` and the schema file. A plain `vX.Y.Z`
+  tag is checked as before, and `tests/test_release_guard.py` runs the guard
+  against both.
 - **docs**: an Engine section (`/engine/`) with the documentation of the FLUX
   Simulation Engine, copied from its repository
-  (`Agenticstiger/flux-engine`). The README, the guide and the roadmap pages
-  now point at the published packages and the current version.
+  (`Agenticstiger/flux-engine`). The README, the guide and the roadmap pages now
+  point at the published packages and the current version.
 
 ## 0.5.0 — 2026-08-20
 
