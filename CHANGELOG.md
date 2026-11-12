@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **examples**: the towers contract declares `tenancy_count`,
+  `chronic_sla_breaches` and `months_to_lease_expiry` as `INTEGER` instead of
+  `DECIMAL(10,0)` and `DECIMAL(6,0)`, and `simulation.flux.yml` re-pins its
+  `provenance.contractDigest`. The decimal types were a workaround for an
+  engine that refused a drawn count in an `INTEGER` column;
+  [flux-engine#19](https://github.com/Agenticstiger/flux-engine/pull/19)
+  removes that limit.
+
 ## 0.5.1 - 2026-11-12
 
 Specification 0.5.1, additive
