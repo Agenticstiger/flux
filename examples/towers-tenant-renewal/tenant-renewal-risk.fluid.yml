@@ -1,8 +1,8 @@
 # The FLUID contract the simulation emits rows for: one row per renewal-risk
 # detection. It consumes the tower-management products the tenant facts come
-# from, and FLUX refers to it without restating it. The tenant counts are
-# DECIMAL(p,0): the engine draws them as exact decimals, and an INTEGER column
-# takes only an integer-class value.
+# from, and FLUX refers to it without restating it. Its counts are INTEGER
+# columns. The engine checks at plan time that each one is filled from a source
+# that is always a whole number.
 fluidVersion: "0.7.6"
 kind: DataProduct
 id: towers.gold.tenant_renewal_risk_moment
@@ -55,7 +55,7 @@ exposes:
           required: true
           description: The tenant's tenancy lifecycle state
         - name: tenancy_count
-          type: DECIMAL(10,0)
+          type: INTEGER
           required: true
           description: Active tenancies the tenant holds in its market
         - name: monthly_recurring_charge
@@ -67,11 +67,11 @@ exposes:
           required: true
           description: Contracted availability target from the master lease agreement
         - name: chronic_sla_breaches
-          type: DECIMAL(6,0)
+          type: INTEGER
           required: true
           description: The tenant's sites that breached their SLA in three or more of the last six months
         - name: months_to_lease_expiry
-          type: DECIMAL(6,0)
+          type: INTEGER
           required: true
           description: Whole months until the tenant's lease term ends
         - name: availability_pct
