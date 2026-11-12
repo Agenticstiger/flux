@@ -1,0 +1,13 @@
+# A capital upgrade that removes the outage cause: hybrid power and battery backup.
+fluxVersion: "0.5.1"
+kind: Treatment
+id: tr-capex-upgrade
+name: Site Power Upgrade
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  actionType: site_power_upgrade
+  payloadTemplate:
+    scope: hybrid_power_and_battery
+    leadTimeWeeks: 8

@@ -1,0 +1,14 @@
+# A service credit against the next invoice, posted as a PENALTY_CREDIT line (dp016).
+fluxVersion: "0.5.1"
+kind: Treatment
+id: tr-sla-credit
+name: SLA Service Credit
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  actionType: sla_service_credit
+  payloadTemplate:
+    chargeType: PENALTY_CREDIT
+    creditPctOfMonthlyCharge: 5
+    message: "We have credited this month's availability shortfall against your next invoice"

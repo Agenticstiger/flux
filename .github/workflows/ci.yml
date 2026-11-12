@@ -32,12 +32,12 @@ jobs:
               print(f"ok  {p}")
           EOF
       - name: latest alias matches current release
-        run: cmp schema/flux-schema-0.5.0.json schema/flux-schema-latest.json
+        run: cmp schema/flux-schema-0.5.1.json schema/flux-schema-latest.json
       - name: Generated artifacts are in sync (kinds doc + UI hints)
         run: |
           python scripts/generate-kinds-doc.py
           python scripts/generate-ui-hints.py
-          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.5.0.json
+          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.5.1.json
       # Placed AFTER the generated-artifact sync check above, so docs/schema/
       # kinds.md is the freshly regenerated one by the time this reads it —
       # and BEFORE the bundle validation below, so a vocabulary failure is not

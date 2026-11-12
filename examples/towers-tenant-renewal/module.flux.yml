@@ -1,0 +1,20 @@
+fluxVersion: "0.5.1"
+kind: Module
+id: module-tenant-renewal
+name: Tenant Renewal Module
+version: 1.0.0
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  resources:
+    - sig-sla-breach
+    - sig-site-outage
+    - sig-billing-dispute
+    - det-renewal-risk
+    - jr-sla-credit
+    - jr-capex-upgrade
+    - jr-dispute-credit
+  binds:
+    - { port: event-envelope, config: { spec: cloudevents/1.0 } }
+    - { port: fluid-contract }

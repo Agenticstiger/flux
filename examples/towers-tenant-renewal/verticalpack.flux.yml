@@ -1,0 +1,10 @@
+fluxVersion: "0.5.1"
+kind: VerticalPack
+id: vp-towers
+name: Towers Vertical Pack
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  industry: towers
+  modules: [module-tenant-renewal]

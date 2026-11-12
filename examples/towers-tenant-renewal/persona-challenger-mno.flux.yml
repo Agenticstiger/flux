@@ -1,0 +1,23 @@
+fluxVersion: "0.5.1"
+kind: Persona
+id: persona-challenger-mno
+name: Challenger Mobile Operator
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  traits:
+    slaSensitivity: 0.70
+    priceSensitivity:
+      dist: categorical
+      levels: { low: 0.10, medium: 0.40, high: 0.50 }
+    capexAppetite:
+      dist: normal
+      mean: 0.50
+      stddev: 0.15
+      min: 0
+      max: 1
+  worldview:
+    riskTolerance: medium
+    trustInInstitutions: 0.45
+    trendFollowing: 0.60             # follows a rival operator's move to another tower company

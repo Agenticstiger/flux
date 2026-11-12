@@ -1,0 +1,29 @@
+# A large billing dispute is settled with a goodwill credit before it sours the renewal.
+fluxVersion: "0.5.1"
+kind: Journey
+id: jr-dispute-credit
+name: Dispute Credit Journey
+metadata:
+  owner:
+    team: tm-finance
+spec:
+  trigger:
+    signalRef: sig-billing-dispute
+    condition: "disputedAmount >= 5000"
+  intervention:
+    treatmentRef: tr-sla-credit
+    action: settle_dispute_with_credit
+  taxonomyRef: jt-tenancy-lifecycle
+  personaReactions:
+    persona-anchor-mno:
+      successProbability: 0.50
+      outcome: dispute_settled
+      nextState: active
+    persona-challenger-mno:
+      successProbability: 0.40
+      outcome: dispute_settled
+      nextState: active
+    persona-regional-isp:
+      successProbability: 0.45
+      outcome: dispute_settled
+      nextState: active

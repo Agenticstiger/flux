@@ -1,0 +1,92 @@
+# The FLUID contract the simulation emits rows for: one row per renewal-risk
+# detection. It consumes the tower-management products the tenant facts come
+# from, and FLUX refers to it without restating it. The tenant counts are
+# DECIMAL(p,0): the engine draws them as exact decimals, and an INTEGER column
+# takes only an integer-class value.
+fluidVersion: "0.7.6"
+kind: DataProduct
+id: towers.gold.tenant_renewal_risk_moment
+name: Tenant Renewal Risk Moment
+description: >-
+  One row per tenant whose SLA breaches are rising: a chargeable breach followed by another
+  within 30 days. Each row carries the tenant's tenancy count, monthly recurring charge, SLA
+  target, chronic-breach count and months to lease expiry, so a key-account team can rank the
+  renewals at risk.
+domain: Tenancy and Commercial
+metadata:
+  owner:
+    team: tm-commercial
+consumes:
+  - { productId: silver.commercial.active_tenancy_v1, exposeId: active_tenancy }
+  - { productId: gold.ops.uptime_slas_v1, exposeId: uptime_slas }
+  - { productId: silver.finance.tenant_billing_v1, exposeId: tenant_billing }
+  - { productId: gold.asset.site_360_v1, exposeId: site_360 }
+exposes:
+  - exposeId: tenant_renewal_risk_moment
+    kind: table
+    contract:
+      schema:
+        - name: tenant_id
+          type: STRING
+          required: true
+          description: The tenant, one operator in one market
+        - name: detected_at
+          type: TIMESTAMP
+          required: true
+          description: When the second breach completed the detection
+        - name: first_breach_at
+          type: TIMESTAMP
+          required: true
+          description: When the first chargeable breach of the detection happened
+        - name: breach_count
+          type: INTEGER
+          required: true
+          description: SLA breaches the detection matched
+        - name: country
+          type: STRING
+          required: true
+          description: ISO 3166-1 alpha-2 market of the tenant
+        - name: tenant_segment
+          type: STRING
+          required: true
+          description: The tenant archetype (anchor operator, challenger operator, regional ISP)
+        - name: lifecycle_stage
+          type: STRING
+          required: true
+          description: The tenant's tenancy lifecycle state
+        - name: tenancy_count
+          type: DECIMAL(10,0)
+          required: true
+          description: Active tenancies the tenant holds in its market
+        - name: monthly_recurring_charge
+          type: DECIMAL(12,2)
+          required: true
+          description: Monthly recurring charge per tenancy, before energy pass-through
+        - name: sla_target_pct
+          type: DECIMAL(6,3)
+          required: true
+          description: Contracted availability target from the master lease agreement
+        - name: chronic_sla_breaches
+          type: DECIMAL(6,0)
+          required: true
+          description: The tenant's sites that breached their SLA in three or more of the last six months
+        - name: months_to_lease_expiry
+          type: DECIMAL(6,0)
+          required: true
+          description: Whole months until the tenant's lease term ends
+        - name: availability_pct
+          type: DECIMAL(7,4)
+          description: Measured availability of the breach that completed the detection
+        - name: downtime_minutes
+          type: DECIMAL(10,2)
+          description: Chargeable outage minutes of the breach that completed the detection
+        - name: outage_cause
+          type: STRING
+          description: Alarm type behind the breach that completed the detection
+    binding:
+      platform: databricks
+      format: delta_table
+      location:
+        database: tasc_gold
+        schema: commercial
+        table: tenant_renewal_risk_moment

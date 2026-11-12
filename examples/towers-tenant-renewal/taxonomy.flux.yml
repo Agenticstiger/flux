@@ -1,0 +1,19 @@
+# A tenancy's life, as dp005 active_tenancy records it: onboarding is
+# PENDING_INSTALL, notice is NOTICE_GIVEN, churned is TERMINATED. A tenant who
+# has given notice can still be won back before the lease ends.
+fluxVersion: "0.5.1"
+kind: JourneyTaxonomy
+id: jt-tenancy-lifecycle
+name: Tenancy Lifecycle Taxonomy
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  states: [onboarding, active, atrisk, notice, churned]
+  transitions:
+    - { from: onboarding, to: active }
+    - { from: active, to: atrisk }
+    - { from: atrisk, to: active }
+    - { from: atrisk, to: notice }
+    - { from: notice, to: active }
+    - { from: notice, to: churned }

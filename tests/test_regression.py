@@ -32,6 +32,7 @@ import bundle as bundle_tool  # noqa: E402
 SCHEMA = json.loads((REPO / "schema" / "flux-schema-latest.json").read_text())
 VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
 EXAMPLES = REPO / "examples" / "telco-payment-recovery"
+TOWERS_EXAMPLE = REPO / "examples" / "towers-tenant-renewal"
 
 
 def envelope(kind, doc_id="doc-under-test", **spec):
@@ -135,6 +136,19 @@ sim_range_prov = envelope_041(
 )
 sim_unvendored_exact = envelope_041(
     "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
+)
+
+
+def envelope_051(kind, doc_id="doc-under-test", **spec):
+    d = envelope(kind, doc_id, **spec)
+    d["fluxVersion"] = "0.5.1"
+    return d
+
+
+# 0.5.1: the seam window widens to the newly vendored FLUID 0.7.6
+sim_exact_076 = envelope_051(
+    "Simulation", worldRef="w",
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.6"}],
 )
 sim_garbage_range = envelope_041(
@@ -148,6 +162,7 @@ sim_bad_digest = envelope_041(
 )
 
 CASES_PASS = {
+    "0.5.1: exact FLUID 0.7.6 pin at the seam": sim_exact_076,
     "RFC-05: playback scorecard": pb_scorecard,
     "RFC-06: seam range + provenance + minCredibility": sim_range_prov,
     "RFC-01: scalar + categorical + normal traits": persona_dists,
@@ -524,6 +539,22 @@ def main() -> int:
         if errors:
             failures.append(f"[validator] pristine example bundle failed: {errors[:5]}")
 
+    # 0.5.1: the towers example pins FLUID 0.7.6 exactly and stays green, and its
+    # 0.7.6 contract is really checked against the 0.7.6 schema, not waved through
+    with tempfile.TemporaryDirectory() as tmp:
+        bundle = Path(tmp) / "bundle"
+        shutil.copytree(TOWERS_EXAMPLE, bundle)
+        errors = Bundle(bundle, flux_validator).run()
+        if errors:
+            failures.append(f"[validator] pristine towers bundle failed: {errors[:5]}")
+    with tempfile.TemporaryDirectory() as tmp:
+        bundle = Path(tmp) / "bundle"
+        shutil.copytree(TOWERS_EXAMPLE, bundle)
+        mutate_yaml(bundle, "tenant-renewal-risk.fluid.yml", _break_fluid)
+        errors = Bundle(bundle, flux_validator).run()
+        if not any("fails FLUID 0.7.6" in e for e in errors):
+            failures.append(f"[validator] a broken FLUID 0.7.6 contract was not caught: {errors[:3]}")
+
     # ref-like keys inside free-form payloads must not be flagged
     with tempfile.TemporaryDirectory() as tmp:
         bundle = Path(tmp) / "bundle"
@@ -825,10 +856,19 @@ def main() -> int:
     # above, asserted here against the old schema too for the reverse direction
     if list(old_schema.iter_errors(envelope("Segment", query="x"))):
         failures.append("[schema] a plain 0.3.0 document should still pass the 0.3.0 schema")
+    schema_050 = Draft202012Validator(
+        json.loads((REPO / "schema" / "flux-schema-0.5.0.json").read_text()),
+        format_checker=FormatChecker(),
+    )
+    exact_076_as_050 = copy.deepcopy(sim_exact_076)
+    exact_076_as_050["fluxVersion"] = "0.5.0"
+    if not list(schema_050.iter_errors(exact_076_as_050)):
+        failures.append("[schema] an exact FLUID 0.7.6 pin should fail the immutable 0.5.0 schema")
 
     total = (
         len(CASES_PASS) + len(CASES_REJECT) + 1
         + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 6
+        + 3   # 0.5.1: towers bundle green, broken 0.7.6 contract caught, 0.7.6 refused by 0.5.0
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
