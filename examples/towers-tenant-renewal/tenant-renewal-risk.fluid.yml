@@ -76,13 +76,15 @@ exposes:
           description: Whole months until the tenant's lease term ends
         - name: availability_pct
           type: DECIMAL(7,4)
-          description: Measured availability of the breach that completed the detection
+          description: >-
+            Measured availability of the month whose breach completed the detection, below the
+            tenant's SLA target
         - name: downtime_minutes
           type: DECIMAL(10,2)
-          description: Chargeable outage minutes of the breach that completed the detection
+          description: Minutes of the longest chargeable outage in that month
         - name: outage_cause
           type: STRING
-          description: Alarm type behind the breach that completed the detection
+          description: Alarm type behind that longest outage
     binding:
       platform: databricks
       format: delta_table

@@ -26,4 +26,4 @@ spec:
       provenance:
         # The canonical digest of tenant-renewal-risk.fluid.yml: the run refuses
         # a contract that moved away from the one this simulation was written for.
-        contractDigest: "sha256:1fc27b495f61f6095387983845975aba5520675d0c9a358d07ca5c515992d6d1"
+        contractDigest: "sha256:4f85bb210dbb25ac908e29da31f247bd0e24a39ff5f9affddc5bc04bc2e08766"
