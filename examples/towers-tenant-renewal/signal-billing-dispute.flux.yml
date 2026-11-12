@@ -1,0 +1,13 @@
+# A tenant disputed a posted invoice line (dp016 tenant_billing, invoice_status DISPUTED).
+fluxVersion: "0.5.1"
+kind: Signal
+id: sig-billing-dispute
+name: Billing Dispute Signal
+metadata:
+  owner:
+    team: tm-finance
+spec:
+  envelope: cloudevents/1.0
+  source: "urn:flux:tenant-billing"
+  type: com.towerco.billing.disputed
+  dataschema: https://example.com/schemas/towers/billing-dispute.json

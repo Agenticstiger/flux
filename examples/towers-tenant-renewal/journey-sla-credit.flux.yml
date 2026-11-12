@@ -1,0 +1,30 @@
+# A long breach earns the tenant a service credit; a tenant who accepts it is
+# back to active, wherever the taxonomy allows that move.
+fluxVersion: "0.5.1"
+kind: Journey
+id: jr-sla-credit
+name: SLA Credit Journey
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  trigger:
+    signalRef: sig-sla-breach
+    condition: "downtimeMinutes >= 60"
+  intervention:
+    treatmentRef: tr-sla-credit
+    action: issue_sla_credit
+  taxonomyRef: jt-tenancy-lifecycle
+  personaReactions:
+    persona-anchor-mno:
+      successProbability: 0.55
+      outcome: credit_accepted
+      nextState: active
+    persona-challenger-mno:
+      successProbability: 0.45
+      outcome: credit_accepted
+      nextState: active
+    persona-regional-isp:
+      successProbability: 0.35
+      outcome: credit_accepted
+      nextState: active

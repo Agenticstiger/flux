@@ -2,6 +2,23 @@
 
 One human-written diff per released version pair. The regression suite pins every behavioral change.
 
+## 0.5.0 → 0.5.1
+
+**Additive, non-breaking.** Every valid 0.3.0–0.5.0 document validates
+unchanged under 0.5.1 (regression-asserted). One change: the FLUID seam
+window widens to FLUID 0.7.6.
+
+- `vendor/fluid/fluid-schema-0.7.6.json` is vendored verbatim from FLUID
+  ("FLUID 0.7.6 — Declarative Packaging Modes"), so a `.fluid.yml` that
+  declares `fluidVersion: "0.7.6"` is validated against it.
+- `Simulation.emits[].fluidVersion` accepts the exact pin `"0.7.6"`. Ranges
+  such as `^0.7.3` already reached 0.7.6 once it was vendored.
+- `fluxVersion` enum widens to `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1"]`.
+- `$id` → `flux-schema-0.5.1.json`; `flux-schema-latest.json` aliases 0.5.1;
+  UI hints regenerate as `flux-ui-hints-0.5.1.json`. The enforcement and
+  manifest contracts are unchanged and keep their 0.5.0 files.
+- New example: `examples/towers-tenant-renewal/` pins the 0.7.6 seam exactly.
+
 ## 0.4.1 → 0.5.0
 
 **Additive, non-breaking.** Every valid 0.3.0–0.4.1 document validates

@@ -6,7 +6,8 @@ window** — the document versions it accepts.
 
 | Version | Status | Window | Schema |
 |---|---|---|---|
-| **0.5.0** | current | `0.3.0`–`0.5.0` | [flux-schema-0.5.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.0.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) |
+| **0.5.1** | current | `0.3.0`–`0.5.1` | [flux-schema-0.5.1.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.1.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.1.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) (both unchanged from 0.5.0) |
+| 0.5.0 | superseded (additively) | `0.3.0`–`0.5.0` | [flux-schema-0.5.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.0.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) |
 | 0.4.1 | superseded (additively) | `0.3.0`, `0.4.0`, `0.4.1` | [flux-schema-0.4.1.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.1.json) |
 | 0.4.0 | superseded (additively) | `0.3.0`, `0.4.0` | [flux-schema-0.4.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.4.0.json) |
 | 0.3.0 | superseded (additively) | `0.3.0` | [flux-schema-0.3.0.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.3.0.json) |
@@ -19,7 +20,7 @@ window** — the document versions it accepts.
 ## The FLUID window
 
 `Simulation.emits[].fluidVersion` enumerates exactly the FLUID schema versions
-vendored by this release: **0.7.3, 0.7.4, 0.7.5**. Widening the window is
+vendored by this release: **0.7.3, 0.7.4, 0.7.5, 0.7.6**. Widening the window is
 additive; narrowing it is breaking.
 
 ## Policy

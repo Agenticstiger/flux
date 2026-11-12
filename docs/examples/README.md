@@ -1,6 +1,6 @@
 # FLUX by Example
 
-The repository ships one complete, CI-validated universe:
+The repository ships two CI-validated bundles. The first is a complete universe:
 [`examples/telco-payment-recovery/`](https://github.com/Agenticstiger/flux/tree/main/examples/telco-payment-recovery)
 — the position paper's worked example, covering **all nineteen kinds plus the
 FLUID contract at the seam**.
@@ -47,3 +47,31 @@ use case in the ConsentProfile that the contract allows — and watch the
 validator name the exact document, path and rule. The
 [regression suite](https://github.com/Agenticstiger/flux/blob/main/tests/test_regression.py)
 does exactly that, 61 times, on every commit.
+
+## Towers: tenant renewal risk
+
+[`examples/towers-tenant-renewal/`](https://github.com/Agenticstiger/flux/tree/main/examples/towers-tenant-renewal)
+is a tower company's view of its tenants: mobile operators and internet
+providers renting space on its sites across six markets. SLA breaches are
+rising. Which tenants are at risk at renewal, and do service credits and
+power upgrades win them back? Its World declares `vertical: towers`, and its
+Simulation pins the FLUID 0.7.6 seam exactly.
+
+| Document | Kind | Role |
+|---|---|---|
+| `world.flux.yml` | World | 1,500 tenants in six markets named by ISO country code |
+| `persona-*.flux.yml` | Persona | anchor operator, challenger operator, regional ISP |
+| `taxonomy.flux.yml` | JourneyTaxonomy | onboarding → active → atrisk → notice → churned |
+| `segment.flux.yml` | Segment | at-risk tenants inside the renewal window with chronic breaches |
+| `signal-*.flux.yml` | Signal | SLA breach, site outage, billing dispute |
+| `detector.flux.yml` | Detector | a chargeable SLA breach followed by another within 30 days |
+| `journey-*.flux.yml` | Journey | SLA credit, capex upgrade, dispute credit, per persona |
+| `treatment-*.flux.yml` | Treatment | the service credit and the site power upgrade |
+| `module.flux.yml` / `verticalpack.flux.yml` | Composition | packaging |
+| `simulation.flux.yml` | Simulation | the root, with an exact `fluidVersion: "0.7.6"` pin |
+| `tenant-renewal-risk.fluid.yml` | **FLUID DataProduct** | one row per renewal-risk detection, consuming the tower-management data products |
+
+```bash
+python3 scripts/validate.py examples/towers-tenant-renewal
+# [ok] examples/towers-tenant-renewal
+```

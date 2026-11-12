@@ -1,0 +1,13 @@
+# An outage-class alarm that took one or more of the tenant's sites off air.
+fluxVersion: "0.5.1"
+kind: Signal
+id: sig-site-outage
+name: Site Outage Signal
+metadata:
+  owner:
+    team: tm-network-operations
+spec:
+  envelope: cloudevents/1.0
+  source: "urn:flux:site-alarms"
+  type: com.towerco.site.outage
+  dataschema: https://example.com/schemas/towers/site-outage.json

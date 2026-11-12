@@ -1,0 +1,29 @@
+# One quarter of tenant renewal risk across six markets. The emitted rows are
+# the renewal-risk detections, written for the FLUID 0.7.6 contract beside this
+# file.
+fluxVersion: "0.5.1"
+kind: Simulation
+id: sim-tenant-renewal-risk
+name: Tenant Renewal Risk Simulation
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  worldRef: towers-tenant-world
+  fidelity: deterministic        # same bundle and seed, same bytes, on any machine
+  seed: 7
+  timeBounds:
+    start: "2026-07-01T00:00:00Z"
+    end: "2026-09-30T23:59:59Z"
+  personaRefs: [persona-anchor-mno, persona-challenger-mno, persona-regional-isp]
+  segmentRefs: [seg-renewal-window]
+  signalRefs: [sig-sla-breach, sig-site-outage, sig-billing-dispute]
+  moduleRefs: [module-tenant-renewal]
+  emits:
+    - productRef: towers.gold.tenant_renewal_risk_moment
+      exposeId: tenant_renewal_risk_moment
+      fluidVersion: "0.7.6"        # an exact pin: FLUX 0.5.1 vendors FLUID 0.7.6
+      provenance:
+        # The canonical digest of tenant-renewal-risk.fluid.yml: the run refuses
+        # a contract that moved away from the one this simulation was written for.
+        contractDigest: "sha256:4f85bb210dbb25ac908e29da31f247bd0e24a39ff5f9affddc5bc04bc2e08766"

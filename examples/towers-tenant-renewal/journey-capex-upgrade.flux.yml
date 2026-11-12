@@ -1,0 +1,29 @@
+# A long outage is answered with a committed power upgrade on the affected sites.
+fluxVersion: "0.5.1"
+kind: Journey
+id: jr-capex-upgrade
+name: Capex Upgrade Journey
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  trigger:
+    signalRef: sig-site-outage
+    condition: "outageMinutes >= 240"
+  intervention:
+    treatmentRef: tr-capex-upgrade
+    action: commit_power_upgrade
+  taxonomyRef: jt-tenancy-lifecycle
+  personaReactions:
+    persona-anchor-mno:
+      successProbability: 0.60
+      outcome: upgrade_accepted
+      nextState: active
+    persona-challenger-mno:
+      successProbability: 0.50
+      outcome: upgrade_accepted
+      nextState: active
+    persona-regional-isp:
+      successProbability: 0.30
+      outcome: upgrade_accepted
+      nextState: active

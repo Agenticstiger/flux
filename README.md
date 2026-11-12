@@ -103,7 +103,7 @@ Point the same commands at your own bundle directory; the clone is only for the 
 
 Two layers, both offline (no cloud, no running engine):
 
-1. **Schema** — every `*.flux.yml` against [`schema/flux-schema-0.5.0.json`](schema/flux-schema-0.5.0.json)
+1. **Schema** — every `*.flux.yml` against [`schema/flux-schema-0.5.1.json`](schema/flux-schema-0.5.1.json)
    (JSON Schema 2020-12, closed specs, typed everything).
 2. **Cross-document** — every reference resolves to the right kind (no
    dangling links), mixes and weights sum to 1, transitions stay inside their
@@ -158,6 +158,10 @@ The command is `fluxsim`, and the engine needs Python 3.11 or newer. Documentati
 [`examples/telco-payment-recovery/`](examples/telco-payment-recovery/) is the
 paper's worked example, complete: all nineteen kinds plus the FLUID contract
 at the seam, green under CI.
+
+[`examples/towers-tenant-renewal/`](examples/towers-tenant-renewal/) follows a
+tower company's tenants as SLA breaches rise, and emits renewal-risk rows for a
+FLUID 0.7.6 contract.
 
 ## Repository layout
 

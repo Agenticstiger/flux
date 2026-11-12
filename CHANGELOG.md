@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+Specification 0.5.1, additive
+([schema-diffs/diff-0.5.0-to-0.5.1.md](schema-diffs/diff-0.5.0-to-0.5.1.md)):
+
+- **seam**: FLUID 0.7.6 is vendored (`vendor/fluid/fluid-schema-0.7.6.json`,
+  verbatim from FLUID), and `Simulation.emits[].fluidVersion` accepts the
+  exact pin `"0.7.6"`.
+- **schema**: `schema/flux-schema-0.5.1.json`, with the `fluxVersion` window
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1"]`; `flux-schema-latest.json`
+  aliases it and `flux_spec.SCHEMA_VERSION` is `0.5.1`. The package version is
+  set when the release is cut.
+- **examples**: `examples/towers-tenant-renewal/`, tenant renewal risk at a
+  tower company, emitting for a FLUID 0.7.6 contract.
+- **tests**: the regression suite checks the exact 0.7.6 pin, the towers
+  bundle, a broken 0.7.6 contract, and that the immutable 0.5.0 file still
+  refuses the pin.
+
 ## 0.5.0.post1 - 2026-11-11
 
 Packaging only. The specification and the schema are unchanged:

@@ -28,7 +28,7 @@ digest.
 It also solves three mechanical problems:
 
 - **Version skew** — `fluidVersion` is an exact vendored version or a semver
-  range resolved against the vendored set (`0.7.3`–`0.7.5`); either way a
+  range resolved against the vendored set (`0.7.3`–`0.7.6`); either way a
   contract can't silently target a FLUID version the toolchain has never seen,
   and ranges don't freeze the seam to a point release.
 - **Dialect boundary** — FLUX and FLUID schemas evolve independently; each

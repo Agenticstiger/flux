@@ -1,0 +1,12 @@
+# Tenants inside the renewal window with a chronic-breach record: the accounts
+# a key-account manager calls first.
+fluxVersion: "0.5.1"
+kind: Segment
+id: seg-renewal-window
+name: Renewal Window with Chronic Breaches
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  query: "lifecycle == 'atrisk' && monthsToLeaseExpiry <= 18 && chronicSlaBreaches >= 2"
+  queryLanguage: flux-expr/1

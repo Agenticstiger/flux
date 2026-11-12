@@ -1,0 +1,21 @@
+# One subject is one tenant in one market: a mobile operator or an ISP renting
+# space on the tower company's sites. Markets are ISO 3166-1 alpha-2 country
+# codes, so a subject's market is its country.
+fluxVersion: "0.5.1"
+kind: World
+id: towers-tenant-world
+name: MENA Tower Tenants
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  seed: 7
+  vertical: towers
+  sovereignty:
+    allowedZones: [me-central-1, me-south-1]
+    enforcement: block
+  population:
+    size: 1500
+    lifecycleMix: { onboarding: 0.10, active: 0.55, atrisk: 0.20, notice: 0.07, churned: 0.08 }
+    markets: [DZ, IQ, JO, KW, QA, TN]
+  temperature: { engagement: 0.5, campaignResponse: 0.5 }

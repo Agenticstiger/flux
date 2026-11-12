@@ -1,0 +1,23 @@
+fluxVersion: "0.5.1"
+kind: Persona
+id: persona-regional-isp
+name: Regional Internet Provider
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  traits:
+    slaSensitivity: 0.55
+    priceSensitivity:
+      dist: categorical
+      levels: { low: 0.05, medium: 0.35, high: 0.60 }
+    capexAppetite:
+      dist: normal
+      mean: 0.30
+      stddev: 0.15
+      min: 0
+      max: 1
+  worldview:
+    riskTolerance: high
+    trustInInstitutions: 0.40
+    trendFollowing: 0.50

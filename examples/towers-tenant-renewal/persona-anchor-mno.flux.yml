@@ -1,0 +1,23 @@
+fluxVersion: "0.5.1"
+kind: Persona
+id: persona-anchor-mno
+name: Anchor Mobile Operator
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  traits:
+    slaSensitivity: 0.85             # penalties are settled in cash, so every breach counts
+    priceSensitivity:
+      dist: categorical
+      levels: { low: 0.20, medium: 0.50, high: 0.30 }
+    capexAppetite:                   # willingness to co-fund a site upgrade
+      dist: normal
+      mean: 0.70
+      stddev: 0.10
+      min: 0
+      max: 1
+  worldview:
+    riskTolerance: low
+    trustInInstitutions: 0.60        # trust in the tower company's remediation promises
+    trendFollowing: 0.30

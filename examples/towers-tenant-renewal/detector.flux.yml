@@ -1,0 +1,14 @@
+# Renewal risk: a chargeable SLA breach followed by another within 30 days
+# (2 592 000 000 ms). Each firing is one row of the emitted product.
+fluxVersion: "0.5.1"
+kind: Detector
+id: det-renewal-risk
+name: Renewal Risk Detector
+metadata:
+  owner:
+    team: tm-commercial
+spec:
+  timeWindowMs: 2592000000
+  pattern:
+    - { signalRef: sig-sla-breach, predicate: "downtimeMinutes >= 30" }
+    - { signalRef: sig-sla-breach }

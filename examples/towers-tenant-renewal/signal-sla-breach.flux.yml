@@ -1,0 +1,14 @@
+# A site-month in which a tenant's measured availability fell below its MLA
+# target (dp014 uptime_slas, sla_met_flag false).
+fluxVersion: "0.5.1"
+kind: Signal
+id: sig-sla-breach
+name: SLA Breach Signal
+metadata:
+  owner:
+    team: tm-network-operations
+spec:
+  envelope: cloudevents/1.0
+  source: "urn:flux:uptime-sla-ledger"
+  type: com.towerco.sla.breached
+  dataschema: https://example.com/schemas/towers/sla-breach.json
