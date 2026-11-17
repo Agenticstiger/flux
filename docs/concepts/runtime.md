@@ -129,10 +129,14 @@ The manifest carries:
   crossing with its contract digest.
 
 `verify` re-derives everything the manifest asserts rather than trusting any
-of it: every file digest, the Merkle root, the `schemaId`, the `fluxVersions`,
-and the attestation itself — a manifest claiming a scorecard the bundle
-doesn't contain fails, as does one claiming a `fluxVersion` its documents
-don't pin. It needs no engine, no network, and no trust in whoever packed it.
+of it: every file digest, the Merkle root, the `fluxVersions`, and the
+attestation itself. A manifest claiming a scorecard the bundle doesn't contain
+fails, as does one claiming a `fluxVersion` its documents don't pin. The
+`schemaId` only picks the schema the documents are re-validated against, and
+only among the schemas inside the toolchain's compatibility window, so a pack
+made by an earlier release in the window still verifies after an upgrade
+([VERSIONING.md](https://github.com/Agenticstiger/flux/blob/main/VERSIONING.md#evidence-packs-across-releases)).
+It needs no engine, no network, and no trust in whoever packed it.
 
 Hostile archives are rejected *before* anything is written to disk: declared
 sizes are budgeted first (gzip compresses zeros about 1000:1, so a 500 KB

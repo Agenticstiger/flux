@@ -28,6 +28,20 @@ lists the versions it accepts — its *compatibility window* (the convention
 FLUID 0.7.5 uses: `["0.7.3", "0.7.4", "0.7.5"]`). A release that is fully
 backward-compatible widens the window; a breaking release resets it.
 
+## Evidence packs across releases
+
+An evidence pack (RFC-09) names, in its manifest's `schemaId`, the `$id` of
+the schema its documents were validated against. `pack` always validates
+against the current schema. `verify` accepts a `schemaId` that is the `$id` of
+a version inside the current window (the `fluxVersion` enum of
+`flux-schema-latest.json`) and re-validates the documents against that
+version's schema file, which ships with the package. So a pack made by an
+earlier release in the window still verifies after an upgrade. Re-packing is
+never the remedy: it changes the manifest bytes and breaks a detached
+signature over them. A `schemaId` outside the window, from before a breaking
+reset or from a newer release, is refused with the versions the toolchain
+accepts. Verify that pack with a flux-spec release whose window includes it.
+
 ## Pre-1.0 vs post-1.0
 
 - **Pre-1.0 (now):** minor versions MAY break. Every release — breaking or not
