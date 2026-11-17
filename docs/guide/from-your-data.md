@@ -175,7 +175,10 @@ privacy or anonymity guarantee. Read the document before you share it.
 :::
 
 The [`fluid profile` page](https://agenticstiger.github.io/forge_docs/cli/profile.html)
-has every rule and every source it reads.
+has every rule and every source it reads. This profile document is not a
+conformance profile, nor the FLUID `data_profile` expose that is proposed for
+Playback: [Three things called a profile](/flux/concepts/#three-things-called-a-profile)
+tells them apart.
 
 ## 4. Write the Simulation from the profile's numbers
 

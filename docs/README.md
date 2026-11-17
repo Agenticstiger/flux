@@ -17,7 +17,7 @@ features:
   - title: Declarative
     details: A governed synthetic customer universe is nineteen small YAML documents, not a codebase. Adding a vertical or a rule is a configuration change, validated by one JSON Schema.
   - title: Deterministic
-    details: Every run is a pure function of a seed — byte-for-byte replayable, golden-regression anchored, with stochastic sweeps and agentic fidelity layered on top, never instead.
+    details: "Every run is a pure function of a seed, byte-for-byte replayable and anchored to a golden baseline. The spec layers stochastic sweeps and agentic fidelity on top, never instead; both are spec only, and the engine refuses them today."
   - title: Governed
     details: ConsentProfile, sovereignty, and agentPolicy are schema surfaces, not policy docs. Skills give every kind bounded, model-backed variation under an enforced budget.
   - title: The FLUID Seam
