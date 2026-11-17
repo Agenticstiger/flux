@@ -60,6 +60,7 @@ export default defineUserConfig({
         children: [
           { text: 'Introduction', link: '/guide/' },
           { text: 'Quickstart', link: '/guide/quickstart' },
+          { text: 'From Your Data to a Synthetic Copy', link: '/guide/from-your-data' },
         ],
       },
       {
@@ -116,7 +117,7 @@ export default defineUserConfig({
       '/guide/': [
         {
           text: 'Guide',
-          children: ['/guide/README.md', '/guide/quickstart.md'],
+          children: ['/guide/README.md', '/guide/quickstart.md', '/guide/from-your-data.md'],
         },
       ],
       '/concepts/': [

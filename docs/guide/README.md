@@ -50,4 +50,6 @@ envelope. See [The Six Families](/flux/concepts/families) and the
 FLUX is a **pre-1.0 working draft** under Apache 2.0. The
 [Versions](/flux/schema/versions) page names the current release and every
 earlier one. Pre-1.0, minor versions may break; every release ships a schema
-diff and a regression suite. Start with the [Quickstart](/flux/guide/quickstart).
+diff and a regression suite. Start with the [Quickstart](/flux/guide/quickstart),
+or with [From your data to a synthetic copy](/flux/guide/from-your-data) to
+bring a table of your own.

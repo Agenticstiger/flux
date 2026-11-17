@@ -6,6 +6,7 @@
 <p align="center">
   <a href="https://agenticstiger.github.io/flux/">📖 Documentation</a> ·
   <a href="https://agenticstiger.github.io/flux/guide/quickstart.html">🚀 Quickstart</a> ·
+  <a href="https://agenticstiger.github.io/flux/guide/from-your-data.html">🧪 From Your Data</a> ·
   <a href="https://agenticstiger.github.io/flux/schema/kinds.html">🧭 The Nineteen Kinds</a> ·
   <a href="https://agenticstiger.github.io/flux/concepts/seam.html">🔗 The FLUID Seam</a> ·
   <a href="https://agenticstiger.github.io/flux/roadmap/">🗺️ Roadmap</a> ·
@@ -154,6 +155,13 @@ fluxsim init demo && cd demo && fluxsim run . --verify --ship -o out
 
 The command is `fluxsim`, and the engine needs Python 3.11 or newer. Documentation:
 [agenticstiger.github.io/flux/engine](https://agenticstiger.github.io/flux/engine/).
+
+To start from a table of your own, follow
+[From your data to a synthetic copy](https://agenticstiger.github.io/flux/guide/from-your-data.html):
+forge-cli writes a FLUID contract and a profile of aggregates from the data,
+you write the Simulation from the profile's numbers, and the engine generates
+the rows. Parts of it need builds from `main` until the next releases; the
+guide says which.
 
 ## Example
 
