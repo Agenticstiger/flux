@@ -848,6 +848,35 @@ def check_schema_id_refusals(flux_validator) -> list[str]:
     return failures
 
 
+def check_pack_refuses_symlinks(flux_validator) -> list[str]:
+    """pack refuses a link anywhere in the bundle before reading through it: a
+    linked file would put its target's bytes into a signed archive, and a
+    planted flux-manifest.json link would aim the manifest write at its target."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        outside = Path(tmp) / "outside"
+        outside.mkdir()
+        secret = outside / "secret.txt"
+        secret.write_text("TOP-SECRET\n")
+        cases = {
+            "a linked file outside the bundle": ("notes.txt", secret),
+            "a linked directory": ("more", outside),
+            "a planted flux-manifest.json link": (bundle_tool.MANIFEST_NAME, secret),
+        }
+        for i, (label, (name, target)) in enumerate(cases.items()):
+            work, out = Path(tmp) / f"bundle{i}", Path(tmp) / f"dist{i}"
+            shutil.copytree(EXAMPLES, work)
+            (work / name).unlink(missing_ok=True)   # a manifest left by an earlier pack of the example
+            (work / name).symlink_to(target)
+            said = io.StringIO()
+            with contextlib.redirect_stdout(said):
+                rc = bundle_tool.pack(work, out, flux_validator)
+            refused = rc != 0 and f"unsupported bundle entry (symlink): {name}" in said.getvalue()
+            if not refused or out.exists() or secret.read_text() != "TOP-SECRET\n":
+                failures.append(f"[bundle] pack did not refuse {label} before reading it: {said.getvalue().strip()}")
+    return failures
+
+
 def main() -> int:
     failures = []
 
@@ -1161,6 +1190,7 @@ def main() -> int:
 
     failures += check_packs_across_releases(flux_validator)
     failures += check_schema_id_refusals(flux_validator)
+    failures += check_pack_refuses_symlinks(flux_validator)
 
     # a bundle that does not validate must never be packed
     with tempfile.TemporaryDirectory() as tmp:
@@ -1204,6 +1234,7 @@ def main() -> int:
         + 9   # RFC-09 negative fixtures: 6 archive attacks + 2 malformed inputs + size cap
         + 7   # RFC-09 across releases: window resolves, 0.5.0 and 0.5.1 packs verify, named schema
               # applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
+        + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link
     )
     if failures:
         print(f"FAIL — {len(failures)}/{total} checks failed")

@@ -196,6 +196,23 @@ def bundle_files(directory: Path, skip_signatures: bool = True) -> dict[str, str
     return out
 
 
+def _symlink_entries(directory: Path) -> list[str]:
+    """Every symlink in the bundle tree, as refusal messages. Empty means clean.
+
+    `bundle_files` reads through a link (`is_file()` follows it), so packing
+    one would archive its target's bytes: anything the packing process can
+    read, an ssh key or a .env, becomes content of a signed, distributed
+    artifact. `verify` refuses links inside an archive (`_extract_safely`),
+    and flux-engine refuses them before it packs; this is the same guard on
+    `pack`'s way in, with the message shape of both. `rglob` lists a linked
+    directory without descending into it.
+    """
+    return [
+        f"unsupported bundle entry (symlink): {path.relative_to(directory).as_posix()}"
+        for path in sorted(directory.rglob("*")) if path.is_symlink()
+    ]
+
+
 def collect_attestation(directory: Path, validator) -> tuple[dict, list[str]]:
     """Validate the bundle and describe what can honestly be attested."""
     b = Bundle(directory, validator)
@@ -266,6 +283,12 @@ def pack(directory: Path, out_dir: Path, validator) -> int:
     directory = directory.resolve()          # `pack .` must not become a nameless archive
     if not directory.name:
         print(f"[FAIL] {directory}: cannot determine a bundle name")
+        return 1
+    links = _symlink_entries(directory)        # before anything reads through one
+    if links:
+        print(f"[FAIL] {directory}: a pack holds regular files only; replace each link with a copy of its file")
+        for link in links[:10]:
+            print(f"       {link}")
         return 1
     manifest, errors = build_manifest(directory, validator)
     if errors:

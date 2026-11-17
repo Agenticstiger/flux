@@ -113,6 +113,8 @@ zeroed in both the tar entries *and* the gzip header, ownership normalised to
 `0/0` with empty names, fixed mode, and GNU rather than PAX format — PAX
 extended headers can carry `atime`/`ctime`. The same inputs always produce
 byte-identical output, so two parties can compare bundles by digest alone.
+`pack` refuses a bundle that holds a symlink: following one would put the
+bytes of whatever it points to into the archive.
 
 The manifest carries:
 

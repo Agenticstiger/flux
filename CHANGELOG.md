@@ -50,6 +50,11 @@ Specification 0.5.2, additive
   a reset window; each archive attack now checks the reason it was refused.
   The wheel smoke test checks that the installed package ships every schema
   in the window.
+- **bundle**: `pack` refuses a bundle that holds a symlink, before it reads
+  anything, the way `verify` refuses a link inside an archive and flux-engine
+  refuses one before it packs. `pack` used to read through a linked file, so
+  the target's bytes (an ssh key, a `.env`) went into the archive, and it left
+  a linked directory out without a word.
 
 ## 0.5.1 - 2026-11-12
 
