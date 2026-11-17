@@ -12,8 +12,8 @@
 # or a bare commit is refused there. To take newer pages, change the pin to the
 # new release tag, run this script, and commit docs/engine/ with it.
 #
-# Copied: every Markdown page, and the JSON files in spec/ (the engine's schemas
-# and their examples). scripts/sync-public-assets.mjs serves those JSON files on
+# Copied: every Markdown page, and the JSON files directly in spec/ (the engine's
+# schemas and their examples). scripts/sync-public-assets.mjs serves those JSON files on
 # the site, and each schema also at the address its $id names.
 # Left out on purpose, because it is not user documentation: adr/, RELEASING.md,
 # and accuracy/latest.json (the report's data).
@@ -38,8 +38,19 @@ cd "$(dirname "$0")/.."
 
 release_tag='^v[0-9]+\.[0-9]+\.[0-9]+$'
 
+# The pin is the one line of scripts/engine-docs.ref that is not blank or a
+# comment, with the whitespace around it (a CR included) taken off. A second such
+# line is refused rather than ignored.
 read_pin() {
-  grep -v -E '^[[:space:]]*(#|$)' scripts/engine-docs.ref | head -n 1 | tr -d '[:space:]' || true
+  local lines
+  lines="$(grep -v -E '^[[:space:]]*(#|$)' scripts/engine-docs.ref \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)"
+  if [ "$(printf '%s' "$lines" | grep -c '')" -gt 1 ]; then
+    echo "REFUSED: scripts/engine-docs.ref names more than one pin:" >&2
+    printf '%s\n' "$lines" | sed 's/^/  /' >&2
+    exit 2
+  fi
+  printf '%s' "$lines"
 }
 
 require_release_pin() {
@@ -58,8 +69,13 @@ fi
 if [ "${1:-}" = "--check-pin" ]; then
   pin="$(read_pin)"
   require_release_pin "$pin"
-  if ! git ls-remote --exit-code --tags "$repo" "refs/tags/$pin" > /dev/null; then
+  status=0
+  git ls-remote --exit-code --tags "$repo" "refs/tags/$pin" > /dev/null || status=$?
+  if [ "$status" -eq 2 ]; then
     echo "REFUSED: the engine repository has no tag $pin" >&2
+    exit 1
+  elif [ "$status" -ne 0 ]; then
+    echo "FAILED: could not read the tags of $repo (git exit $status)" >&2
     exit 1
   fi
   echo "[sync-engine-docs] the pin names the engine release tag $pin"
@@ -106,12 +122,12 @@ while IFS= read -r -d '' file; do
     *.md) pages=$((pages + 1)) ;;
     *) files=$((files + 1)) ;;
   esac
-done < <(cd "$src" && find . -type f \( -name '*.md' -o -path './spec/*.json' \) \
+done < <(cd "$src" && find . -type f \( -name '*.md' -o \( -path './spec/*.json' ! -path './spec/*/*' \) \) \
   ! -path './adr/*' ! -path './RELEASING.md' -print0 | LC_ALL=C sort -z)
 
 # Anything else the engine keeps under docs/ is not copied. Say so, so a new kind
 # of file (an image, say) is noticed instead of silently missing from the site.
-others="$(cd "$src" && find . -type f ! -name '*.md' ! -path './spec/*.json' \
+others="$(cd "$src" && find . -type f ! -name '*.md' \( ! -path './spec/*.json' -o -path './spec/*/*' \) \
   ! -path './accuracy/latest.json' ! -path './adr/*' | LC_ALL=C sort)"
 if [ -n "$others" ]; then
   echo "[sync-engine-docs] not copied, not Markdown:" >&2

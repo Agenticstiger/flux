@@ -61,7 +61,8 @@ if (existsSync(engineSpec)) {
   for (const name of files) {
     let id
     try {
-      id = JSON.parse(bytesOf.get(name).toString('utf8')).$id
+      const doc = JSON.parse(bytesOf.get(name).toString('utf8'))
+      id = doc !== null && typeof doc === 'object' ? doc.$id : undefined
     } catch {
       console.warn(`[sync-assets] docs/engine/spec/${name} is not JSON; served under its own name only`)
       continue

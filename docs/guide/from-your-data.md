@@ -9,19 +9,20 @@ one of those records. This guide takes you there in six steps:
 3. profile the data where it lives with `fluid profile`;
 4. write a FLUX Simulation from the profile's numbers;
 5. pin the profile's digest in the Simulation;
-6. generate the rows with `fluxsim run`, check them with `fluxsim verify`, and
-   pack them with `fluxsim ship`.
+6. generate the rows with `fluxsim run` and check them with `fluxsim verify`,
+   then pack them with `fluxsim ship`.
 
 Two documents travel from the data to the engine: the contract, which holds
 the schema, and the profile, which holds aggregates. The engine reads those and
 never a record.
 
-::: warning Some steps need builds from main, for now
-`fluid profile` (step 3) and the engine's support for a profile (steps 5 and 6)
-are on the `main` branches of forge-cli and flux-engine, and not yet in a
-release. Steps 1, 2 and 4, and a run without a profile, work with the released
-packages. And today `ship` withholds a run checked against a profile that
-`fluid profile` wrote: step 6 says why, and what to do instead.
+::: warning What works today
+- `fluid profile` (step 3) and the engine's support for a profile (steps 5 and
+  6) are on the `main` branches of forge-cli and flux-engine, not in a release
+  yet. The other steps work with the released packages.
+- The engine cannot yet pass a run checked against a profile that
+  `fluid profile` wrote, so `ship` withholds it. Step 6 says why, and shows how
+  to ship today with a slice of your records instead.
 :::
 
 ## 1. Install
@@ -34,22 +35,25 @@ packages. And today `ship` withholds a run checked against a profile that
 | `flux-stats` | 0.0.1, a placeholder with no code | the statistics behind `fluid profile` and the engine | on `main` only, installed from flux-engine's repository |
 
 The engine needs Python 3.11 or newer. The released packages cover steps 2 and
-4, and a run without a profile:
+4, and step 6 with a slice of your records:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install flux-sim-engine "data-product-forge[local]"
 ```
 
-For steps 3, 5 and 6, install both tools from `main`, each in an environment of
-its own: forge-cli's `profile` extra pins flux-stats to a commit of its own,
-which need not be the one the engine's `main` reads. `pip` needs `git` for
-these.
+For steps 3 and 5, and step 6 with a profile, install both tools from `main`,
+each in an environment of its own: each installs flux-stats from a commit of its
+own. `pip` needs `git` for these.
 
 ```bash
 python3 -m venv .venv-forge
 .venv-forge/bin/pip install "data-product-forge[profile] @ git+https://github.com/Agenticstiger/forge-cli.git"
+.venv-forge/bin/pip install -r https://raw.githubusercontent.com/Agenticstiger/forge-cli/main/requirements/flux-stats.txt
 ```
+
+The second line installs flux-stats at the commit forge-cli names. If it is
+missing, `fluid profile` stops before it reads anything and prints the command.
 
 ```bash
 python3 -m venv .venv-engine
@@ -58,13 +62,38 @@ python3 -m venv .venv-engine
   "flux-sim-engine @ git+https://github.com/Agenticstiger/flux-engine.git"
 ```
 
+With these, run `fluid` from `.venv-forge` and `fluxsim` from `.venv-engine`:
+activate one at a time (`. .venv-forge/bin/activate`), or call the command by
+its path (`.venv-engine/bin/fluxsim`). The commands below are written bare.
 `fluxsim --version` prints 0.5.0 for both engines. `fluxsim verify --help`
 lists `--profile` only on the one built from `main`.
 
 ## 2. Get a FLUID contract from your data
 
-Put your file in a folder of its own, here `data/orders.parquet`, and let
-forge-cli read its schema:
+Put your file in a folder of its own, here `data/orders.parquet`.
+
+::: details No data at hand? Make the file this guide uses first.
+The numbers below come from 600 made-up orders. DuckDB comes with
+`data-product-forge[local]` and with its `[profile]` extra:
+
+```python
+# make_orders.py: run it with `mkdir -p data && python3 make_orders.py`
+import duckdb
+
+duckdb.sql("""
+    COPY (
+        SELECT
+            printf('ord-%05d', i) AS order_id,
+            ['DE', 'DE', 'DE', 'DE', 'FR', 'FR', 'FR', 'GB', 'GB', 'IE'][i % 10 + 1] AS country,
+            CAST([10, 25, 40, 90][i % 4 + 1] + i % 3 * 5 AS DECIMAL(10, 2)) AS amount,
+            TIMESTAMP '2026-07-01' + to_hours(i * 7 % 2184) AS created_at
+        FROM range(1, 601) AS t(i)
+    ) TO 'data/orders.parquet' (FORMAT parquet)
+""")
+```
+:::
+
+Then let forge-cli read its schema:
 
 ```bash
 fluid init orders --discover "file://$PWD/data"
@@ -76,8 +105,9 @@ fluid init orders --discover "file://$PWD/data"
 ```
 
 `--discover` writes one contract per file, with the columns and types it found
-and no records. The project name, `orders`, goes into the product id,
-`bronze.orders.orders`. The part the next steps use is the expose:
+and no records. It also records where it found them, the folder's full path.
+The project name, `orders`, goes into the product id, `bronze.orders.orders`.
+The part the next steps use is the expose:
 
 ```yaml
 # contract.orders.fluid.yaml (abridged)
@@ -108,30 +138,9 @@ as which columns are required. The
 [`fluid init` page](https://agenticstiger.github.io/forge_docs/cli/init.html)
 lists every source `--discover` reads.
 
-::: details No data at hand? Make the file this guide uses.
-The numbers below come from 600 made-up orders. DuckDB comes with
-`data-product-forge[local]`:
-
-```python
-# make_orders.py: run it with `mkdir -p data && python3 make_orders.py`
-import duckdb
-
-duckdb.sql("""
-    COPY (
-        SELECT
-            printf('ord-%05d', i) AS order_id,
-            ['DE', 'DE', 'DE', 'DE', 'FR', 'FR', 'FR', 'GB', 'GB', 'IE'][i % 10 + 1] AS country,
-            CAST([10, 25, 40, 90][i % 4 + 1] + i % 3 * 5 AS DECIMAL(10, 2)) AS amount,
-            TIMESTAMP '2026-07-01' + to_hours(i * 7 % 2184) AS created_at
-        FROM range(1, 601) AS t(i)
-    ) TO 'data/orders.parquet' (FORMAT parquet)
-""")
-```
-:::
-
 ## 3. Profile the data where it lives
 
-*Needs forge-cli from `main` until its next release.*
+*Needs forge-cli from `main` until its next release: run it from `.venv-forge`.*
 
 Run the profiler inside the environment that holds the data. It reads every
 record once and writes only aggregates that passed its output checks:
@@ -192,9 +201,17 @@ number, you choose one and say so.
 | `rowCount` 600 | `rows: 600` |
 | `order_id`: 600 distinct values in 600 | `unique: true`: an identifier, which the engine derives and never draws |
 | `amount`: `min` 10, `max` 100 | `range: { min: "10", max: "100" }` |
-| `amount`: quartiles 20, 35 and 50 | `bins: ["10", "20", "35", "50", "100"]` with `binWeights: ["1", "1", "1", "1"]`, about a quarter of the orders in each bin |
+| `amount`: quartiles 20, 35 and 50 | bin edges at 10, 20, 35 and 50, with a quarter of the orders in each of those three bins |
+| `amount`: `sum` 27750 over `count` 600 | the top quarter in a bin from 95 to 100, and none from 50 to 95 (see below) |
 | `country`: about 5 distinct values, no shares | your choice: the four countries you know, at equal weights |
 | `created_at`: `min` and `max` withheld | your choice: the quarter the data covers, which is also the run's `timeBounds` |
+
+The quartiles alone would spread the top quarter evenly from 50 to 100, which
+averages 75 and puts the overall mean near 40. The `sum` says the mean is
+27750 / 600 = 46.25. Drawn evenly, the three lower quarters average 15, 27.5
+and 42.5, so the top quarter must average 4 × 46.25 - 15 - 27.5 - 42.5 = 100:
+it sits at the `max`. A bin from 95 to 100 is one way to put it there; any
+narrow bin at the top gives a mean close to 46.25.
 
 The bundle is a folder of four files. Copy the contract into it, and keep the
 data and the profile outside it: a bundle holds only its FLUX and FLUID
@@ -269,8 +286,8 @@ extensions:
               unique: true
             amount:
               range: { min: "10", max: "100" }
-              bins: ["10", "20", "35", "50", "100"]
-              binWeights: ["1", "1", "1", "1"]
+              bins: ["10", "20", "35", "50", "95", "100"]
+              binWeights: ["1", "1", "1", "0", "1"]
               null: fail
             country:
               support: { values: ["DE", "FR", "GB", "IE"] }
@@ -301,7 +318,7 @@ A few of those keys need a word:
 - `encoding` is the profile's own, so the two compare on the same grid.
 - `records` bounds how many records a compared group may hold.
 - A fidelity block needs at least one property. The `mean` property says the
-  run's mean `amount` must be within 10% of the profile's.
+  run's mean `amount` must be within 10% of the data's.
 - Numbers are strings, exact decimals, and the weights of `levels` add up to 1.
 
 ```bash
@@ -314,7 +331,8 @@ bundle: valid -- 3 FLUX document(s), 1 FLUID contract(s), 1 Simulation(s)
 
 ::: details Or let a script write what the profile can answer
 This prints the declarations the published values support, and says which
-values you have to choose yourself:
+values you have to choose yourself. It writes the quartile bins; the step from
+the `sum` above is yours.
 
 ```python
 # declare.py: python3 declare.py orders.profile.json orders
@@ -375,7 +393,7 @@ order_id:
 
 ## 5. Pin the profile's digest
 
-*Needs the engine from `main` until its next release.*
+*Needs the engine from `main` until its next release: run it from `.venv-engine`.*
 
 Copy the line `fluid profile` printed into the Simulation's
 `com.agentics.flux/1` namespace, indented to sit beside `emits`:
@@ -390,16 +408,17 @@ extensions:
         # the rest as in step 4
 ```
 
-The digest is the sha256 of the profile's bytes. It binds the run to that exact
-document: given another profile the plan refuses to run with FLX-3110, and
-given none with FLX-3109. Both codes are new on the engine's `main`, so their
-pages reach this site with the next release. flux-sim-engine 0.5.0 accepts the
-pin but does not read it, and its commands have no `--profile`.
+The digest is the sha256 of the profile's canonical JSON (RFC 8785), which is
+the file exactly as `fluid profile` writes it, so re-indenting the file keeps
+its digest. It binds the run to that document: given another profile the plan
+refuses to run with FLX-3110, and given none with FLX-3109. Both codes are new
+on the engine's `main`, so their pages reach this site with the next release.
+flux-sim-engine 0.5.0 accepts the pin but does not read it, and its commands
+have no `--profile`.
 
 ## 6. Run, verify, ship
 
-*`--profile` needs the engine from `main` until its next release. Without it,
-`fluxsim run bundle` works on 0.5.0 too.*
+*`--profile` needs the engine from `main` until its next release.*
 
 Generate the rows:
 
@@ -408,27 +427,31 @@ fluxsim run bundle --profile orders.profile.json
 ```
 
 ```text
-plan written to .flux/runs/a821532b33227640/plan.json (runId=a821532b33227640, planDigest=sha256:...)
-applied to .flux/runs/a821532b33227640 (runDigest=sha256:...)
+plan written to .flux/runs/dc7263d0ac826695/plan.json (runId=dc7263d0ac826695, planDigest=sha256:...)
+applied to .flux/runs/dc7263d0ac826695 (runDigest=sha256:...)
 emitted orders: 600 rows (generator)
-run a821532b33227640 complete
+run dc7263d0ac826695 complete
 ```
 
 The run writes under `.flux/runs/` in the current folder. Each row is a JSON
-array in the contract's column order, and the same bundle gives the same bytes
-on any machine:
+array in the contract's column order:
 
 ```console
 $ head -n 3 .flux/runs/*/emits/orders.ndjson
-["dee66882f624e5211712402699ec3b0d","GB","48.40","2026-09-21T07:00:05.264Z"]
-["fcb259682f06486548e0479ea9b642c6","FR","16.35","2026-09-27T06:45:21.847Z"]
-["85e1f5e4d6e0e2c23a472c9f2fad5585","DE","16.76","2026-08-17T07:31:42.561Z"]
+["458b8ff82fe5f8beb5720db41dbd4fac","DE","27.05","2026-07-21T23:05:36.517Z"]
+["6508878ce94df9745e2ddbd65e1932d0","GB","19.31","2026-07-27T11:47:09.792Z"]
+["080cfb50abb80cb40c05483ec254eeaa","DE","16.78","2026-09-24T22:27:28.569Z"]
 ```
 
-Check the run against the contract and the profile:
+The same bundle gives the same bytes on any machine. Your run id and rows
+differ from these, because your contract records the path of your data folder,
+and the rows depend on the contract's bytes.
+
+Check the run against the contract and the profile. `$(ls -t .flux/runs | head -1)`
+names the newest run:
 
 ```bash
-fluxsim verify bundle --run-id a821532b33227640 --profile orders.profile.json
+fluxsim verify bundle --run-id "$(ls -t .flux/runs | head -1)" --profile orders.profile.json
 ```
 
 ```text
@@ -446,7 +469,8 @@ reproducible: not checked | validity: not asserted
 
 Three things happened:
 
-- `rows: ok`: every row fits the contract's columns and types.
+- `rows: ok`: the emitted file reads back, with as many rows as the run
+  recorded and one value per contract column.
 - The shape flags compared each profiled column with the run, for example its
   distinct count against the one the profile allows, and found nothing unlikely.
 - The `mean` property was refused, with FLX-5037. The engine compares a
@@ -457,7 +481,7 @@ Three things happened:
 So `ship`, which packs only a run that passed its checks, withholds this one:
 
 ```bash
-fluxsim ship bundle --run-id a821532b33227640 --profile orders.profile.json -o out
+fluxsim ship bundle --run-id "$(ls -t .flux/runs | head -1)" --profile orders.profile.json -o out
 ```
 
 ```text
@@ -468,18 +492,61 @@ nothing was written to the output directory
 FLX-8001: withheld orders
 ```
 
-Until `fluid profile` writes those statistics, you have two ways on:
+### Ship today, with a slice of your records
 
-- Use the rows as they are, without an evidence pack, and compare the numbers
-  yourself. For the sample data, the run's mean `amount` is 41.43, against the
-  profile's 27750 / 600 = 46.25: quartile bins place the quartiles, not the
-  shape inside each bin, and the top quarter of the real amounts sits near 100.
-  Move a bin edge or a weight when you know better, and say why. The profile
-  gives no share per country either, so equal weights are a guess.
-- Check the properties against a committed slice, a file of records you hold,
-  with `--committed-slice` (see [Ship with evidence](../engine/how-to/ship-with-evidence.md)).
-  The engine then reads those records itself, so this gives up the
-  aggregate-only path this guide follows.
+Until `fluid profile` writes those statistics, the way to an evidence pack is a
+committed slice: a file of the records themselves, from which the engine forms
+the statistics it compares. The engine then reads those records, which gives up
+the aggregate-only path this guide follows, so use it only where the records
+may reach the engine, on your own machine for example. It works with the
+released packages.
+
+1. Take the `profile:` line out of the Simulation again: while a profile is
+   pinned, the check runs against the profile, slice or no slice.
+2. Write the records as one JSON object per line, each decimal as a string and
+   each timestamp in RFC 3339 with milliseconds:
+
+   ```python
+   # make_slice.py: python3 make_slice.py
+   import duckdb
+
+   duckdb.sql("""
+       COPY (
+           SELECT order_id, country,
+                  CAST(amount AS VARCHAR) AS amount,
+                  strftime(created_at, '%Y-%m-%dT%H:%M:%S.%gZ') AS created_at
+           FROM 'data/orders.parquet'
+       ) TO 'orders.ndjson' (FORMAT json)
+   """)
+   ```
+
+3. Run, verify and ship against the slice:
+
+   ```bash
+   fluxsim run bundle
+   fluxsim verify bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson
+   fluxsim ship bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson -o out
+   ```
+
+   ```text
+     ...
+     rows: ok
+     ...
+     fidelity orders: passed
+   ```
+
+   ```text
+   [ok] packed out/bundle.flux.tgz
+        ...
+   shipped out/bundle.flux.tgz
+   ```
+
+The run's mean amount lands within 10% of the records' (45.83 against 46.25 in
+our run), so the `mean` property passes and the pack is written.
+[Ship with evidence](../engine/how-to/ship-with-evidence.md) says what the pack
+holds. Where the records may not reach the engine at all, use the rows without
+a pack: they follow the contract and your declarations, and the same bundle
+gives the same rows again.
 
 ## Next
 
