@@ -273,9 +273,11 @@ def build_manifest(directory: Path, validator) -> tuple[dict, list[str]]:
 def _write_manifest(path: Path, manifest: dict) -> None:
     """Write *manifest* to *path*, never through a link planted there: with
     O_NOFOLLOW the open fails on a symlink instead of truncating its target.
-    `pack` refuses links before this point; this holds if one appears later."""
+    `pack` refuses links before this point; this holds if one appears later.
+    A new manifest is owner-only: the packing user signs it, and its entry in
+    the archive carries the archive's own fixed mode."""
     nofollow = getattr(os, "O_NOFOLLOW", 0)    # POSIX; elsewhere the pack-time refusal stands alone
-    with open(path, "w", encoding="utf-8", opener=lambda p, flags: os.open(p, flags | nofollow, 0o666)) as fh:
+    with open(path, "w", encoding="utf-8", opener=lambda p, flags: os.open(p, flags | nofollow, 0o600)) as fh:
         fh.write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 

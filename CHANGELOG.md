@@ -57,7 +57,8 @@ Specification 0.5.2, additive
   a linked directory out without a word. It also opens `flux-manifest.json`
   with `O_NOFOLLOW` where the platform has it, so a link that appears after
   that check fails the pack instead of overwriting the file it points to, and
-  a manifest it cannot write is a `[FAIL]` line, not a traceback.
+  a manifest it cannot write is a `[FAIL]` line, not a traceback. A manifest
+  it creates is owner-only (0600); the archive entry keeps its fixed mode.
 - **tests**: `verify`'s refusals of an archive member with `..`, an absolute
   path, a symlink, a hard link, a FIFO or a file beside the bundle directory,
   and of an archive above the member cap, are each pinned by their message.
