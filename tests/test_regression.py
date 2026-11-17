@@ -903,6 +903,75 @@ def check_manifest_write_never_follows_a_link(flux_validator) -> list[str]:
     return []
 
 
+def _member(name: str, kind=tarfile.REGTYPE, linkname: str = "") -> tarfile.TarInfo:
+    info = tarfile.TarInfo(name)
+    info.type, info.linkname, info.mode = kind, linkname, 0o644
+    info.size = 1 if kind == tarfile.REGTYPE else 0
+    return info
+
+
+def _append_member(work: Path, out: Path, member: tarfile.TarInfo, flux_validator) -> Path:
+    """The packed archive plus one more member, as an attacker would add it."""
+    bundle_tool.pack(work, out, flux_validator)
+    attacked = out / "attacked.flux.tgz"
+    with tarfile.open(out / f"{work.name}.flux.tgz", "r:gz") as src, tarfile.open(attacked, "w:gz") as dst:
+        for m in src.getmembers():
+            dst.addfile(m, src.extractfile(m))
+        dst.addfile(member, io.BytesIO(b"x") if member.isfile() else None)
+    return attacked
+
+
+def check_verify_refuses_unsafe_members(flux_validator) -> list[str]:
+    """verify's _extract_safely refusals, each pinned by its message, with
+    nothing written outside verify's own scratch directory."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        # verify's scratch directory goes under `scratch`, so bundle/../../escape.txt
+        # would land at scratch/escape.txt if the refusal ever stopped working
+        scratch, escape = Path(tmp) / "scratch", Path(tmp) / "absolute-escape.txt"
+        scratch.mkdir()
+        attacks = {
+            "a member with ..": (_member("bundle/../../escape.txt"), "unsafe archive path: bundle/../../escape.txt"),
+            "an absolute member": (_member(str(escape)), f"unsafe archive path: {escape}"),
+            "a symlink member": (_member("bundle/link", tarfile.SYMTYPE, "/etc/passwd"),
+                                 "unsupported archive entry (symlink): bundle/link"),
+            "a hard link member": (_member("bundle/hard", tarfile.LNKTYPE, "bundle/world.flux.yml"),
+                                   "unsupported archive entry"),
+            "a FIFO member": (_member("bundle/fifo", tarfile.FIFOTYPE), "unsupported archive entry (special): bundle/fifo"),
+            "a file beside the bundle directory": (_member("bundle"), "entry outside the bundle directory: bundle"),
+        }
+        for i, (label, (member, expected)) in enumerate(attacks.items()):
+            work, out = Path(tmp) / f"w{i}" / "bundle", Path(tmp) / f"d{i}"
+            shutil.copytree(EXAMPLES, work)
+            attacked = _append_member(work, out, member, flux_validator)
+            tempfile.tempdir = str(scratch)
+            try:
+                rc, said = _verify_output(attacked, flux_validator)
+            except Exception as exc:  # noqa: BLE001 (a traceback is the failure)
+                failures.append(f"[bundle] CRASHED ({type(exc).__name__}: {exc}) on {label}")
+                continue
+            finally:
+                tempfile.tempdir = None
+            escaped = [p for p in (escape, scratch / "escape.txt") if p.exists()]
+            if rc == 0 or expected not in said or escaped:
+                failures.append(f"[bundle] verify did not refuse {label} with '{expected}': {said.strip()}")
+            for path in escaped:   # so one broken refusal does not fail the cases after it
+                path.unlink()
+
+        work, out = Path(tmp) / "capped" / "bundle", Path(tmp) / "capped-dist"
+        shutil.copytree(EXAMPLES, work)
+        bundle_tool.pack(work, out, flux_validator)
+        cap = bundle_tool.MAX_MEMBERS
+        bundle_tool.MAX_MEMBERS = 5
+        try:
+            rc, said = _verify_output(out / "bundle.flux.tgz", flux_validator)
+        finally:
+            bundle_tool.MAX_MEMBERS = cap
+        if rc == 0 or "members, above the 5 cap" not in said:
+            failures.append(f"[bundle] verify did not refuse an archive above the member cap: {said.strip()}")
+    return failures
+
+
 def main() -> int:
     failures = []
 
@@ -1218,6 +1287,7 @@ def main() -> int:
     failures += check_schema_id_refusals(flux_validator)
     failures += check_pack_refuses_symlinks(flux_validator)
     failures += check_manifest_write_never_follows_a_link(flux_validator)
+    failures += check_verify_refuses_unsafe_members(flux_validator)
 
     # a bundle that does not validate must never be packed
     with tempfile.TemporaryDirectory() as tmp:
@@ -1263,6 +1333,8 @@ def main() -> int:
               # applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
         + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link
         + 1   # RFC-09 the manifest write never follows a link that appears after that refusal
+        + 7   # RFC-09 verify refuses .., absolute, symlink, hard link, FIFO, beside-the-directory
+              # members and an archive above the member cap
     )
     if failures:
         print(f"FAIL — {len(failures)}/{total} checks failed")

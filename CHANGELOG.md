@@ -58,6 +58,10 @@ Specification 0.5.2, additive
   with `O_NOFOLLOW` where the platform has it, so a link that appears after
   that check fails the pack instead of overwriting the file it points to, and
   a manifest it cannot write is a `[FAIL]` line, not a traceback.
+- **tests**: `verify`'s refusals of an archive member with `..`, an absolute
+  path, a symlink, a hard link, a FIFO or a file beside the bundle directory,
+  and of an archive above the member cap, are each pinned by their message.
+  Until now none of them was exercised.
 
 ## 0.5.1 - 2026-11-12
 
