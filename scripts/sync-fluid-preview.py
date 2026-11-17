@@ -147,6 +147,17 @@ def fetch(pin: dict) -> bytes:
     return data
 
 
+def _write_regular(path: Path, data: bytes) -> None:
+    """Write *data* to *path*, a regular file inside this repository.
+
+    A committed symlink could point anywhere, so a vendored preview or its pins
+    file that is a link, or resolves outside the repository, is refused.
+    """
+    if path.is_symlink() or not path.resolve().is_relative_to(REPO.resolve()):
+        raise PinError(f"{path} is a symlink or lies outside the repository: a vendored preview and its pins are regular files")
+    path.write_bytes(data)
+
+
 def _unpinned_files(pins: list[dict]) -> list[str]:
     pinned = {pin["file"] for pin in pins}
     return sorted(p.name for p in PREVIEW_DIR.glob("fluid-schema-*.json") if p.name not in pinned)
@@ -166,7 +177,7 @@ def sync(pins: list[dict]) -> int:
             )
             status = 1
             continue
-        (PREVIEW_DIR / pin["file"]).write_bytes(data)
+        _write_regular(PREVIEW_DIR / pin["file"], data)
         print(f"[sync-fluid-preview] vendor/fluid-preview/{pin['file']} <- {where} (sha256 {digest})")
     for name in _unpinned_files(pins):
         print(f"REFUSED: vendor/fluid-preview/{name} has no pin in pins.json: pin it or remove it", file=sys.stderr)
@@ -182,11 +193,11 @@ def repin(pins: list[dict], version: str, commit: str) -> int:
     candidate = check_pin({**matches[0], "commit": commit})
     data = fetch(candidate)
     candidate["sha256"] = sha256_hex(data)
-    (PREVIEW_DIR / candidate["file"]).write_bytes(data)
+    _write_regular(PREVIEW_DIR / candidate["file"], data)
     updated = [candidate if pin is matches[0] else pin for pin in pins]
     document = json.loads(PINS_PATH.read_text(encoding="utf-8"))
     document["previews"] = [{key: pin[key] for key in PIN_FIELDS} for pin in updated]
-    PINS_PATH.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    _write_regular(PINS_PATH, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
     print(
         f"[sync-fluid-preview] FLUID {version} re-pinned to {commit} (sha256 {candidate['sha256']}). "
         "Next: python3 scripts/sync-package-data.py, and a schema-diff note in the flux-spec PR."
@@ -195,7 +206,9 @@ def repin(pins: list[dict], version: str, commit: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Re-create the vendored FLUID previews from their pins.")
+    parser = argparse.ArgumentParser(
+        prog="sync-fluid-preview.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--repin", nargs=2, metavar=("VERSION", "COMMIT"), help="move one preview's pin to COMMIT")
     args = parser.parse_args(argv)
     try:

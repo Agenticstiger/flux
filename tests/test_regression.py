@@ -597,6 +597,8 @@ def _check_preview_pins(pins: list[dict]) -> list[str]:
     releases = {p.stem.replace("fluid-schema-", "") for p in RELEASE_DIR.glob("fluid-schema-*.json")}
     for pin in pins:
         path = PREVIEW_DIR / pin["file"]
+        if path.is_symlink():
+            problems.append(f"{pin['file']} is a symlink, not a vendored copy")
         data = path.read_bytes() if path.is_file() else b""
         if hashlib.sha256(data).hexdigest() != pin["sha256"]:
             problems.append(f"{pin['file']} bytes do not match the pinned sha256 (re-run scripts/sync-fluid-preview.py)")
