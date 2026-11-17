@@ -70,6 +70,10 @@ class FetchError(RuntimeError):
     """The pinned file could not be read at its pinned commit."""
 
 
+class WriteError(RuntimeError):
+    """The vendored files could not be written; nothing was left half written."""
+
+
 def check_pin(pin: object) -> dict:
     """Return *pin* when it names exactly one immutable file, else raise PinError."""
     if not isinstance(pin, dict):
@@ -171,9 +175,22 @@ def _check_regular(path: Path) -> None:
         raise PinError(f"{path} is a symlink or lies outside the repository: a vendored preview and its pins are regular files")
 
 
-def _write_regular(path: Path, data: bytes) -> None:
-    _check_regular(path)
-    path.write_bytes(data)
+def _write_all(writes: list[tuple[Path, bytes]]) -> None:
+    """Write every (path, bytes) pair, or none: a failed write restores the files written before it."""
+    for path, _ in writes:
+        _check_regular(path)
+    written: list[tuple[Path, bytes | None]] = []
+    try:
+        for path, data in writes:
+            written.append((path, path.read_bytes() if path.is_file() else None))
+            path.write_bytes(data)
+    except OSError as exc:
+        for path, before in reversed(written[:-1]):
+            if before is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(before)
+        raise WriteError(f"cannot write {exc.filename or 'a vendored file'}: {exc.strerror or exc}; nothing was changed") from exc
 
 
 def check_schema(pin: dict, data: bytes) -> None:
@@ -205,7 +222,7 @@ def sync(pins: list[dict]) -> int:
             )
             status = 1
             continue
-        _write_regular(PREVIEW_DIR / pin["file"], data)
+        _write_all([(PREVIEW_DIR / pin["file"], data)])
         print(f"[sync-fluid-preview] vendor/fluid-preview/{pin['file']} <- {where} (sha256 {digest})")
     for name in _unpinned_files(pins):
         print(f"REFUSED: vendor/fluid-preview/{name} has no pin in pins.json: pin it or remove it", file=sys.stderr)
@@ -229,8 +246,7 @@ def repin(pins: list[dict], version: str, commit: str) -> int:
     candidate["sha256"] = sha256_hex(data)
     updated = [candidate if pin is matches[0] else pin for pin in pins]
     document["previews"] = [{key: pin[key] for key in PIN_FIELDS} for pin in updated]
-    target.write_bytes(data)
-    PINS_PATH.write_bytes((json.dumps(document, indent=2) + "\n").encode("utf-8"))
+    _write_all([(target, data), (PINS_PATH, (json.dumps(document, indent=2) + "\n").encode("utf-8"))])
     print(
         f"[sync-fluid-preview] FLUID {version} re-pinned to {commit} (sha256 {candidate['sha256']}). "
         "Next: python3 scripts/sync-package-data.py, and a schema-diff note in the flux-spec PR."
@@ -249,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.repin:
             return repin(pins, *args.repin)
         return sync(pins)
-    except (PinError, FetchError) as exc:
+    except (PinError, FetchError, WriteError) as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
 
