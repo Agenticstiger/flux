@@ -25,9 +25,13 @@ into a virtual environment instead.) To try it without installing anything, writ
 `uvx --from flux-sim-engine fluxsim init demo`. Every command on this page works
 either way.
 
+These pages follow the `main` branch, which can be ahead of the release on PyPI. To
+install `main` instead, see [which version these pages
+describe](../README.md#which-version-these-pages-describe).
+
 ```console
 $ fluxsim --version
-0.6.0
+0.6.1
 ```
 
 ## 2. Create a project
@@ -57,8 +61,8 @@ already holds files. Together they are a *bundle*, the unit the engine runs:
 
 ```console
 $ fluxsim run . --verify --ship -o out
-plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
-applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
+plan written to .flux/runs/.../plan.json (runId=..., planDigest=sha256:...)
+applied to .flux/runs/... (runDigest=sha256:...)
 emitted payment_recovery_moment: 154 rows (scenario)
 reproducible: not checked | validity: not asserted
   golden: not checked (no golden baseline recorded yet -- record one with `--update-golden --reason "<why>"`)
@@ -74,13 +78,17 @@ reproducible: not checked | validity: not asserted
      sign it: ...
           or: ...
 shipped out/demo.flux.tgz
-run 8835218acf7b4f8e complete; shipped to out
+run ... complete; shipped to out
 ```
+
+Where the page shows `...`, your terminal shows your run's id and digests.
 
 Read it from the top.
 
 - **plan** records what the run will do and gives it an id. The `runId` is the front of
-  the plan's digest, so the same bundle always gets the same id.
+  the plan's digest, so the same bundle and the same engine version, a release or one
+  commit of `main`, always give the same id. Another version can record a different plan
+  for the same bundle, and so give it another id. That is why this page does not print one.
 - **applied** writes the run to `.flux/runs/<runId>/`. The `runDigest` is a fingerprint
   of everything the run produced.
 - **emitted** is the point of it all: 154 rows in the shape of the FLUID contract.
@@ -88,14 +96,21 @@ Read it from the top.
   purpose. `reproducible` compares the run's digest with a baseline you record, and here
   it says `not checked` because none has been recorded yet; step 6 shows the check that
   runs the plan again. `validity` asks whether the scenario describes the real world, and
-  the engine never claims that: it says `not asserted`.
+  the engine never claims that: it says `not asserted`. One leg checks the engine rather
+  than the run: `rfc-04 vectors` replays the specification's test cases for the engine's
+  enforcement gate, and `0 failure(s)` means the gate decided every one as the
+  specification says ([what RFC-04 and the gate are](../explanation/architecture.md#words-this-page-uses)).
 - **ship** packs the bundle, the run and a manifest into `out/demo.flux.tgz`, with two
   in-toto statements beside it.
 
 ## 4. Look at the rows
 
+The run's id is the name of its directory under `.flux/runs`. This is the only run so
+far, so keep its id in a shell variable for the steps that follow:
+
 ```console
-$ head -3 .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson
+$ RUN=$(ls .flux/runs)
+$ head -3 .flux/runs/$RUN/emits/payment_recovery_moment.ndjson
 ["sub-e19b5b0ae87789b0","2026-07-01T20:46:18.581Z","40.5500","mkt-b"]
 ["sub-e19b5b0ae87789b0","2026-07-01T20:55:26.840Z","30.5500","mkt-b"]
 ["sub-3ee1d4f847ee4a44","2026-07-01T23:51:54.082Z","48.4600","mkt-a"]
@@ -110,14 +125,14 @@ same subscriber, nine minutes apart.
 Every run that ships writes a report. Its last section is the one to read first.
 
 ```console
-$ grep '^## ' .flux/runs/8835218acf7b4f8e/EVIDENCE.md
+$ grep '^## ' .flux/runs/$RUN/EVIDENCE.md
 ## What This Bundle Is
 ## Conformance
 ## Reproducibility
 ## Fidelity
 ## Column Provenance
 ## What Was Not Proven
-$ sed -n '/^## What Was Not Proven/,$p' .flux/runs/8835218acf7b4f8e/EVIDENCE.md
+$ sed -n '/^## What Was Not Proven/,$p' .flux/runs/$RUN/EVIDENCE.md
 ## What Was Not Proven
 
 This bundle asserts no privacy or re-identification claim about any source data, no fairness claim about any source system, and no claim about any system trained or tested using its output.
@@ -129,22 +144,27 @@ No column fell back to a type default: every column was produced by a declaratio
 
 The pack records what was run and what was checked. It does not say the simulated
 customers behave like real ones. The section above it, **Column Provenance**, says how each
-column was made; here all four are copied from the simulated world. [The evidence
-pack](../explanation/the-evidence-pack.md) explains what each section is for.
+column was made; here all four are copied from the simulated world, which is why the
+report's last line says no column fell back to a type default.
+[The evidence pack](../explanation/the-evidence-pack.md) explains what each section is
+for.
 
 ## 6. Run it again and get the same answer
 
 `replay` runs a recorded plan again and refuses unless it reaches the digest you ask for.
+Ask for the run's `runDigest`. Step 3 printed it, and the report repeats it on its
+`Run digest` line, so keep it in a variable too:
 
 ```console
-$ fluxsim replay . --run-id 8835218acf7b4f8e --assert-digest sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
-replay of 8835218acf7b4f8e matches asserted digest sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
+$ DIGEST=$(grep 'Run digest' .flux/runs/$RUN/EVIDENCE.md | grep -o 'sha256:[0-9a-f]*')
+$ fluxsim replay . --run-id $RUN --assert-digest $DIGEST
+replay of ... matches asserted digest sha256:...
 ```
 
 Ask for a digest that is not the one it produces and it says so, with exit status 1:
 
 ```console
-$ fluxsim replay . --run-id 8835218acf7b4f8e --assert-digest sha256:0000000000000000000000000000000000000000000000000000000000000000   # exit 1
+$ fluxsim replay . --run-id $RUN --assert-digest sha256:0000000000000000000000000000000000000000000000000000000000000000   # exit 1
 FLX-2106: a replay produced a different run digest than the one asserted -- ...
 more: fluxsim explain FLX-2106  ...
 ```
@@ -163,18 +183,18 @@ manifest) a bundle directory may hold no other file, and the engine refuses one
 $ sed -i.bak 's/^  seed: 42$/  seed: 43/' simulation.flux.yml
 $ rm simulation.flux.yml.bak
 $ fluxsim run .
-plan written to .flux/runs/f4e93037d73a350d/plan.json (runId=f4e93037d73a350d, ...)
-applied to .flux/runs/f4e93037d73a350d (runDigest=sha256:4c100d5228624a28f6b37c613d573d9e14b94ac7f268ea9017c5e075959b07bf)
+plan written to .flux/runs/.../plan.json (runId=..., ...)
+applied to .flux/runs/... (runDigest=sha256:...)
 emitted payment_recovery_moment: 153 rows (scenario)
-run f4e93037d73a350d complete
+run ... complete
 ```
 
 Everything moved: a new run id, a new digest, 153 rows. The first run is still on disk,
-but it no longer belongs to this bundle:
+and `$RUN` still holds its id, but it no longer belongs to this bundle:
 
 ```console
-$ fluxsim verify . --run-id 8835218acf7b4f8e   # exit 1
-FLX-2101: plan recorded sha256:e8c40bd3ec5da6733dd64b242cbce42f4e6a81d263456118a0382c7fdc1c033a, bundle is now sha256:...
+$ fluxsim verify . --run-id $RUN   # exit 1
+FLX-2101: plan recorded sha256:..., bundle is now sha256:...
 more: fluxsim explain FLX-2101  ...
 ```
 

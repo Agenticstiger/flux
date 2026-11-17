@@ -108,7 +108,7 @@ The rule is strict and has a cost: a harmless edit means a new plan and a new ru
 1. **Artifacts.** Every component of `run-digest.json` is recomputed from the files on disk. This catches an emit stream edited after `apply` wrote it.
 2. **Golden regression.** The run digest is compared with the recorded baseline for the Simulation. It compares digests; nothing is run again. With no baseline it says `not checked`, not "passed".
 3. **Row conformance.** Each stream's row count must match the receipt, and each row's width must match the columns its seam attestation declares.
-4. **RFC-04 vectors.** The enforcement vectors that ship with the engine are replayed against the governance gate.
+4. **RFC-04 vectors.** The specification's published test cases for the enforcement gate ([RFC-04](./architecture.md#words-this-page-uses)) are replayed through the engine's gate. Each carries its own policy and request, so this leg checks the gate, not the run's rows or the bundle's own policy.
 5. **Fidelity.** An emit that declares a fidelity check is measured against the slice you pass with `--committed-slice`, and reports `declared, not checked` when you pass none. One that declares no check reports `not declared`.
 
 Here is a run whose emit stream was edited after the fact:

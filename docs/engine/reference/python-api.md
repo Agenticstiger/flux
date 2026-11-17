@@ -201,7 +201,7 @@ that starts a Python script of its own as a child process passes that
 script the directories it imports from: its own directory is not on its
 path either.
 
-**Strict coverage.** `plan`, `apply` and `run` take `strict_coverage`
+**Strict coverage**. `plan`, `apply` and `run` take `strict_coverage`
 (default `False`). A column that falls back to a type default is named by the
 plan either way; with `strict_coverage=True` it is refused instead, with
 `FLX-3304` and a table of every such column, before any row is drawn. The

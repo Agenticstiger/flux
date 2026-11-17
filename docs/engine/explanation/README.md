@@ -1,6 +1,6 @@
 ---
 title: "Explanation"
-description: "Background on the six-step loop, determinism and the seed tree, the FLUID seam, and the evidence pack."
+description: "Background on the architecture and its patterns, the six-step loop, determinism and the seed tree, the FLUID seam, and the evidence pack."
 ---
 
 # Explanation
@@ -8,6 +8,7 @@ description: "Background on the six-step loop, determinism and the seed tree, th
 These pages answer "why is it like this?". They connect ideas rather than give steps; for
 steps, see the [how-to guides](../how-to/README.md).
 
+- [Architecture and patterns](./architecture.md): how the parts fit together, the rules between them, the life of a run, and the design patterns behind it. Start here for the whole picture.
 - [The six-step loop](./the-six-step-loop.md): what validate, plan, apply, run, verify and ship each do, and why they are separate.
 - [Determinism and the seed tree](./determinism-and-the-seed-tree.md): why the same bundle and seed give the same bytes, and what can still differ.
 - [The FLUID seam](./the-seam.md): why a simulation refers to a contract and never restates it.

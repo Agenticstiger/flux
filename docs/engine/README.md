@@ -16,7 +16,9 @@ manifest, and the report inside says plainly what the run does not show. The com
 
 New here? Start with [First evidence pack in five
 minutes](./tutorial/first-evidence-pack.md). It needs [uv](https://docs.astral.sh/uv/) and
-nothing else.
+nothing else. For the whole picture first, read [Architecture and
+patterns](./explanation/architecture.md): what crosses over from the data, the parts you
+install, and how a run moves through them.
 
 ## How these docs are organised
 
@@ -25,12 +27,38 @@ nothing else.
 | Learn by doing | [Tutorial](./tutorial/README.md) | A lesson that works the first time. |
 | Get a job done | [How-to guides](./how-to/README.md) | Steps for one goal, for a reader who knows the basics. |
 | Look something up | [Reference](./reference/README.md) | The command line, every error code, the Python API, the schemas. |
-| Understand why | [Explanation](./explanation/README.md) | Background: the loop, determinism, the seam, the evidence pack. |
+| Understand why | [Explanation](./explanation/README.md) | Background: the architecture, the loop, determinism, the seam, the evidence pack. |
+| Read the rules | [Specifications](./spec/README.md) | What the engine must do, rule by rule: the kernel, the seam, the expression languages, the profile and the scores. |
+| See why it was decided | [Decision records](./adr/README.md) | One record per design decision, with what else was considered. |
 
 Every command and file on the tutorial, how-to and explanation pages is run by the
-project's tests, so what you read is what the engine does. The one exception is the
-install line: it installs the published package, so it cannot test this checkout, and
-the First run workflow runs the same commands from a built wheel instead.
+project's tests, so what you read is what the engine does. The exceptions are the lines
+that install the engine: they install the published package, or `main` from GitHub, so
+they cannot test this checkout, and the First run workflow runs the tutorial's first
+commands from a built wheel instead.
+
+## Which version these pages describe
+
+These pages describe the engine on the `main` branch of
+[Agenticstiger/flux-engine](https://github.com/Agenticstiger/flux-engine), and the latest
+release on PyPI can lag behind it. A feature that `main` has and the latest release lacks is
+marked where a page first mentions it, with the release it came after, for example
+*(added after 0.6.0)*. A build from `main` reports the version number of the last
+release, so `fluxsim --version` does not tell the two apart.
+
+To run exactly what these pages describe, install the engine from `main` with uv:
+
+```text
+uv tool install git+https://github.com/Agenticstiger/flux-engine
+```
+
+uv builds it with the `flux-stats` in the same repository, which `main` names as a member
+of its uv workspace. pip does not read that, so with pip, install `flux-stats` from the
+same repository first:
+
+```text
+pip install "flux-stats @ git+https://github.com/Agenticstiger/flux-engine#subdirectory=packages/flux-stats" "flux-sim-engine @ git+https://github.com/Agenticstiger/flux-engine"
+```
 
 ## What it is, and what it is not
 

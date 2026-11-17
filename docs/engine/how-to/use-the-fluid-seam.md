@@ -121,4 +121,81 @@ reproducible: not checked | validity: not asserted
 - **A column with no source.** `plan_code` has none, so every row has `null` for it. This is allowed only because the column is optional. In a test with `required: true` on it, planning stopped with FLX-3302 and no run was written. The plan names such a column, as the `coverage:` lines above do, and the evidence pack lists it under "What Was Not Proven". Add `--strict-coverage` to `plan`, `apply` or `run` to refuse the run instead, with FLX-3304 and a table of every such column; map the column in the emit's `mapping` block, or give it an attribute of its own name, to cover it. To make that a property of the bundle, put `strictCoverage: true` under the Simulation's `extensions`, in the `com.agentics.flux/1` block next to `emits`: the run is strict whether or not the flag is given, and the flag cannot turn it off.
 - **`tags: [identifier]`.** The tag marks a column as an identifier. It does not give the column values: in a test, a second tagged column with no source was `null`. `subscriber_id` has values because the engine maps it to the customer id.
 
+## Keys from the contract
+
+From FLUID 0.7.7 on, a contract declares its keys, and the engine reads them from the contract. A `primary` or `unique` entity in an expose's `semantics` is a one-column key of that expose. A relationship is a foreign key: its `fromColumns` in the declaring expose equal the `toColumns` of the expose it names in `to`, paired by position, so a composite key is one relationship with several columns.
+
+Replace `payment-recovery.fluid.yml` once more. Each payment moment now belongs to one subscriber, and a `subscriber` table is keyed by its id:
+
+```yaml
+# payment-recovery.fluid.yml
+fluidVersion: "0.7.7"
+kind: DataProduct
+id: telco.gold.payment_recovery_moment
+name: Payment Recovery Moment
+metadata:
+  owner:
+    team: growth-lab
+exposes:
+  - exposeId: payment_recovery_moment
+    kind: stream
+    contract:
+      schema:
+        - { name: subscriber_id, type: STRING, required: true, tags: [identifier] }
+        - { name: aborted_at, type: TIMESTAMP, required: true }
+        - { name: amount, type: "DECIMAL(18,4)" }
+        - { name: market, type: STRING }
+        - { name: priceSensitivity, type: STRING }
+        - { name: plan_code, type: STRING }
+    semantics:
+      relationships:
+        - name: moment_to_subscriber
+          to: subscriber
+          fromColumns: [subscriber_id]
+          toColumns: [subscriber_id]
+          cardinality: many_to_one
+    binding:
+      platform: kafka
+      format: kafka_topic
+      location:
+        topic: billing.payment-recovery.v1
+  - exposeId: subscriber
+    kind: table
+    contract:
+      schema:
+        - { name: subscriber_id, type: STRING, required: true }
+        - { name: market, type: STRING }
+    semantics:
+      entities:
+        - { name: subscriber, type: primary, expr: subscriber_id }
+    binding:
+      platform: kafka
+      format: kafka_topic
+      location:
+        topic: billing.subscriber.v1
+```
+
+FLUID 0.7.7 is a preview in the FLUX specification package, and a version range never selects a preview, so the emit has to name it exactly. The contract has moved too:
+
+```console
+$ fluxsim validate .   # exit 1
+FLX-3105: bundle does not validate, so its seam cannot be resolved --...
+  sim-payment-recovery: spec.emits[0]: payment-recovery.fluid.yml declares FLUID 0.7.7, a preview, and a range never selects a preview: pin fluidVersion "0.7.7" exactly to opt in
+  sim-payment-recovery: spec.emits[0]: provenance.contractDigest mismatch ... bundle contract is sha256:2b505ad44769166ea95ffb33870b5e04329dd880368aaafa0452c06f02b68919
+more: fluxsim explain FLX-3105  ...
+$ sed -i.bak -e 's/fluidVersion: "^0.7.3"/fluidVersion: "0.7.7"/' -e 's/sha256:90324eff47f5f673c2838ecb6d23efa90739ae37ba43d69c920ca818559913dc/sha256:2b505ad44769166ea95ffb33870b5e04329dd880368aaafa0452c06f02b68919/' simulation.flux.yml
+$ rm simulation.flux.yml.bak
+$ fluxsim validate .
+.: valid -- 9 FLUX document(s), 1 FLUID contract(s), 1 Simulation(s)
+```
+
+The engine now reads the keys and holds the bundle to them:
+
+- **The Simulation never restates a key.** A key in its extensions, such as `primaryKey: [subscriber_id]` in the emit's block, is refused with [FLX-3111](../reference/errors/FLX-3111.md), and so is a fidelity `unique: false` on a column the contract makes a key.
+- **The contract stays pinned.** An emit of a contract that declares keys must pin `provenance.contractDigest` ([FLX-3112](../reference/errors/FLX-3112.md)), so a moved key stops the run until you pin the new digest. A key that does not resolve, such as a relationship to an expose the contract does not have, is refused where the contract declares it ([FLX-3005](../reference/errors/FLX-3005.md)).
+- **A one-column text key is generated as an identifier.** In an emit with a `fidelity` block, a one-column `STRING` key is derived from the seam's digest and the row index, as an identifier column is, with no fidelity `unique` or `identifier` tag needed. This emit has no `fidelity` block, so its rows still come from the simulated customers, as above.
+- **Related tables are not generated together yet.** A key of another type, a composite key and a foreign key are read from the contract, but each column is still drawn on its own. The engine does not draw `payment_recovery_moment.subscriber_id` from the rows of `subscriber`; here no emit names `subscriber`, so it is not generated at all, and an emit of it would be drawn apart from the moments ([KERNEL-SPEC.md](../spec/KERNEL-SPEC.md) §8.1).
+
+A contract on FLUID 0.7.6 or earlier is read as before: its entities are not keys to the engine.
+
 See [the seam](../explanation/the-seam.md) for the design, and [FLX-3105](../reference/errors/FLX-3105.md) for the error.
