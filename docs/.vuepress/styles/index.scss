@@ -332,6 +332,16 @@ div[class*="language-"] {
 }
 
 // ---------------------------------------------------------------------
+// Diagrams. A Mermaid diagram is drawn at its natural width, so one wider
+// than the column ran off the page. It now scrolls inside its own box, as
+// the diagrams wrapped in <MermaidLazy> do. The engine's pages are copied
+// here unchanged and cannot use that component, so this rule does it.
+// ---------------------------------------------------------------------
+.mermaid-content {
+  overflow-x: auto;
+}
+
+// ---------------------------------------------------------------------
 // Tables — full width, alternating rows.
 // ---------------------------------------------------------------------
 [vp-content] table {

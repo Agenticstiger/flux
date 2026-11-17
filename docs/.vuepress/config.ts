@@ -164,6 +164,8 @@ export default defineUserConfig({
             '/engine/how-to/calibrate-from-aggregates.md',
             '/engine/how-to/draw-a-column-given-another.md',
             '/engine/how-to/ship-with-evidence.md',
+            '/engine/how-to/score-a-run-against-a-profile.md',
+            '/engine/how-to/seal-and-score-a-prediction.md',
             '/engine/how-to/load-a-simulation-into-a-database.md',
           ],
         },
@@ -200,6 +202,7 @@ export default defineUserConfig({
             '/engine/reference/schemas.md',
             {
               text: 'Specifications',
+              link: '/engine/spec/',
               collapsible: true,
               children: [
                 '/engine/spec/KERNEL-SPEC.md',
@@ -218,6 +221,7 @@ export default defineUserConfig({
           text: 'Explanation',
           link: '/engine/explanation/',
           children: [
+            '/engine/explanation/architecture.md',
             '/engine/explanation/the-six-step-loop.md',
             '/engine/explanation/determinism-and-the-seed-tree.md',
             '/engine/explanation/the-seam.md',
