@@ -135,7 +135,8 @@ Pin it in the FLUX Simulation:
   profile: {digest: sha256:bd2f9a689d119e6a489f1878891c695c3f6c7dd602c365a92fff491905b416a5}
 ```
 
-Your digest will differ: the document names the forge-cli build that wrote it.
+The digest follows the data and the forge-cli build, which the document names:
+other data or another release writes another digest.
 For the sample data, the profile holds these values:
 
 | Column | Published | Withheld |
@@ -156,7 +157,8 @@ exact value, and no instant in `created_at` is held by 10 orders.
 rounded to 5 like every count, and its sum on a grid of 2^-16 steps. The grid
 is `--fractional-bits`, 16 unless you give another, and the Simulation's
 `encoding.fractionalBits` must be the same (step 4 uses 16). `fluid profile`
-writes one, ungrouped, for each number column.
+writes one, ungrouped, for each number column it profiles, and publishes it
+only when the column's count and sum are published.
 
 ::: warning Aggregates only, and no privacy guarantee
 The profile holds aggregates and nothing else: no record, no sample of records,
@@ -422,9 +424,9 @@ $ head -n 3 .flux/runs/*/emits/orders.ndjson
 ["48a86b2e4b5bbe236997e76dea39cadc","IE","13.15","2026-08-19T15:24:18.484Z"]
 ```
 
-The same bundle gives the same bytes on any machine. Your run id and rows
-differ from these, because your contract records the path of your data folder,
-and the rows depend on the contract's bytes.
+The same bundle gives the same bytes on any machine. Your run id, rows and
+scores differ from these, because your contract records the path of your data
+folder, and the rows depend on the contract's bytes.
 
 Check the run against the contract and the profile. `$(ls -t .flux/runs | head -1)`
 names the newest run:
@@ -451,8 +453,8 @@ Three things happened:
   recorded and one value per contract column.
 - The `mean` property compared the run's mean `amount` with the profile's
   `mean/1` and landed within its 10% margin. The scorecard turns that into a
-  similarity, where 1 is an exact match; [Score a run against a profile](../engine/how-to/score-a-run-against-a-profile.md)
-  explains the numbers.
+  similarity, where 1 is an exact match;
+  [SCORECARD-SPEC](../engine/spec/SCORECARD-SPEC.md) defines the scores.
 - The shape flags compared each profiled column with the run, for example its
   distinct count against the one the profile allows, and found nothing unlikely.
 
@@ -473,8 +475,8 @@ The pack holds the rows and the evidence for them, the scorecard included;
 
 ### When the profile cannot answer a property
 
-`fluid profile` writes one ungrouped `mean/1` for each number column, and
-nothing else the fidelity check compares. A property that needs another
+`fluid profile` writes one ungrouped `mean/1` for each number column it
+profiles, and nothing else the fidelity check compares. A property that needs another
 statistic, such as a `support` property over `country` or a `mean` over
 `created_at`, is refused against the profile with
 [FLX-5037](../engine/reference/errors/FLX-5037.md), which names the statistic the
@@ -487,8 +489,9 @@ engine then reads those records, which gives up the aggregate-only path this
 guide follows, so use it only where the records may reach the engine, on your
 own machine for example.
 
-1. Take the `profile:` line out of the Simulation: while a profile is pinned,
-   the check runs against the profile, slice or no slice.
+1. Take the `profile:` line out of the Simulation: once a profile is pinned,
+   `run` and `ship` need it with `--profile`, and with it the check runs
+   against the profile.
 2. Write the records as one JSON object per line, each decimal as a string and
    each timestamp in RFC 3339 with milliseconds:
 
