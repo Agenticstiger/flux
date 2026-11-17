@@ -1,5 +1,7 @@
-# The FLUX Simulation Engine tag or full commit that docs/engine/ mirrors.
-# To take newer pages: change this line, run scripts/sync-engine-docs.sh, and
-# commit docs/engine/ together with it. CI re-creates the copy from this pin and
-# fails if the committed one differs.
-63a26db6d6efc748db27c6d314d95e88b3935928
+# The FLUX Simulation Engine release tag (vX.Y.Z) that docs/engine/ mirrors.
+# A release tag only: a commit or a branch would document an engine nobody can
+# install, and CI refuses it. To take newer pages: change this line to the new
+# release tag, run scripts/sync-engine-docs.sh, and commit docs/engine/ together
+# with it. CI re-creates the copy from this pin and fails if the committed one
+# differs.
+v0.5.0

@@ -95,6 +95,8 @@ The contract fixes the column order and the types. The engine turns each column 
 
 A required column that nothing fills is an error at plan time (`FLX-3302`). An optional column renders `null`. The engine does not invent a value.
 
+An `INT` column is checked at the same time. Its source must be a whole number on every row: a count, such as the moment's event count or a subject attribute drawn as one. Anything else, such as an amount, stops planning (`FLX-3303`). The engine reads this from how each value is drawn, not from the values one run happened to draw, so the same declarations get the same answer on every run.
+
 Types come from a small closed set. `float` and `double` columns are refused by name (`FLX-3001`) because they have no reproducible spelling. Use `DECIMAL(p,s)` instead. A row is a JSON array in contract order:
 
 ```console
@@ -150,7 +152,7 @@ After `apply`, `verify` checks conformance again from the files on disk. Every s
 
 ## Who owns the schema
 
-The engine does not own the FLUID schema or the FLUX schema. It depends on the published FLUX specification package for validation, and that package carries the FLUID schemas for versions 0.7.3 to 0.7.5. A contract cannot silently target a version the toolchain has not seen. If a range matches none of them, validation fails. When FLUID moves, the schemas move with the package, not with this engine.
+The engine does not own the FLUID schema or the FLUX schema. It depends on the published FLUX specification package for validation, and that package carries the FLUID schemas a contract may target: 0.7.3 to 0.7.5 in flux-spec 0.5.0, and 0.7.3 to 0.7.6 from FLUX 0.5.1 on. The engine's vendored fallback already carries FLUX 0.5.1. A contract cannot silently target a version the toolchain has not seen. If a range matches none of them, validation fails. When FLUID moves, the schemas move with the package, not with this engine.
 
 ## What the seam does not do
 

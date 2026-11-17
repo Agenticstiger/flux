@@ -181,6 +181,26 @@ running in the background — Python threads cannot be cancelled — so this
 is a bound on how long the *caller* waits, not a kill. Same contract
 forge-cli's engine documents.
 
+**More than one job.** `plan`, `apply`, `run` and `replay` take `jobs`
+(default 1): how many processes may generate an emit's rows from declared
+statistics. The rows and every digest are the ones one job gives. The
+worker processes are started with spawn, so each one imports the host's
+main module again: a script that passes `jobs` above 1 keeps its work
+under `if __name__ == "__main__":`, and whatever it does at the top level,
+outside that block, happens again in every worker. Runs in one process
+share one worker per CPU: an emit gets the workers it asks for or what
+other runs have left, so the count the run summary prints ("4 processes")
+also tells a caller how busy the process is. The soft timeout stops
+neither the stage thread nor its workers; after `TimeoutError` they run on,
+and keep their share of the workers, until the stage ends. Workers start
+with the current directory off their import path: unless the host already
+runs with `-P` or with `PYTHONSAFEPATH` set, the engine sets
+`PYTHONSAFEPATH` for the moment it starts them, which other threads of the
+host can see. `fluxsim` sets it for its whole process, so a sink or plugin
+that starts a Python script of its own as a child process passes that
+script the directories it imports from: its own directory is not on its
+path either.
+
 Stability here is governed by the frozen-kwarg promise in that module's
 own docstring, not by `__api_version__`: `__api_version__` covers the
 names exported from `flux_engine.api`, and the facade exports none of

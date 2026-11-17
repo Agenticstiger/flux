@@ -133,7 +133,7 @@ computes them from DataFrames. Here they are reimplemented on aggregates
 | TVComplement | `1 - 1/2 * sum(abs(c_a/k_a - c_b/k_b))` over the bins of a histogram property | Equal, with the bins as categories |
 | KSComplement | `1 - max(abs(F_a(e) - F_b(e)))` over the declared edges, from cumulative bin counts | A lower bound on the record-level KS distance: the supremum taken only at the edges |
 | CorrelationSimilarity | `1 - abs(r_a - r_b)/2`, with Pearson's r from `k`, `Sx`, `Sy`, `Sxx`, `Syy`, `Sxy` | Equal for Pearson, up to the declared grid's quantisation |
-| ContingencySimilarity | TVComplement of the (group, bin) table of a grouped histogram property | Equal, with the groups and bins as the two columns' categories |
+| ContingencySimilarity | TVComplement of the (group, bin) table of a grouped histogram property, or of the (group, level) table of a grouped level histogram | Equal, with the groups and the bins or levels as the two columns' categories |
 
 Pass criteria:
 
@@ -161,10 +161,35 @@ Pass criteria:
     synthetic mean must sit within four standard errors of the within-bin
     uniform prediction, which shows that the whole shift comes from the
     declared shape.
-  - The generator draws columns independently. When the committed markets
-    differ in their amounts, ContingencySimilarity is capped by the committed
-    table's own distance from independence. The measured score must sit within
-    three sampling distances of that cap.
+  - Without `given`, the generator draws columns independently. When the
+    committed markets differ in their amounts, ContingencySimilarity is capped
+    by the committed table's own distance from independence. The measured
+    score must sit within three sampling distances of that cap.
+- **Conditional draws lift the cap.** The same dependent markets, with
+  `amount` declared `given` `market` and one bin-weight list per market taken
+  from the grouped histogram's (group, bin) counts, draw D' from S's own joint
+  table. ContingencySimilarity must then sit within three one-sample sampling
+  distances of 1, and the fixture must discriminate: its independence cap lies
+  further below 1 than that. The ungrouped histogram's TVComplement must stay
+  within its own sampling distance too, because the joint implies it. A chain (channel, then market given channel, then
+  amount given market) is declared from the tree
+  `flux_engine.calibrate.structure` suggests from the two-way count tables
+  (`tests/accuracy/fidelity/test_tree_draws.py`). The suggested tree must be
+  the true chain. Each table on a tree edge must sit within three one-sample
+  distances of the committed table, and the table off the tree and the
+  three-way table within three two-sample distances.
+- **A categorical link, declared from S and checked by the gate.** A
+  committed pair draws market given channel, and S counts it with a grouped
+  `levelHistogram` (`tests/accuracy/fidelity/test_level_pair_draws.py`).
+  `pair_table_from_level_groups` reads that table back, and the tree and the
+  declarations come from it alone. The suggested tree must be the true link.
+  Drawn with `levelWeightsGiven`, the fidelity check must find every property
+  within, and ContingencySimilarity must sit within three one-sample
+  distances of 1. Drawn independently, the check must withhold on the grouped
+  property alone, and ContingencySimilarity must sit within three two-sample
+  distances of the independence cap. In both cases every group's verdict must
+  equal `TV <= margin` computed from the two S values, and the score from S
+  must equal the record-level crosstab value.
 
 ### 2. Goodness of fit, for every sampler and every declared distribution
 
@@ -256,7 +281,12 @@ Pass criteria:
   own rows ships with exit 0. The same slice with every amount raised by 200
   exits 1 with `FLX-8001` and writes no bundle. In both cases the outcome
   must match the declared rule, `|mean_synthetic - mean_committed| <= 50`,
-  evaluated on the two record sets.
+  evaluated on the two record sets. Through `python -m flux_engine.cli verify
+  --committed-slice` on a copy of that bundle whose `market` is drawn given a
+  new `channel` column with `levelWeightsGiven`, a slice holding the declared
+  (channel, market) counts passes with exit 0, and the same slice with the
+  two channels' market shares swapped fails with exit 1
+  (`tests/accuracy/fidelity/test_gate_verify_level_pair.py`).
 
 The rates near the tolerance itself, at 0.9 and 1.1 times it, are reported but
 not gated. They measure the sampling noise at the stated sizes, which is a
@@ -286,6 +316,17 @@ property of `n` and `τ`, not of the gate.
   5. *Adding a column leaves sibling streams untouched*: under a fixed root
      for the generator, and end to end for a Persona trait, which is not part
      of `H`.
+  6. *A forest of conditional draws keeps every generator invariant*:
+     Hypothesis draws random valid forests of 2 to 7 columns (`given` links
+     from categorical columns of every kind, histogram leaves, chains, NFC
+     and NFD spellings of a parent's levels, zero weights, a shuffled declared
+     order). Two runs agree byte for byte; permuting the declared order
+     changes no column; column-first equals row-first; slices join; a longer
+     plan extends a shorter one; every drawn level and bin carries weight in
+     the row of its parent's level; replacing every conditional declaration
+     with an unconditional one leaves the root columns unchanged; and a
+     single corruption of a valid forest is refused at plan time with
+     `FLX-3402`, never with another exception type.
 - **Counterexamples** become regression cases. A falsifying example is written
   to `FLUX_ACCURACY_COUNTEREXAMPLES` and uploaded with the nightly artefact.
   Each one is then committed under `tests/accuracy/properties/regressions/`,
@@ -483,9 +524,16 @@ definitions, not code.
   construction, and its privacy is outside this program.
 - **The agentic tier and the stochastic sweep executor** are not built. The
   engine refuses them, and the existing suite tests those refusals.
-- **Joint structure in generated data**: the generator draws each column
-  independently. Family 1 measures the shortfall in ContingencySimilarity
-  and CorrelationSimilarity, and nothing here claims joint fidelity.
+- **Joint structure in generated data**: without `given`, the generator
+  draws each column independently, and Family 1 measures the shortfall in
+  ContingencySimilarity and CorrelationSimilarity. With `given`, Family 1
+  measures the declared links: a histogram drawn given a categorical, a
+  categorical drawn given a categorical, and a three-column chain. The
+  fidelity check tests each declared link through a grouped property: a
+  grouped `marginalHistogram` for a histogram link, a grouped
+  `levelHistogram` for a categorical one. Two numeric columns are never
+  linked directly, because a histogram column is a leaf. Nothing here claims
+  joint fidelity beyond the declared links.
 - **Real data**: every record set here is synthetic, drawn from stated
   parameters (ADR 0003). A fit to an owner's real committed state is
   measured only by that owner's own fidelity check.

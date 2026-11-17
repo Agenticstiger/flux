@@ -28,6 +28,8 @@ traits:
     min: 0
 ```
 
+<a id="rfc-02-a-versioned-extension-port"></a>
+
 ## RFC-02 — A versioned extension port ✅ shipped in 0.4.0
 
 *Envelope · all kinds*

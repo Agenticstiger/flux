@@ -37,12 +37,17 @@ python3 tests/test_regression.py   # regression suite must be green
 
 Everything under `docs/engine/` is copied from the engine's own repository,
 [Agenticstiger/flux-engine](https://github.com/Agenticstiger/flux-engine), at the
-tag or commit named in `scripts/engine-docs.ref`. Do not edit those pages here.
-Change them in the engine repository, then take the change by setting the new tag
-or commit in `scripts/engine-docs.ref`, running `scripts/sync-engine-docs.sh` and
-committing `docs/engine/` with it. A page the engine adds also needs an entry in
-the `/engine/` sidebar of `docs/.vuepress/config.ts`; the script warns when one
-is missing. CI re-creates the copy from the pin and fails if it differs.
+release tag named in `scripts/engine-docs.ref`. Do not edit those pages here.
+Change them in the engine repository. Once an engine release carries the change,
+set its tag (`vX.Y.Z`) in `scripts/engine-docs.ref`, run
+`scripts/sync-engine-docs.sh` and commit `docs/engine/` with it. The pin is a
+release tag only: CI refuses a commit or a branch, because the site documents an
+engine people can install. A page the engine adds also needs an entry in the
+`/engine/` sidebar of `docs/.vuepress/config.ts`; the script warns when one is
+missing, and when a copied page links into `adr/` or `RELEASING.md`, which are
+not copied. The engine's `spec/` pages come with their JSON schemas, and the site
+serves each schema at the address its `$id` names. CI re-creates the copy from
+the pin and fails if it differs.
 
 ## Licensing
 

@@ -143,6 +143,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # The site documents an engine people can install, so the pin is a release
+      # tag of the engine repository: never a commit, a branch or main.
+      - name: The pin names an engine release tag
+        run: bash scripts/sync-engine-docs.sh --check-pin
       - name: Re-create docs/engine from the pinned engine docs
         run: bash scripts/sync-engine-docs.sh
       - name: docs/engine is exactly what the pin says

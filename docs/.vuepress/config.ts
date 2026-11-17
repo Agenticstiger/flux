@@ -161,7 +161,9 @@ export default defineUserConfig({
             '/engine/how-to/add-a-journey.md',
             '/engine/how-to/use-the-fluid-seam.md',
             '/engine/how-to/calibrate-from-aggregates.md',
+            '/engine/how-to/draw-a-column-given-another.md',
             '/engine/how-to/ship-with-evidence.md',
+            '/engine/how-to/load-a-simulation-into-a-database.md',
           ],
         },
         {
@@ -195,6 +197,15 @@ export default defineUserConfig({
             '/engine/reference/errors/README.md',
             '/engine/reference/python-api.md',
             '/engine/reference/schemas.md',
+            {
+              text: 'Specifications',
+              collapsible: true,
+              children: [
+                '/engine/spec/KERNEL-SPEC.md',
+                '/engine/spec/SEAM-FIDELITY-SPEC.md',
+                '/engine/spec/EXPR-SPEC.md',
+              ],
+            },
           ],
         },
         {
