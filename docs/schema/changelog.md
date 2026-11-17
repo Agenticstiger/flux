@@ -50,7 +50,7 @@ Both additions are *contracts about running and proving*, not new document
 fields, so the core schema changes only its version window. The new normative
 surface lives in two sibling schemas plus two reference tools.
 
-## RFC-04 — The enforcement decision contract
+## The enforcement decision contract
 
 New published schema `schema/flux-enforcement-0.5.0.json`: the request and
 decision shapes every conformant policy gate implements.
@@ -87,7 +87,7 @@ implementable:
   *document's* policy; skill narrowing is reported separately as
   `effectiveBudget`/`skillRef`, so a decision joins back to its document.
 
-## RFC-09 — Signed evidence bundles
+## Signed evidence bundles
 
 New published schema `schema/flux-manifest-0.5.0.json` and the reference
 tool `scripts/bundle.py`:
@@ -125,16 +125,16 @@ python3 scripts/bundle.py verify dist/<name>.flux.tgz
   budgets declared sizes before extracting, refuses symlinks/devices/duplicates
   and any member outside the bundle directory, and reports every malformed
   input as `[FAIL]` rather than a traceback.
-- RFC-03 lockfile and RFC-06 contract digests also move to RFC 8785 (JCS);
+- The `flux.lock` lockfile and seam contract digests also move to RFC 8785 (JCS);
   the example bundle's digests are regenerated accordingly.
 
 ## 0.4.0 → 0.4.1
 
 **Additive, non-breaking.** Every valid 0.3.0 and 0.4.0 document validates
-unchanged under 0.4.1 (regression-asserted). Ships RFC-05 and RFC-06 of the
-[vNext roadmap](/flux/roadmap/).
+unchanged under 0.4.1 (regression-asserted). Ships the credibility scorecard and seam version ranges
+with provenance from the [vNext roadmap](/flux/roadmap/).
 
-## RFC-05 — The credibility scorecard
+## The credibility scorecard
 
 New optional `Playback.spec.scorecard`:
 
@@ -151,19 +151,19 @@ fails the bundle when no Playback scorecard calibrates the Simulation's world
 or when the twin's best credibility is below the bar. Twin claims become
 graded, not asserted — and an untrustworthy twin cannot ship a contract.
 
-## RFC-06 — Seam version ranges + provenance
+## Seam version ranges + provenance
 
 - `emits[].fluidVersion` now also accepts a semver **range** (`^0.7.3`,
   `~0.7.4`), resolved against the vendored FLUID set. The referenced
   document's own `fluidVersion` must satisfy the pin or range, and at least
   one vendored schema must satisfy a range (validator-enforced). Exact pins
-  behave exactly as in 0.4.0; the seam no longer freezes to a point release.
+  behave exactly as in 0.4.0; the seam is no longer held to one point release.
 - New optional `emits[].provenance`:
   - `contractDigest` — canonical-JSON sha256 of the referenced FLUID
     document, **validator-enforced**: contract drift after proving fails the
     bundle (proven bytes are shipped bytes).
   - `outputDigest` — the engine-attested run digest; format-checked here,
-    value-verified at the Runtime profile (RFC-04).
+    value-verified at the Runtime profile (the runtime enforcement contract).
 
 ## Envelope / window
 
@@ -175,11 +175,11 @@ graded, not asserted — and an untrustworthy twin cannot ship a contract.
 ## 0.3.0 → 0.4.0
 
 **Additive, non-breaking.** Every valid 0.3.0 document validates unchanged
-under 0.4.0 (regression-asserted). Ships the first five RFCs of the
-[vNext roadmap](/flux/roadmap/): RFC-01, RFC-02, RFC-03, RFC-07,
-RFC-08.
+under 0.4.0 (regression-asserted). Ships the first five proposals of the
+[vNext roadmap](/flux/roadmap/): trait distributions, the extension port,
+the module supply chain, the semantic-model port and UI hints.
 
-## RFC-01 — Trait distributions
+## Trait distributions
 
 `Persona.spec.traits` values become a typed union (`$defs/trait`): a plain
 0..1 scalar (0.3.0-compatible), a `categorical` distribution (weighted
@@ -193,7 +193,7 @@ traits:
   monthlySpend: { dist: normal, mean: 42.0, stddev: 11.0, min: 0 }
 ```
 
-## RFC-02 — The versioned extension port
+## The versioned extension port
 
 New optional envelope field on every kind:
 
@@ -212,7 +212,7 @@ stays closed everywhere else — this is the one sanctioned escape hatch, so
 dialects extend without forking. Rejected (regression-pinned):
 non-namespaced keys, non-object values, empty `extensions`.
 
-## RFC-03 — Module supply chain
+## Module supply chain
 
 - New optional envelope field `version` (`x.y.z`) — the lockfile anchor.
 - `Simulation.spec.moduleRefs` and `VerticalPack.spec.modules` items become
@@ -232,7 +232,7 @@ The validator enforces: lock entry exists, pinned version satisfies the
 range, the document's `version` matches the pin, and the content digest
 matches the in-bundle document — content drift breaks the build.
 
-## RFC-07 — The semantic-model port
+## The semantic-model port
 
 `Experiment.spec.metrics[].semanticRef` (`<model>/<measure>`,
 `$defs/semanticRef`) resolves against the measures a Module declares when
@@ -240,7 +240,7 @@ binding the `ossie-model` port (`binds[].config.measures`). The validator
 rejects unknown measures and `semanticRef` use with no bound model.
 `ossieRef` remains as a deprecated 0.3.0 alias.
 
-## RFC-08 — UI hints artifact
+## UI hints artifact
 
 New published artifact `schema/flux-ui-hints-0.4.0.json`, generated by
 `scripts/generate-ui-hints.py` (CI-enforced in sync): per-kind titles,

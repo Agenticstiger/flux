@@ -98,8 +98,8 @@ contract file is wrapped around the real estate.
 pip install flux-spec
 git clone https://github.com/Agenticstiger/flux.git && cd flux    # the worked example lives here
 python3 -m flux_spec.validate examples/telco-payment-recovery     # schema + cross-document
-python3 -m flux_spec.enforce                                      # RFC-04 conformance vectors
-python3 -m flux_spec.bundle pack examples/telco-payment-recovery -o dist/   # RFC-09 evidence bundle
+python3 -m flux_spec.enforce                                      # runtime enforcement conformance vectors
+python3 -m flux_spec.bundle pack examples/telco-payment-recovery -o dist/   # signed evidence bundle
 ```
 
 Point the same commands at your own bundle directory; the clone is only for the example.
@@ -181,7 +181,7 @@ schema-diffs/    one diff document per version pair
 examples/        validated bundles (CI-enforced)
 vendor/fluid/    vendored FLUID schemas the seam validates against
 vendor/fluid-preview/  FLUID previews, pinned to a commit and a sha256 (pins.json)
-flux_spec/       the flux-spec package: validate.py · enforce.py (RFC-04) · bundle.py (RFC-09)
+flux_spec/       the flux-spec package: validate.py · enforce.py (runtime enforcement) · bundle.py (evidence bundles)
 scripts/         validate.py / enforce.py / bundle.py — thin CLI shims onto flux_spec
 tests/           regression suite + published enforcement conformance vectors
 docs/            documentation site (VuePress): guide, concepts, schema, roadmap, releases,

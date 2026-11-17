@@ -104,7 +104,7 @@ export default defineUserConfig({
         children: [
           { text: 'The vNext Plan', link: '/roadmap/' },
           { text: 'The Nine RFCs', link: '/roadmap/rfcs' },
-          { text: 'RFC-10 (proposed)', link: '/roadmap/rfc-10-playback-source' },
+          { text: 'Playback Source (proposed)', link: '/roadmap/rfc-10-playback-source' },
           { text: 'Conformance Profiles', link: '/roadmap/profiles' },
         ],
       },

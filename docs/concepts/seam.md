@@ -11,8 +11,8 @@ spec:
   emits:
     - productRef: telco.gold.payment_recovery_moment   # id of a .fluid.yml in the bundle
       exposeId: payment_recovery_moment                # an expose of that product
-      fluidVersion: "^0.7.3"                           # exact pin or semver range (RFC-06)
-      minCredibility: 0.7                              # gate on the twin's scorecard (RFC-05)
+      fluidVersion: "^0.7.3"                           # exact pin or semver range
+      minCredibility: 0.7                              # gate on the twin's scorecard
       provenance:
         contractDigest: "sha256:762f…"                 # proven bytes == shipped bytes
 ```

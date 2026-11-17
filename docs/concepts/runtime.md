@@ -4,7 +4,7 @@ Through 0.4.1, FLUX was something you could *check*. From 0.5.0 it is also
 something you can **run** and **prove** — the two RFCs that turn a schema into
 a substrate.
 
-## Enforcement: policy with teeth (RFC-04)
+## Enforcement: policy with teeth
 
 `agentPolicy` declares what an AI call may do. Declaration alone is a lint:
 nothing stops a conforming document from making an off-policy call at
@@ -84,7 +84,7 @@ python3 scripts/enforce.py                    # the reference implementation
 python3 scripts/enforce.py --vectors mine.json
 ```
 
-A vendor demonstrates RFC-04 conformance by reproducing every vector. That is
+A vendor demonstrates runtime enforcement conformance by reproducing every vector. That is
 what makes "did it pass the gate?" a reproducible fact rather than an opinion.
 
 **The suite is itself tested.** A conformance suite that everything passes
@@ -95,7 +95,7 @@ matching, lenient handling of off-spec policies, and a fabricated
 `policyDigest` — and assert that **every one fails**. When a vector is added,
 that meta-test is what keeps it load-bearing.
 
-## Evidence bundles: proof that travels (RFC-09)
+## Evidence bundles: proof that travels
 
 A local `[ok]` convinces the person who ran it. A regulator, a partner, or a
 consortium needs something portable:

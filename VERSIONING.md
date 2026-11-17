@@ -30,7 +30,7 @@ backward-compatible widens the window; a breaking release resets it.
 
 ## Evidence packs across releases
 
-An evidence pack (RFC-09) names, in its manifest's `schemaId`, the `$id` of
+An evidence pack names, in its manifest's `schemaId`, the `$id` of
 the schema its documents were validated against. `pack` always validates
 against the current schema. `verify` accepts a `schemaId` that is the `$id` of
 a version inside the current window (the `fluxVersion` enum of
