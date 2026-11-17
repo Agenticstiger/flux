@@ -54,7 +54,10 @@ Specification 0.5.2, additive
   anything, the way `verify` refuses a link inside an archive and flux-engine
   refuses one before it packs. `pack` used to read through a linked file, so
   the target's bytes (an ssh key, a `.env`) went into the archive, and it left
-  a linked directory out without a word.
+  a linked directory out without a word. It also opens `flux-manifest.json`
+  with `O_NOFOLLOW` where the platform has it, so a link that appears after
+  that check fails the pack instead of overwriting the file it points to, and
+  a manifest it cannot write is a `[FAIL]` line, not a traceback.
 
 ## 0.5.1 - 2026-11-12
 

@@ -47,6 +47,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import shutil
 import sys
 import tarfile
@@ -269,6 +270,15 @@ def build_manifest(directory: Path, validator) -> tuple[dict, list[str]]:
     return manifest, []
 
 
+def _write_manifest(path: Path, manifest: dict) -> None:
+    """Write *manifest* to *path*, never through a link planted there: with
+    O_NOFOLLOW the open fails on a symlink instead of truncating its target.
+    `pack` refuses links before this point; this holds if one appears later."""
+    nofollow = getattr(os, "O_NOFOLLOW", 0)    # POSIX; elsewhere the pack-time refusal stands alone
+    with open(path, "w", encoding="utf-8", opener=lambda p, flags: os.open(p, flags | nofollow, 0o666)) as fh:
+        fh.write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
 def _deterministic_info(name: str, size: int) -> tarfile.TarInfo:
     info = tarfile.TarInfo(name)
     info.size = size
@@ -298,7 +308,11 @@ def pack(directory: Path, out_dir: Path, validator) -> int:
         return 1
     Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text())).validate(manifest)
 
-    (directory / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    try:
+        _write_manifest(directory / MANIFEST_NAME, manifest)
+    except OSError as exc:
+        print(f"[FAIL] {directory}: cannot write {MANIFEST_NAME}: {exc.strerror or exc}")
+        return 1
     out_dir.mkdir(parents=True, exist_ok=True)
     archive = out_dir / f"{directory.name}.flux.tgz"
 

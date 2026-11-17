@@ -18,6 +18,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import shutil
 import sys
 import tarfile
@@ -877,6 +878,31 @@ def check_pack_refuses_symlinks(flux_validator) -> list[str]:
     return failures
 
 
+def check_manifest_write_never_follows_a_link(flux_validator) -> list[str]:
+    """The manifest write itself opens with O_NOFOLLOW (POSIX): a link that
+    appears after pack's symlink refusal fails the pack, never its target."""
+    if not hasattr(os, "O_NOFOLLOW"):
+        return []
+    with tempfile.TemporaryDirectory() as tmp:
+        victim = Path(tmp) / "victim.txt"
+        victim.write_text("untouched\n")
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        (work / bundle_tool.MANIFEST_NAME).unlink(missing_ok=True)
+        (work / bundle_tool.MANIFEST_NAME).symlink_to(victim)
+        scan = bundle_tool._symlink_entries
+        bundle_tool._symlink_entries = lambda directory: []   # as if the link appeared after the scan
+        said = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(said):
+                rc = bundle_tool.pack(work, out, flux_validator)
+        finally:
+            bundle_tool._symlink_entries = scan
+        if rc == 0 or f"cannot write {bundle_tool.MANIFEST_NAME}" not in said.getvalue() or victim.read_text() != "untouched\n":
+            return [f"[bundle] the manifest write followed a planted link: {said.getvalue().strip()}"]
+    return []
+
+
 def main() -> int:
     failures = []
 
@@ -1191,6 +1217,7 @@ def main() -> int:
     failures += check_packs_across_releases(flux_validator)
     failures += check_schema_id_refusals(flux_validator)
     failures += check_pack_refuses_symlinks(flux_validator)
+    failures += check_manifest_write_never_follows_a_link(flux_validator)
 
     # a bundle that does not validate must never be packed
     with tempfile.TemporaryDirectory() as tmp:
@@ -1235,6 +1262,7 @@ def main() -> int:
         + 7   # RFC-09 across releases: window resolves, 0.5.0 and 0.5.1 packs verify, named schema
               # applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
         + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link
+        + 1   # RFC-09 the manifest write never follows a link that appears after that refusal
     )
     if failures:
         print(f"FAIL — {len(failures)}/{total} checks failed")
