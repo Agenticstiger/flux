@@ -27,10 +27,11 @@ digest.
 
 It also solves three mechanical problems:
 
-- **Version skew** — `fluidVersion` is an exact vendored version or a semver
-  range resolved against the vendored set (`0.7.3`–`0.7.6`); either way a
+- **Version skew**: `fluidVersion` is an exact vendored version or a semver
+  range resolved against the vendored releases (0.7.3 to 0.7.6). Either way a
   contract can't silently target a FLUID version the toolchain has never seen,
-  and ranges don't freeze the seam to a point release.
+  and ranges don't pin the seam to a point release. A FLUID preview (0.7.7) is
+  vendored from a pinned commit, and only an exact pin selects it.
 - **Dialect boundary** — FLUX and FLUID schemas evolve independently; each
   document is validated against *its own* schema, not through a cross-schema
   `$ref`.
@@ -47,7 +48,8 @@ For every `emits[]` entry, [`scripts/validate.py`](https://github.com/Agenticsti
 2. validates that document against the vendored FLUID schema for the pinned
    `fluidVersion` — an invalid contract fails the bundle (and every
    `.fluid.yml` is validated even if nothing references it);
-3. asserts the document's own `fluidVersion` satisfies the pin or range;
+3. asserts the document's own `fluidVersion` satisfies the pin or range, and
+   that a range never selects a FLUID preview (only an exact pin does);
 4. asserts `exposeId` is a member of the product's `exposes[]`;
 5. verifies `provenance.contractDigest` against the in-bundle contract —
    contract drift after proving fails the bundle;

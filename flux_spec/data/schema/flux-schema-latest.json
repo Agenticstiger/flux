@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenticstiger.github.io/flux/schema/flux-schema-0.5.1.json",
+  "$id": "https://agenticstiger.github.io/flux/schema/flux-schema-0.5.2.json",
   "title": "FLUX Document Schema",
-  "description": "Open standard JSON Schema for the FLUX v0.5.1 declarative specification. A FLUX document declares one of nineteen kinds; the discovery-side sibling of the FLUID data-product contract standard. Cross-document checks (reference resolution, weight sums, state membership, FLUID seam conformance) are enforced by the offline reference validator, not by this schema alone.",
+  "description": "Open standard JSON Schema for the FLUX v0.5.2 declarative specification. A FLUX document declares one of nineteen kinds; the discovery-side sibling of the FLUID data-product contract standard. Cross-document checks (reference resolution, weight sums, state membership, FLUID seam conformance) are enforced by the offline reference validator, not by this schema alone.",
   "type": "object",
   "required": [
     "fluxVersion",
@@ -21,7 +21,8 @@
         "0.4.0",
         "0.4.1",
         "0.5.0",
-        "0.5.1"
+        "0.5.1",
+        "0.5.2"
       ],
       "description": "The version of the FLUX specification this document targets. Each published schema file accepts the versions in its declared compatibility window."
     },
@@ -1388,7 +1389,8 @@
                             "0.7.3",
                             "0.7.4",
                             "0.7.5",
-                            "0.7.6"
+                            "0.7.6",
+                            "0.7.7"
                           ]
                         },
                         {
@@ -1396,7 +1398,7 @@
                           "pattern": "^[~^]\\d+\\.\\d+(\\.\\d+)?$"
                         }
                       ],
-                      "description": "RFC-06: an exact vendored FLUID version (as before) or a semver range (^0.7.3, ~0.7.4) resolved against the vendored compatibility set. The referenced document's own fluidVersion must satisfy the pin or range, and at least one vendored schema must satisfy a range (validator-enforced)."
+                      "description": "RFC-06: an exact vendored FLUID version (as before) or a semver range (^0.7.3, ~0.7.4) resolved against the vendored compatibility set. The referenced document's own fluidVersion must satisfy the pin or range, and at least one vendored schema must satisfy a range (validator-enforced). 0.7.7 is a FLUID preview, vendored from a pinned commit: only the exact pin \"0.7.7\" selects it, and a range never does (validator-enforced)."
                     },
                     "minCredibility": {
                       "$ref": "#/$defs/unitInterval",

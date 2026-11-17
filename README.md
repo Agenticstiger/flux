@@ -103,7 +103,7 @@ Point the same commands at your own bundle directory; the clone is only for the 
 
 Two layers, both offline (no cloud, no running engine):
 
-1. **Schema** — every `*.flux.yml` against [`schema/flux-schema-0.5.1.json`](schema/flux-schema-0.5.1.json)
+1. **Schema**: every `*.flux.yml` against [`schema/flux-schema-0.5.2.json`](schema/flux-schema-0.5.2.json)
    (JSON Schema 2020-12, closed specs, typed everything).
 2. **Cross-document** — every reference resolves to the right kind (no
    dangling links), mixes and weights sum to 1, transitions stay inside their
@@ -170,6 +170,7 @@ schema/          flux-schema-<version>.json (+ -latest alias) — normative
 schema-diffs/    one diff document per version pair
 examples/        validated bundles (CI-enforced)
 vendor/fluid/    vendored FLUID schemas the seam validates against
+vendor/fluid-preview/  FLUID previews, pinned to a commit and a sha256 (pins.json)
 flux_spec/       the flux-spec package: validate.py · enforce.py (RFC-04) · bundle.py (RFC-09)
 scripts/         validate.py / enforce.py / bundle.py — thin CLI shims onto flux_spec
 tests/           regression suite + published enforcement conformance vectors

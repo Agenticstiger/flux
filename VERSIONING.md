@@ -47,6 +47,30 @@ green bundle fails.
 ## The FLUID seam window
 
 `Simulation.emits[].fluidVersion` enumerates exactly the FLUID schema versions
-vendored under `vendor/fluid/`. Adding a FLUID version to the window is
-additive; dropping one is breaking. The vendored files are upstream FLUID
+vendored under `vendor/fluid/` and `vendor/fluid-preview/`. Adding a FLUID
+version to the window is additive; dropping one is breaking. The vendored files are upstream FLUID
 releases, verbatim — never patched locally.
+
+### FLUID previews
+
+A FLUID version that FLUID has not released yet can be vendored as a preview,
+in `vendor/fluid-preview/`, when the engine needs it before the release. A
+preview is copied verbatim from the repository where FLUID's schema is written
+(forge-cli), at one full commit, and `vendor/fluid-preview/pins.json` records
+the repository, the path, that commit and the sha256 of the bytes. CI
+re-creates every preview from its pin with `scripts/sync-fluid-preview.py` and
+fails on any byte difference.
+
+- Only an exact pin selects a preview. A semver range resolves against the
+  vendored releases only, so `^0.7.3` never reaches a preview. This is the rule
+  node-semver applies to prereleases, and the one FLUID's own tooling applies
+  to a preview schema: it counts only where a contract declares it.
+- A pin moves only through a flux-spec PR that re-pins it
+  (`scripts/sync-fluid-preview.py --repin VERSION COMMIT`), and the move ships
+  in a specification release with a schema-diff note. A preview can change
+  between two such releases.
+- When FLUID releases the version, the next specification release vendors the
+  release in `vendor/fluid/` and removes the preview and its entry in
+  `pins.json` (the file stays, with an empty list once no preview is left). An
+  exact pin keeps working, ranges start to reach the version, and the schema
+  diff names anything the release changed from the preview.

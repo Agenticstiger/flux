@@ -12,6 +12,9 @@ Run: python3 tests/test_regression.py   (exit 0 = green)
 from __future__ import annotations
 
 import copy
+import functools
+import hashlib
+import importlib.util
 import io
 import json
 import shutil
@@ -25,7 +28,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
-from validate import Bundle  # noqa: E402
+from validate import Bundle, canonical_digest  # noqa: E402
 import enforce  # noqa: E402
 import bundle as bundle_tool  # noqa: E402
 
@@ -35,9 +38,9 @@ EXAMPLES = REPO / "examples" / "telco-payment-recovery"
 TOWERS_EXAMPLE = REPO / "examples" / "towers-tenant-renewal"
 
 
-def envelope(kind, doc_id="doc-under-test", **spec):
+def envelope(kind, doc_id="doc-under-test", *, flux_version="0.3.0", **spec):
     return {
-        "fluxVersion": "0.3.0",
+        "fluxVersion": flux_version,
         "kind": kind,
         "id": doc_id,
         "name": "Doc under test",
@@ -63,10 +66,7 @@ sim_lowercase_tz = envelope(
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.5"}],
 )
 
-def envelope_040(kind, doc_id="doc-under-test", **spec):
-    d = envelope(kind, doc_id, **spec)
-    d["fluxVersion"] = "0.4.0"
-    return d
+envelope_040 = functools.partial(envelope, flux_version="0.4.0")
 
 
 ext_ns = envelope_040("Segment", query="x")
@@ -107,10 +107,7 @@ versioned_doc = envelope_040("Module", resources=["sig-x"])
 versioned_doc["version"] = "2.1.3"
 
 
-def envelope_041(kind, doc_id="doc-under-test", **spec):
-    d = envelope(kind, doc_id, **spec)
-    d["fluxVersion"] = "0.4.1"
-    return d
+envelope_041 = functools.partial(envelope, flux_version="0.4.1")
 
 
 PLAYBACK_BASE = {
@@ -136,20 +133,28 @@ sim_range_prov = envelope_041(
 )
 sim_unvendored_exact = envelope_041(
     "Simulation", worldRef="w",
-    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
+    # 0.7.7 is vendored as a preview since 0.5.2; 0.7.8 is vendored nowhere
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.8"}],
 )
 
 
-def envelope_051(kind, doc_id="doc-under-test", **spec):
-    d = envelope(kind, doc_id, **spec)
-    d["fluxVersion"] = "0.5.1"
-    return d
+envelope_051 = functools.partial(envelope, flux_version="0.5.1")
 
 
 # 0.5.1: the seam window widens to the newly vendored FLUID 0.7.6
 sim_exact_076 = envelope_051(
     "Simulation", worldRef="w",
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.6"}],
+)
+
+
+envelope_052 = functools.partial(envelope, flux_version="0.5.2")
+
+
+# 0.5.2: the seam window gains the FLUID 0.7.7 preview, selected by an exact pin
+sim_exact_077 = envelope_052(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
 )
 sim_garbage_range = envelope_041(
     "Simulation", worldRef="w",
@@ -162,6 +167,7 @@ sim_bad_digest = envelope_041(
 )
 
 CASES_PASS = {
+    "0.5.2: exact FLUID 0.7.7 (preview) pin at the seam": sim_exact_077,
     "0.5.1: exact FLUID 0.7.6 pin at the seam": sim_exact_076,
     "RFC-05: playback scorecard": pb_scorecard,
     "RFC-06: seam range + provenance + minCredibility": sim_range_prov,
@@ -501,6 +507,221 @@ VALIDATOR_ROBUSTNESS = {
 }
 
 
+# --- 0.5.2: the FLUID 0.7.7 preview --------------------------------------------
+
+PREVIEW_DIR = REPO / "vendor" / "fluid-preview"
+RELEASE_DIR = REPO / "vendor" / "fluid"
+TOWERS_CONTRACT = "tenant-renewal-risk.fluid.yml"
+TOWERS_SIMULATION = "simulation.flux.yml"
+
+#: The towers renewal-risk rows join a tenant table on a composite key: a
+#: tenant is one operator in one market.
+COMPOSITE_KEY = {
+    "name": "risk_to_tenant",
+    "to": "tenant",
+    "fromColumns": ["tenant_id", "country"],
+    "toColumns": ["tenant_id", "country"],
+    "cardinality": "many_to_one",
+    "joinType": "inner",
+}
+
+
+def _load_sync_tool():
+    spec = importlib.util.spec_from_file_location("sync_fluid_preview", REPO / "scripts" / "sync-fluid-preview.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _with_relationship(contract: dict, fluid_version: str, relationship: dict) -> None:
+    """Give the towers contract a tenant expose and *relationship* to it."""
+    contract["fluidVersion"] = fluid_version
+    risk = contract["exposes"][0]
+    tenant = {
+        "exposeId": "tenant",
+        "kind": "table",
+        "contract": {
+            "schema": [
+                {"name": "tenant_id", "type": "STRING", "required": True},
+                {"name": "country", "type": "STRING", "required": True},
+                {"name": "tenant_segment", "type": "STRING", "required": True},
+            ]
+        },
+        "binding": copy.deepcopy(risk["binding"]),
+    }
+    tenant["binding"]["location"]["table"] = "tenant"
+    contract["exposes"].append(tenant)
+    risk["semantics"] = {"relationships": [relationship]}
+
+
+def _towers_on(bundle: Path, fluid_version: str, emit_pin: str, relationship: dict = COMPOSITE_KEY) -> None:
+    """The towers bundle with its contract on *fluid_version*, carrying a
+    relationship, and its emit pinned to *emit_pin* with a re-pinned digest."""
+    shutil.copytree(TOWERS_EXAMPLE, bundle)
+    contract_path = bundle / TOWERS_CONTRACT
+    contract = yaml.safe_load(contract_path.read_text())
+    _with_relationship(contract, fluid_version, copy.deepcopy(relationship))
+    contract_path.write_text(yaml.safe_dump(contract, sort_keys=False))
+
+    def pin(sim):
+        sim["fluxVersion"] = "0.5.2"
+        emit = sim["spec"]["emits"][0]
+        emit["fluidVersion"] = emit_pin
+        emit["provenance"]["contractDigest"] = "sha256:" + canonical_digest(contract)
+
+    mutate_yaml(bundle, TOWERS_SIMULATION, pin)
+
+
+def _move_key(d):
+    # the contract changes after the Simulation pinned its digest: the
+    # composite key's column order is swapped on both sides
+    rel = d["exposes"][0]["semantics"]["relationships"][0]
+    rel["fromColumns"].reverse()
+    rel["toColumns"].reverse()
+
+
+def _accepted_fluid_versions(schema_bytes: bytes) -> list:
+    """The fluidVersion values a FLUID schema accepts; none when it is not one."""
+    try:
+        return json.loads(schema_bytes)["properties"]["fluidVersion"]["enum"]
+    except (ValueError, KeyError, TypeError):
+        return []
+
+
+def _check_preview_pins(pins: list[dict]) -> list[str]:
+    """Every preview file has one pin, and the pin names its bytes."""
+    problems = []
+    files = sorted(p.name for p in PREVIEW_DIR.glob("fluid-schema-*.json"))
+    if sorted(pin["file"] for pin in pins) != files:
+        problems.append(f"pinned files {sorted(pin['file'] for pin in pins)} != vendored files {files}")
+    releases = {p.stem.replace("fluid-schema-", "") for p in RELEASE_DIR.glob("fluid-schema-*.json")}
+    for pin in pins:
+        path = PREVIEW_DIR / pin["file"]
+        if path.is_symlink():
+            problems.append(f"{pin['file']} is a symlink, not a vendored copy")
+        data = path.read_bytes() if path.is_file() else b""
+        if hashlib.sha256(data).hexdigest() != pin["sha256"]:
+            problems.append(f"{pin['file']} bytes do not match the pinned sha256 (re-run scripts/sync-fluid-preview.py)")
+        if (pin["repository"], pin["path"]) != ("https://github.com/Agenticstiger/forge-cli", f"fluid_build/schemas/{pin['file']}"):
+            problems.append(f"{pin['file']} is not pinned to forge-cli's fluid_build/schemas/: {pin['repository']} {pin['path']}")
+        if pin["fluidVersion"] in releases:
+            problems.append(f"FLUID {pin['fluidVersion']} is vendored as a release and as a preview")
+        if pin["fluidVersion"] not in _accepted_fluid_versions(data):
+            problems.append(f"{pin['file']} does not accept fluidVersion {pin['fluidVersion']}")
+    return ["[preview] pins do not name the vendored previews: " + "; ".join(problems)] if problems else []
+
+
+def _check_seam_window(pins: list[dict]) -> list[str]:
+    """The seam window is exactly the vendored FLUID versions, releases and previews."""
+    simulation = next(
+        branch["then"] for branch in SCHEMA["allOf"]
+        if branch.get("if", {}).get("properties", {}).get("kind", {}).get("const") == "Simulation"
+    )
+    window = simulation["properties"]["spec"]["properties"]["emits"]["items"]["properties"]["fluidVersion"]["anyOf"][0]["enum"]
+    releases = {p.stem.replace("fluid-schema-", "") for p in RELEASE_DIR.glob("fluid-schema-*.json")}
+    vendored = sorted(releases | {pin["fluidVersion"] for pin in pins})
+    if sorted(window) != vendored:
+        return [f"[preview] the seam window {window} is not exactly the vendored FLUID versions {vendored}"]
+    return []
+
+
+def _check_bad_pins(sync_tool, good: dict) -> list[str]:
+    """A pin that could move, or point outside its repository, is refused."""
+    failures = []
+    for label, change in {
+        "a branch for a commit": {"commit": "main"},
+        "a short commit": {"commit": good.get("commit", "")[:12]},
+        "a path that climbs out of the repository": {"path": "fluid_build/../../etc/fluid-schema-0.7.7.json"},
+        "a repository that is not on GitHub": {"repository": "https://example.com/forge-cli"},
+        "an owner that is only dots": {"repository": "https://github.com/../forge-cli"},
+        "a commit with a trailing newline": {"commit": good.get("commit", "") + "\n"},
+        "a file that does not hold its version": {"fluidVersion": "0.7.8"},
+    }.items():
+        try:
+            sync_tool.check_pin({**good, **change})
+        except sync_tool.PinError:
+            continue
+        failures.append(f"[preview] check_pin accepted {label}")
+    return failures
+
+
+def _check_sync_refusals(sync_tool) -> list[str]:
+    """A pins file that is not JSON, and bytes that are not a FLUID schema, are refused."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        broken = Path(tmp) / "pins.json"
+        broken.write_text("{", encoding="utf-8")
+        try:
+            sync_tool.load_pins(broken)
+            failures.append("[preview] load_pins accepted a pins file that is not JSON")
+        except sync_tool.PinError:
+            pass
+    pin = {"path": "p", "commit": "c", "fluidVersion": "0.7.7"}
+    for label, data in {"not JSON": b"{", "no fluidVersion enum": b"{}",
+                        "another version": b'{"properties": {"fluidVersion": {"enum": ["0.7.6"]}}}'}.items():
+        try:
+            sync_tool.check_schema(pin, data)
+            failures.append(f"[preview] check_schema accepted bytes that are {label}")
+        except sync_tool.FetchError:
+            pass
+    return failures
+
+
+def check_fluid_previews() -> list[str]:
+    """The pins name the vendored bytes, the seam window is exactly the vendored
+    set, and the immutable 0.5.1 file still refuses the preview pin."""
+    sync_tool = _load_sync_tool()
+    try:
+        pins = sync_tool.load_pins(PREVIEW_DIR / "pins.json")
+    except Exception as exc:  # noqa: BLE001 - a bad pin file is the failure
+        return [f"[preview] pins.json does not load: {type(exc).__name__}: {exc}"]
+    failures = _check_preview_pins(pins) + _check_seam_window(pins) + _check_bad_pins(sync_tool, pins[0] if pins else {})
+    failures += _check_sync_refusals(sync_tool)
+    # released schema files are immutable: 0.5.1 still refuses the 0.7.7 pin
+    schema_051 = Draft202012Validator(json.loads((REPO / "schema" / "flux-schema-0.5.1.json").read_text()))
+    if not list(schema_051.iter_errors({**sim_exact_077, "fluxVersion": "0.5.1"})):
+        failures.append("[schema] an exact FLUID 0.7.7 pin should fail the immutable 0.5.1 schema")
+    return failures
+
+
+def check_preview_bundles(flux_validator) -> list[str]:
+    """An exact pin selects the 0.7.7 preview and a composite-key relationship
+    validates; a moved key changes the digest; a broken relationship fails the
+    preview schema; a range never selects it; a 0.7.6 contract cannot carry
+    relationships."""
+    failures = []
+    cases = {
+        "exact": ("0.7.7", "0.7.7", COMPOSITE_KEY),
+        "broken": ("0.7.7", "0.7.7", {k: v for k, v in COMPOSITE_KEY.items() if k != "cardinality"}),
+        "range": ("0.7.7", "^0.7.3", COMPOSITE_KEY),
+        "0.7.6": ("0.7.6", "0.7.6", COMPOSITE_KEY),
+    }
+    expected = {
+        "broken": (lambda e: "fails FLUID 0.7.7 (preview)" in e and "'cardinality' is a required property" in e,
+                   "a relationship without a cardinality passed the 0.7.7 preview"),
+        "range": (lambda e: "a range never selects a preview" in e and 'pin fluidVersion "0.7.7" exactly' in e,
+                  "a range selected the 0.7.7 preview"),
+        "0.7.6": (lambda e: "fails FLUID 0.7.6" in e and "relationships" in e, "a 0.7.6 contract carried relationships"),
+    }
+    for label, (fluid_version, emit_pin, relationship) in cases.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            _towers_on(bundle, fluid_version, emit_pin, relationship=relationship)
+            errors = Bundle(bundle, flux_validator).run()
+            if label == "exact":
+                if errors:
+                    failures.append(f"[validator] an exact 0.7.7 pin with a composite-key relationship failed: {errors[:5]}")
+                mutate_yaml(bundle, TOWERS_CONTRACT, _move_key)
+                errors = Bundle(bundle, flux_validator).run()
+                if not any("provenance.contractDigest mismatch" in e for e in errors):
+                    failures.append(f"[validator] a moved key left the contract digest unchanged: {errors[:3]}")
+                continue
+            matches, message = expected[label]
+            if not any(matches(e) for e in errors):
+                failures.append(f"[validator] {message}: {errors[:3]}")
+    return failures
+
+
 def main() -> int:
     failures = []
 
@@ -554,6 +775,10 @@ def main() -> int:
         errors = Bundle(bundle, flux_validator).run()
         if not any("fails FLUID 0.7.6" in e for e in errors):
             failures.append(f"[validator] a broken FLUID 0.7.6 contract was not caught: {errors[:3]}")
+
+    # 0.5.2: the FLUID 0.7.7 preview, its pins and the seam's opt-in rule
+    failures += check_fluid_previews()
+    failures += check_preview_bundles(flux_validator)
 
     # ref-like keys inside free-form payloads must not be flagged
     with tempfile.TemporaryDirectory() as tmp:
@@ -869,6 +1094,8 @@ def main() -> int:
         len(CASES_PASS) + len(CASES_REJECT) + 1
         + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 6
         + 3   # 0.5.1: towers bundle green, broken 0.7.6 contract caught, 0.7.6 refused by 0.5.0
+        + 20  # 0.5.2: pins, seam window, 7 bad pins, 4 sync refusals, 0.7.7 green, moved key, broken relationship,
+              # range refused, 0.7.6 relationships refused, 0.7.7 refused by 0.5.1
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2

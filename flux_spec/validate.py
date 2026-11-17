@@ -15,10 +15,12 @@ then the cross-document guarantees the schema alone cannot express:
   * skills bindings respect the document's agentPolicy (model allow-list,
     per-skill token budget)
   * every .fluid.yml in the bundle validates against the vendored FLUID schema
-    for its declared fluidVersion (referenced or not)
+    for its declared fluidVersion (referenced or not): a release in
+    vendor/fluid/, or a pinned preview in vendor/fluid-preview/
   * the FLUID seam: Simulation.emits[].productRef resolves to a .fluid.yml in
-    the bundle, the pinned fluidVersion matches the document's declaration,
-    and exposeId is a member of its exposes[]
+    the bundle, the pinned fluidVersion matches the document's declaration
+    (a semver range never selects a preview; only an exact pin does), and
+    exposeId is a member of its exposes[]
   * consent strictness at the seam: an emitted contract's expose
     policy.agentPolicy must not allow a use case denied by any ConsentProfile
     gating the Simulation's campaigns, and (when both enumerate allow-lists)
@@ -38,6 +40,7 @@ Runs fully offline: no network, no running engine. Exit code 0 = green.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -48,10 +51,32 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("validate.py requires: pip install jsonschema pyyaml rfc8785")
 
-from ._paths import REPO, schema_dir, vendor_fluid_dir
+from ._paths import REPO, schema_dir, vendor_fluid_dir, vendor_fluid_preview_dir
 
 FLUX_SCHEMA_PATH = schema_dir() / "flux-schema-latest.json"
 FLUID_VENDOR_DIR = vendor_fluid_dir()
+FLUID_PREVIEW_DIR = vendor_fluid_preview_dir()
+
+_FLUID_VERSION = re.compile(r"\d+\.\d+\.\d+")
+
+
+def fluid_schema_file(version: str) -> Path | None:
+    """The vendored FLUID schema for *version*: a release, else a preview, else None.
+
+    Releases live in vendor/fluid/, verbatim from FLUID; previews in
+    vendor/fluid-preview/, each pinned to a commit and a sha256 (pins.json).
+    """
+    if not isinstance(version, str) or not _FLUID_VERSION.fullmatch(version):
+        return None
+    for directory in (FLUID_VENDOR_DIR, FLUID_PREVIEW_DIR):
+        candidate = directory / f"fluid-schema-{version}.json"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _vendored_versions(directory: Path) -> list[str]:
+    return sorted(p.stem.replace("fluid-schema-", "") for p in directory.glob("fluid-schema-*.json"))
 
 # *Ref field -> kind it must resolve to (None = any kind)
 REF_KINDS = {
@@ -217,10 +242,10 @@ class Bundle:
 
     def _fluid_validator(self, version):
         if version not in self._fluid_validators:
-            schema_file = FLUID_VENDOR_DIR / f"fluid-schema-{version}.json"
+            schema_file = fluid_schema_file(version)
             self._fluid_validators[version] = (
                 Draft202012Validator(json.loads(schema_file.read_text()), format_checker=FormatChecker())
-                if schema_file.exists()
+                if schema_file is not None
                 else None
             )
         return self._fluid_validators[version]
@@ -394,17 +419,26 @@ class Bundle:
 
     def check_fluid_documents(self):
         """Every .fluid.yml in the bundle must be valid FLUID — referenced or not."""
+        previews = set(self._preview_fluid_versions())
         for doc_id, (path, doc) in self.fluid_docs.items():
             declared = doc.get("fluidVersion")
             validator = self._fluid_validator(declared) if isinstance(declared, str) else None
             if validator is None:
-                self.err(path.name, f"declared fluidVersion '{declared}' has no vendored schema in vendor/fluid/")
+                self.err(path.name, f"declared fluidVersion '{declared}' has no vendored schema in vendor/fluid/ or vendor/fluid-preview/")
                 continue
+            label = f"{declared} (preview)" if declared in previews else declared
             for e in sorted(validator.iter_errors(doc), key=lambda e: e.json_path)[:10]:
-                self.err(path.name, f"fails FLUID {declared}: {e.json_path}: {e.message}")
+                self.err(path.name, f"fails FLUID {label}: {e.json_path}: {e.message}")
 
     def _vendored_fluid_versions(self):
-        return sorted(p.stem.replace("fluid-schema-", "") for p in FLUID_VENDOR_DIR.glob("fluid-schema-*.json"))
+        """The vendored FLUID releases: the set a semver range resolves against."""
+        return _vendored_versions(FLUID_VENDOR_DIR)
+
+    def _preview_fluid_versions(self):
+        """The vendored FLUID previews: only an exact pin selects one. A version
+        vendored as a release too is a release, as in fluid_schema_file."""
+        releases = set(self._vendored_fluid_versions())
+        return [v for v in _vendored_versions(FLUID_PREVIEW_DIR) if v not in releases]
 
     def check_fluid_seam(self):
         for doc_id, doc in self.flux_docs.items():
@@ -422,11 +456,15 @@ class Bundle:
                 fluid_path, fluid_doc = entry
                 declared = fluid_doc.get("fluidVersion")
                 if isinstance(fluid_version, str) and fluid_version[:1] in "^~":
-                    # RFC-06: a semver range, resolved against the vendored set
+                    # RFC-06: a semver range, resolved against the vendored
+                    # releases. A preview is not one of them: as with a
+                    # prerelease under node-semver, only an exact pin selects it.
                     rng = fluid_version
                     if not any(semver_satisfies(v, rng) for v in self._vendored_fluid_versions()):
                         self.err(doc_id, f"{where}: no vendored FLUID version satisfies range '{rng}' (vendored: {self._vendored_fluid_versions()})")
-                    if not (isinstance(declared, str) and semver_satisfies(declared, rng)):
+                    if declared in self._preview_fluid_versions():
+                        self.err(doc_id, f"{where}: {fluid_path.name} declares FLUID {declared}, a preview, and a range never selects a preview: pin fluidVersion \"{declared}\" exactly to opt in")
+                    elif not (isinstance(declared, str) and semver_satisfies(declared, rng)):
                         self.err(doc_id, f"{where}: {fluid_path.name} declares fluidVersion {declared}, which does not satisfy the pinned range '{rng}'")
                 elif declared != fluid_version:
                     self.err(doc_id, f"{where}: pinned fluidVersion {fluid_version} but {fluid_path.name} declares {declared}")
