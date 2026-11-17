@@ -152,12 +152,14 @@ After `apply`, `verify` checks conformance again from the files on disk. Every s
 
 ## Who owns the schema
 
-The engine does not own the FLUID schema or the FLUX schema. It depends on the published FLUX specification package for validation, and that package carries the FLUID schemas a contract may target: 0.7.3 to 0.7.5 in flux-spec 0.5.0, and 0.7.3 to 0.7.6 from FLUX 0.5.1 on. A contract cannot silently target a version the toolchain has not seen. If a range matches none of them, validation fails. When FLUID moves, the schemas move with the package, not with this engine.
+The engine does not own the FLUID schema or the FLUX schema. It depends on the published FLUX specification package for validation, and that package carries the FLUID schemas a contract may target: 0.7.3 to 0.7.5 in flux-spec 0.5.0, and 0.7.3 to 0.7.6 from FLUX 0.5.1 on. FLUX 0.5.2 adds FLUID 0.7.7 as a preview, which only an exact `fluidVersion` selects. A contract cannot silently target a version the toolchain has not seen. If a range matches none of them, validation fails. When FLUID moves, the schemas move with the package, not with this engine.
 
 ## What the seam does not do
 
 It does not publish. In this release the engine writes NDJSON files in a run directory and an evidence pack. It sends nothing to a Kafka topic or any platform.
 
 The contract's `binding` block is read for one thing: the first value of `binding.location` names the output dataset in `lineage.ndjson`. Here that is `billing.payment-recovery.v1`. The `platform` value is not read.
+
+It does not generate related tables together yet. From FLUID 0.7.7 on, the engine reads a contract's primary and foreign keys from the contract, refuses one that does not resolve, and refuses a Simulation that restates one. In an emit with a `fidelity` block it generates a one-column text key as an identifier. But a composite key, a key of another type and a foreign key's values are still drawn column by column, so a foreign key's values are not taken from the rows of the table it names ([KERNEL-SPEC.md](../spec/KERNEL-SPEC.md) §8.1). [Using the seam](../how-to/use-the-fluid-seam.md#keys-from-the-contract) shows a contract with keys.
 
 For more, see [using the seam](../how-to/use-the-fluid-seam.md) and [the evidence pack](./the-evidence-pack.md).

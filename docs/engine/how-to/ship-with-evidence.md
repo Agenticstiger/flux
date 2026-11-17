@@ -93,7 +93,7 @@ No validity claim is made (validity: not asserted): this run's predicted outcome
 No column fell back to a type default: every column was produced by a declaration, a copy or a derivation.
 ```
 
-The report records what was run and what was checked. It does not say the simulated customers match real ones. Its last section says so itself. The section before it says how each column was made; the archive also holds the same record as `run/column-provenance.json`, for a tool to read.
+The report records what was run and what was checked. It does not say the simulated customers match real ones. Its last section says so itself. The section before it, Column Provenance, says how each column was made; the archive also holds the same record as `run/column-provenance.json`, for a tool to read.
 
 ## Declare a fidelity block
 
@@ -262,11 +262,13 @@ more: fluxsim explain FLX-8001  https://agenticstiger.github.io/flux/engine/refe
 
 ## Score against a pinned profile
 
-A Simulation can pin a profile, a document of aggregate statistics computed where the real data lives ([PROFILE-SPEC.md](../spec/PROFILE-SPEC.md)), in place of handing `ship` a slice. Hand the profile to every stage of the run with `--profile`:
+A Simulation can pin a profile, a document of aggregate statistics computed where the real data lives ([PROFILE-SPEC.md](../spec/PROFILE-SPEC.md)), in place of handing `ship` a slice. Hand the profile to every stage of the run with `--profile`. The profile stays outside the bundle directory, as the pack does here:
 
 ```text
-fluxsim run ./bundle --profile ./source.profile.json --verify --ship -o ../out
+fluxsim run . --profile ../source.profile.json --verify --ship -o ../out
 ```
+
+[Score a run against a profile](./score-a-run-against-a-profile.md) writes such a profile, pins it and runs this end to end.
 
 `verify` and `ship` then compare each emit's declared properties with the profile and score the run, per property, per table, per dimension and overall ([SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md)). `verify` prints the scores under its legs:
 
