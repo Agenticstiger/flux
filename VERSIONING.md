@@ -70,6 +70,7 @@ fails on any byte difference.
   in a specification release with a schema-diff note. A preview can change
   between two such releases.
 - When FLUID releases the version, the next specification release vendors the
-  release in `vendor/fluid/` and removes the preview and its pin. An exact pin
-  keeps working, ranges start to reach the version, and the schema diff names
-  anything the release changed from the preview.
+  release in `vendor/fluid/` and removes the preview and its entry in
+  `pins.json` (the file stays, with an empty list once no preview is left). An
+  exact pin keeps working, ranges start to reach the version, and the schema
+  diff names anything the release changed from the preview.

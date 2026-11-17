@@ -435,8 +435,10 @@ class Bundle:
         return _vendored_versions(FLUID_VENDOR_DIR)
 
     def _preview_fluid_versions(self):
-        """The vendored FLUID previews: only an exact pin selects one."""
-        return _vendored_versions(FLUID_PREVIEW_DIR)
+        """The vendored FLUID previews: only an exact pin selects one. A version
+        vendored as a release too is a release, as in fluid_schema_file."""
+        releases = set(self._vendored_fluid_versions())
+        return [v for v in _vendored_versions(FLUID_PREVIEW_DIR) if v not in releases]
 
     def check_fluid_seam(self):
         for doc_id, doc in self.flux_docs.items():

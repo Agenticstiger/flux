@@ -645,6 +645,28 @@ def _check_bad_pins(sync_tool, good: dict) -> list[str]:
     return failures
 
 
+def _check_sync_refusals(sync_tool) -> list[str]:
+    """A pins file that is not JSON, and bytes that are not a FLUID schema, are refused."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        broken = Path(tmp) / "pins.json"
+        broken.write_text("{", encoding="utf-8")
+        try:
+            sync_tool.load_pins(broken)
+            failures.append("[preview] load_pins accepted a pins file that is not JSON")
+        except sync_tool.PinError:
+            pass
+    pin = {"path": "p", "commit": "c", "fluidVersion": "0.7.7"}
+    for label, data in {"not JSON": b"{", "no fluidVersion enum": b"{}",
+                        "another version": b'{"properties": {"fluidVersion": {"enum": ["0.7.6"]}}}'}.items():
+        try:
+            sync_tool.check_schema(pin, data)
+            failures.append(f"[preview] check_schema accepted bytes that are {label}")
+        except sync_tool.FetchError:
+            pass
+    return failures
+
+
 def check_fluid_previews() -> list[str]:
     """The pins name the vendored bytes, the seam window is exactly the vendored
     set, and the immutable 0.5.1 file still refuses the preview pin."""
@@ -654,6 +676,7 @@ def check_fluid_previews() -> list[str]:
     except Exception as exc:  # noqa: BLE001 - a bad pin file is the failure
         return [f"[preview] pins.json does not load: {type(exc).__name__}: {exc}"]
     failures = _check_preview_pins(pins) + _check_seam_window(pins) + _check_bad_pins(sync_tool, pins[0] if pins else {})
+    failures += _check_sync_refusals(sync_tool)
     # released schema files are immutable: 0.5.1 still refuses the 0.7.7 pin
     schema_051 = Draft202012Validator(json.loads((REPO / "schema" / "flux-schema-0.5.1.json").read_text()))
     if not list(schema_051.iter_errors({**sim_exact_077, "fluxVersion": "0.5.1"})):
@@ -674,7 +697,8 @@ def check_preview_bundles(flux_validator) -> list[str]:
         "0.7.6": ("0.7.6", "0.7.6", COMPOSITE_KEY),
     }
     expected = {
-        "broken": (lambda e: "fails FLUID 0.7.7 (preview)" in e, "a relationship without a cardinality passed the 0.7.7 preview"),
+        "broken": (lambda e: "fails FLUID 0.7.7 (preview)" in e and "'cardinality' is a required property" in e,
+                   "a relationship without a cardinality passed the 0.7.7 preview"),
         "range": (lambda e: "a range never selects a preview" in e and 'pin fluidVersion "0.7.7" exactly' in e,
                   "a range selected the 0.7.7 preview"),
         "0.7.6": (lambda e: "fails FLUID 0.7.6" in e and "relationships" in e, "a 0.7.6 contract carried relationships"),
@@ -1070,7 +1094,7 @@ def main() -> int:
         len(CASES_PASS) + len(CASES_REJECT) + 1
         + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 6
         + 3   # 0.5.1: towers bundle green, broken 0.7.6 contract caught, 0.7.6 refused by 0.5.0
-        + 16  # 0.5.2: pins, seam window, 7 bad pins, 0.7.7 green, moved key, broken relationship,
+        + 20  # 0.5.2: pins, seam window, 7 bad pins, 4 sync refusals, 0.7.7 green, moved key, broken relationship,
               # range refused, 0.7.6 relationships refused, 0.7.7 refused by 0.5.1
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid

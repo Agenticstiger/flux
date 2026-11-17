@@ -98,12 +98,14 @@ jobs:
           import json
           from flux_spec._paths import vendor_fluid_preview_dir
           from flux_spec.validate import fluid_schema_file
+          # pins.json stays when its last preview is released (VERSIONING.md), so
+          # an empty list is a valid state; every pinned preview must ship
           pins = json.loads((vendor_fluid_preview_dir() / "pins.json").read_text())["previews"]
-          assert pins, "no pinned FLUID preview in the wheel"
           for pin in pins:
               path = fluid_schema_file(pin["fluidVersion"])
               assert path is not None and path.name == pin["file"], f"FLUID {pin['fluidVersion']} preview is missing"
               print(f"ok  {path}")
+          print(f"ok  {len(pins)} pinned FLUID preview(s) in the wheel")
           EOF
 
   fluid-preview-in-sync:

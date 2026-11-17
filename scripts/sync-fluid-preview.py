@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -104,10 +105,20 @@ def check_pin(pin: object) -> dict:
     return pin
 
 
+def read_pins_document(path: Path = PINS_PATH) -> dict:
+    """The pins file as JSON, or PinError naming why it cannot be read."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise PinError(f"{path} cannot be read as JSON: {exc}") from exc
+    if not isinstance(document, dict):
+        raise PinError(f"{path.name} is not a JSON object")
+    return document
+
+
 def load_pins(path: Path = PINS_PATH) -> list[dict]:
     """Every pin in *path*, checked: one per file and one per FLUID version."""
-    document = json.loads(path.read_text(encoding="utf-8"))
-    previews = document.get("previews") if isinstance(document, dict) else None
+    previews = read_pins_document(path).get("previews")
     if not isinstance(previews, list):
         raise PinError(f"{path.name} has no 'previews' list")
     pins = [check_pin(pin) for pin in previews]
@@ -126,11 +137,14 @@ def fetch(pin: dict) -> bytes:
     """The bytes of the pinned file at the pinned commit."""
     source = os.environ.get("FLUID_PREVIEW_SOURCE")
     if source:
-        result = subprocess.run(
-            ["git", "-C", source, "show", f"{pin['commit']}:{pin['path']}"],
-            capture_output=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                ["git", "-C", source, "show", f"{pin['commit']}:{pin['path']}"],
+                capture_output=True,
+                check=False,
+            )
+        except OSError as exc:
+            raise FetchError(f"cannot run git to read {source}: {exc}") from exc
         if result.returncode != 0:
             message = result.stderr.decode("utf-8", "replace").strip()
             raise FetchError(f"{source} cannot show {pin['commit']}:{pin['path']}: {message}")
@@ -140,22 +154,36 @@ def fetch(pin: dict) -> bytes:
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 (https only)
             data = response.read(MAX_BYTES + 1)
-    except (urllib.error.URLError, OSError) as exc:
+    except (urllib.error.URLError, http.client.HTTPException, OSError) as exc:
         raise FetchError(f"cannot fetch {url}: {exc}") from exc
     if len(data) > MAX_BYTES:
         raise FetchError(f"{url} is larger than {MAX_BYTES} bytes, which no FLUID schema is")
     return data
 
 
-def _write_regular(path: Path, data: bytes) -> None:
-    """Write *data* to *path*, a regular file inside this repository.
+def _check_regular(path: Path) -> None:
+    """Refuse a write target that is a symlink or resolves outside this repository.
 
-    A committed symlink could point anywhere, so a vendored preview or its pins
-    file that is a link, or resolves outside the repository, is refused.
+    A committed symlink could point anywhere, and a vendored preview and its
+    pins file are regular files.
     """
     if path.is_symlink() or not path.resolve().is_relative_to(REPO.resolve()):
         raise PinError(f"{path} is a symlink or lies outside the repository: a vendored preview and its pins are regular files")
+
+
+def _write_regular(path: Path, data: bytes) -> None:
+    _check_regular(path)
     path.write_bytes(data)
+
+
+def check_schema(pin: dict, data: bytes) -> None:
+    """Refuse bytes that are not a FLUID JSON Schema accepting the pinned version."""
+    try:
+        accepted = json.loads(data)["properties"]["fluidVersion"]["enum"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise FetchError(f"{pin['path']} at {pin['commit']} is not a FLUID JSON Schema: {exc!r}") from exc
+    if not isinstance(accepted, list) or pin["fluidVersion"] not in accepted:
+        raise FetchError(f"{pin['path']} at {pin['commit']} does not accept fluidVersion {pin['fluidVersion']}")
 
 
 def _unpinned_files(pins: list[dict]) -> list[str]:
@@ -191,13 +219,18 @@ def repin(pins: list[dict], version: str, commit: str) -> int:
         print(f"REFUSED: no preview of FLUID {version} is pinned in pins.json", file=sys.stderr)
         return 2
     candidate = check_pin({**matches[0], "commit": commit})
+    target = PREVIEW_DIR / candidate["file"]
+    # Every check before the first write, so a refusal leaves the file and its pin in step.
+    document = read_pins_document()
+    _check_regular(target)
+    _check_regular(PINS_PATH)
     data = fetch(candidate)
+    check_schema(candidate, data)
     candidate["sha256"] = sha256_hex(data)
-    _write_regular(PREVIEW_DIR / candidate["file"], data)
     updated = [candidate if pin is matches[0] else pin for pin in pins]
-    document = json.loads(PINS_PATH.read_text(encoding="utf-8"))
     document["previews"] = [{key: pin[key] for key in PIN_FIELDS} for pin in updated]
-    _write_regular(PINS_PATH, (json.dumps(document, indent=2) + "\n").encode("utf-8"))
+    target.write_bytes(data)
+    PINS_PATH.write_bytes((json.dumps(document, indent=2) + "\n").encode("utf-8"))
     print(
         f"[sync-fluid-preview] FLUID {version} re-pinned to {commit} (sha256 {candidate['sha256']}). "
         "Next: python3 scripts/sync-package-data.py, and a schema-diff note in the flux-spec PR."

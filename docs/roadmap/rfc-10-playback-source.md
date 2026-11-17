@@ -187,7 +187,7 @@ Rollback is cheap until step 4. If this RFC is withdrawn after 0.6.0, `source` s
 
 ### The seam window
 
-The FLUID seam is jointly owned (GOVERNANCE.md, item 4), so this is checked against the current FLUID release. `data_profile` does not exist in any FLUID version vendored today (0.7.3 to 0.7.5). It is proposed for FLUID's open 0.7.7 preview. The implementation therefore has an order: FLUID ships the kind, FLUX vendors that FLUID version verbatim (VERSIONING.md vendors FLUID releases only, so whether a preview counts is open question 1), and only then can rule 2 pass for any bundle. Vendoring a new FLUID version also widens `Simulation.emits[].fluidVersion`, which is additive under VERSIONING.md.
+The FLUID seam is jointly owned (GOVERNANCE.md, item 4), so this is checked against the current FLUID release. `data_profile` does not exist in any FLUID version vendored today (the releases 0.7.3 to 0.7.6, and the 0.7.7 preview). It is proposed for FLUID's open 0.7.7 preview. The implementation therefore has an order: FLUID ships the kind, FLUX vendors that FLUID version verbatim (since FLUX 0.5.2 a preview can be vendored from a pinned commit, and only an exact pin selects it: VERSIONING.md, FLUID previews), and only then can rule 2 pass for any bundle. Vendoring a new FLUID version also widens `Simulation.emits[].fluidVersion`, which is additive under VERSIONING.md.
 
 ## What the implementation PR carries
 
@@ -213,6 +213,6 @@ A FLUX-native profile kind. It would restate on the FLUX side what FLUID already
 
 ## Open questions
 
-1. Vendor the FLUID preview that carries `data_profile`, or wait until FLUID promotes it to stable? The weekly vendor-sync job compares vendored copies with FLUID's published schemas, and a preview can still change.
+1. Vendor the FLUID preview that carries `data_profile`, or wait until FLUID promotes it to stable? The weekly vendor-sync job compares vendored copies with FLUID's published schemas, and a preview can still change. Answered in general by FLUX 0.5.2: a preview is vendored under `vendor/fluid-preview/`, pinned to a commit and a sha256, and re-pinned only in a spec release (VERSIONING.md, FLUID previews).
 2. FLUID gives `requiredPolicies` no checkable meaning. Should the validator check entries against the profile expose's declared policy (its `policy.agentPolicy` use cases, say), or keep a shape-only check until FLUID defines one?
 3. Should the scorecard name the profile states it calibrated on and backtested against (by sequence and digest), so it is visible that the backtest used a later state than the fit?
