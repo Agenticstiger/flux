@@ -18,8 +18,11 @@ headers can smuggle atime/ctime). Same inputs, same bytes — so two parties
 can compare bundles by digest alone.
 
 `verify` re-derives every digest and the Merkle root, re-validates the
-documents, and checks the attestation against reality. It needs nothing from
-the author: no engine, no network, no trust in the packer.
+documents against the schema the manifest names, and checks the attestation
+against reality. That schema must be inside this toolchain's compatibility
+window, so a pack made by an earlier release in the window still verifies
+after an upgrade. It needs nothing from the author: no engine, no network, no
+trust in the packer.
 
 Signing is deliberately transport-agnostic and detached: sign the manifest
 bytes with whatever your organisation already uses —
@@ -44,6 +47,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 import shutil
 import sys
 import tarfile
@@ -70,6 +74,50 @@ GENERATOR = "flux bundle 0.5.0"
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def accepted_schemas() -> dict[str, tuple[str, Path]]:
+    """The schemas `verify` re-validates a pack against: `$id` -> (version, file).
+
+    One per version in this toolchain's compatibility window, the `fluxVersion`
+    enum of the current schema (VERSIONING.md). The window is read from that
+    file rather than restated here, so a release that widens or resets it moves
+    what `verify` accepts with no edit to this module. Every released schema
+    ships with the package, immutable, so each version resolves to the file its
+    packs were validated against.
+
+    The lookup is keyed on the exact `$id` a manifest declares, the way
+    sigstore-python's `Bundle` accepts a closed set of bundle media types: an
+    id outside the set is refused, never mapped to the newest schema.
+    """
+    window = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))["properties"]["fluxVersion"]["enum"]
+    accepted = {}
+    for version in window:
+        path = schema_dir() / f"flux-schema-{version}.json"
+        schema_id = json.loads(path.read_text(encoding="utf-8")).get("$id") if path.is_file() else None
+        if schema_id:
+            accepted[schema_id] = (version, path)
+    return accepted
+
+
+def _schema_named(schema_id: str) -> tuple[Path | None, str]:
+    """The schema file a manifest's *schema_id* names, or None and the refusal."""
+    accepted = accepted_schemas()
+    if schema_id in accepted:
+        return accepted[schema_id][1], ""
+    window = ", ".join(version for version, _ in accepted.values())
+    return None, (f"schemaId {schema_id} is not a FLUX schema inside this toolchain's compatibility "
+                  f"window (FLUX {window}); verify the pack with a flux-spec release whose window includes it")
+
+
+def _validator_for(schema_path: Path, given) -> Draft202012Validator:
+    """A validator for the schema in *schema_path*: *given* when it was built
+    from that schema (same `$id`), else a new one with format checking."""
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    given_schema = getattr(given, "schema", None)
+    if isinstance(given_schema, dict) and given_schema.get("$id") == schema.get("$id"):
+        return given
+    return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
 def merkle_root(files: dict[str, str]) -> str:
@@ -149,6 +197,23 @@ def bundle_files(directory: Path, skip_signatures: bool = True) -> dict[str, str
     return out
 
 
+def _symlink_entries(directory: Path) -> list[str]:
+    """Every symlink in the bundle tree, as refusal messages. Empty means clean.
+
+    `bundle_files` reads through a link (`is_file()` follows it), so packing
+    one would archive its target's bytes: anything the packing process can
+    read, an ssh key or a .env, becomes content of a signed, distributed
+    artifact. `verify` refuses links inside an archive (`_extract_safely`),
+    and flux-engine refuses them before it packs; this is the same guard on
+    `pack`'s way in, with the message shape of both. `rglob` lists a linked
+    directory without descending into it.
+    """
+    return [
+        f"unsupported bundle entry (symlink): {path.relative_to(directory).as_posix()}"
+        for path in sorted(directory.rglob("*")) if path.is_symlink()
+    ]
+
+
 def collect_attestation(directory: Path, validator) -> tuple[dict, list[str]]:
     """Validate the bundle and describe what can honestly be attested."""
     b = Bundle(directory, validator)
@@ -205,6 +270,17 @@ def build_manifest(directory: Path, validator) -> tuple[dict, list[str]]:
     return manifest, []
 
 
+def _write_manifest(path: Path, manifest: dict) -> None:
+    """Write *manifest* to *path*, never through a link planted there: with
+    O_NOFOLLOW the open fails on a symlink instead of truncating its target.
+    `pack` refuses links before this point; this holds if one appears later.
+    A new manifest is owner-only: the packing user signs it, and its entry in
+    the archive carries the archive's own fixed mode."""
+    nofollow = getattr(os, "O_NOFOLLOW", 0)    # POSIX; elsewhere the pack-time refusal stands alone
+    with open(path, "w", encoding="utf-8", opener=lambda p, flags: os.open(p, flags | nofollow, 0o600)) as fh:
+        fh.write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+
 def _deterministic_info(name: str, size: int) -> tarfile.TarInfo:
     info = tarfile.TarInfo(name)
     info.size = size
@@ -220,6 +296,12 @@ def pack(directory: Path, out_dir: Path, validator) -> int:
     if not directory.name:
         print(f"[FAIL] {directory}: cannot determine a bundle name")
         return 1
+    links = _symlink_entries(directory)        # before anything reads through one
+    if links:
+        print(f"[FAIL] {directory}: a pack holds regular files only; replace each link with a copy of its file")
+        for link in links[:10]:
+            print(f"       {link}")
+        return 1
     manifest, errors = build_manifest(directory, validator)
     if errors:
         print(f"[FAIL] {directory}: bundle does not validate — refusing to pack")
@@ -228,7 +310,11 @@ def pack(directory: Path, out_dir: Path, validator) -> int:
         return 1
     Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text())).validate(manifest)
 
-    (directory / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    try:
+        _write_manifest(directory / MANIFEST_NAME, manifest)
+    except OSError as exc:
+        print(f"[FAIL] {directory}: cannot write {MANIFEST_NAME}: {exc.strerror or exc}")
+        return 1
     out_dir.mkdir(parents=True, exist_ok=True)
     archive = out_dir / f"{directory.name}.flux.tgz"
 
@@ -321,10 +407,15 @@ def _extract_safely(tar: tarfile.TarFile, root: Path, problems: list[str]) -> Pa
     return root / tops.pop()
 
 
-def verify(archive: Path, validator) -> int:
-    """Verify an archive offline. Always reports; never raises."""
+def verify(archive: Path, validator=None) -> int:
+    """Verify an archive offline. Always reports; never raises.
+
+    The documents are re-validated against the schema the manifest names, with
+    *validator* when it was built from that schema, else from the schema's file.
+    """
     problems: list[str] = []
     manifest = {}
+    schema_file = None
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -352,13 +443,15 @@ def verify(archive: Path, validator) -> int:
             if merkle_root(manifest["files"]) != manifest["merkleRoot"]:
                 problems.append("merkleRoot does not match the manifest file list")
 
-            # Everything the manifest asserts is re-derived, never trusted.
-            expected_schema_id = json.loads(SCHEMA_PATH.read_text())["$id"]
-            if manifest["schemaId"] != expected_schema_id:
-                problems.append(f"schemaId {manifest['schemaId']} is not this toolchain's schema ({expected_schema_id})")
-            rebuilt, errors = collect_attestation(directory, validator)
+            # Everything the manifest asserts is re-derived, never trusted. The
+            # schemaId only picks the schema to re-validate against, inside the window.
+            schema_file, refusal = _schema_named(manifest["schemaId"])
+            if schema_file is None:
+                problems.append(refusal)
+                raise _Rejected()
+            rebuilt, errors = collect_attestation(directory, _validator_for(schema_file, validator))
             if errors:
-                problems.append(f"bundle no longer validates ({len(errors)} errors, first: {errors[0]})")
+                problems.append(f"bundle no longer validates against {schema_file.name} ({len(errors)} errors, first: {errors[0]})")
             else:
                 if rebuilt["attestation"] != manifest["attestation"]:
                     problems.append("attestation does not match a fresh validation of the bundle")
@@ -382,6 +475,7 @@ def verify(archive: Path, validator) -> int:
         return 1
     print(f"[ok] {archive} — {len(manifest['files'])} files, merkle root verified, "
           f"attestation reproduced (profile={manifest['attestation']['profile']})")
+    print(f"     re-validated against {schema_file.name}, the schema the manifest names")
     print(f"     verify the signature separately, e.g. ssh-keygen -Y verify ... < {MANIFEST_NAME}")
     return 0
 

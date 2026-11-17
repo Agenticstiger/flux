@@ -36,6 +36,34 @@ Specification 0.5.2, additive
   [flux-engine#19](https://github.com/Agenticstiger/flux-engine/pull/19)
   removes that limit.
 
+- **bundle**: `verify` re-validates a pack against the schema its manifest's
+  `schemaId` names, when that schema is inside the compatibility window, so a
+  pack made by flux-spec 0.5.0 or 0.5.1 verifies under this release without a
+  re-pack (a re-pack would break a detached signature over the manifest).
+  Until now `verify` refused every `schemaId` but the current one, so each
+  release broke the packs made by the one before, every `fluxsim ship`
+  archive included. An id outside the window is refused with the versions the
+  toolchain accepts, and the `[ok]` report names the schema it re-validated
+  against. VERSIONING.md states the rule. The regression suite packs the
+  example the way 0.5.0 and 0.5.1 did and verifies it, checks that the named
+  schema is the one applied, and refuses the 0.2.0 draft, a newer release and
+  a reset window; each archive attack now checks the reason it was refused.
+  The wheel smoke test checks that the installed package ships every schema
+  in the window.
+- **bundle**: `pack` refuses a bundle that holds a symlink, before it reads
+  anything, the way `verify` refuses a link inside an archive and flux-engine
+  refuses one before it packs. `pack` used to read through a linked file, so
+  the target's bytes (an ssh key, a `.env`) went into the archive, and it left
+  a linked directory out without a word. It also opens `flux-manifest.json`
+  with `O_NOFOLLOW` where the platform has it, so a link that appears after
+  that check fails the pack instead of overwriting the file it points to, and
+  a manifest it cannot write is a `[FAIL]` line, not a traceback. A manifest
+  it creates is owner-only (0600); the archive entry keeps its fixed mode.
+- **tests**: `verify`'s refusals of an archive member with `..`, an absolute
+  path, a symlink, a hard link, a FIFO or a file beside the bundle directory,
+  and of an archive above the member cap, are each pinned by their message.
+  Until now none of them was exercised.
+
 ## 0.5.1 - 2026-11-12
 
 Specification 0.5.1, additive

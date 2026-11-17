@@ -11,12 +11,14 @@ Run: python3 tests/test_regression.py   (exit 0 = green)
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import functools
 import hashlib
 import importlib.util
 import io
 import json
+import os
 import shutil
 import sys
 import tarfile
@@ -34,6 +36,8 @@ import bundle as bundle_tool  # noqa: E402
 
 SCHEMA = json.loads((REPO / "schema" / "flux-schema-latest.json").read_text())
 VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
+WINDOW = SCHEMA["properties"]["fluxVersion"]["enum"]   # the compatibility window (VERSIONING.md)
+SCHEMA_ID_BASE = SCHEMA["$id"].rsplit("/", 1)[0]
 EXAMPLES = REPO / "examples" / "telco-payment-recovery"
 TOWERS_EXAMPLE = REPO / "examples" / "towers-tenant-renewal"
 
@@ -722,6 +726,252 @@ def check_preview_bundles(flux_validator) -> list[str]:
     return failures
 
 
+def _repack(work: Path, out: Path, mutate, flux_validator):
+    """Rebuild a packed archive, applying `mutate(members) -> members`."""
+    bundle_tool.pack(work, out, flux_validator)
+    src_path = out / f"{work.name}.flux.tgz"
+    entries = []
+    with tarfile.open(src_path, "r:gz") as src:
+        for m in src.getmembers():
+            entries.append((m.name, src.extractfile(m).read()))
+    entries = mutate(entries)
+    attacked = out / "attacked.flux.tgz"
+    with tarfile.open(attacked, "w:gz") as dst:
+        for name, data in entries:
+            info = tarfile.TarInfo(name)
+            info.size, info.mtime, info.mode = len(data), 0, 0o644
+            dst.addfile(info, io.BytesIO(data))
+    return attacked
+
+
+def _edit_manifest(entries, fn):
+    out = []
+    for name, data in entries:
+        if name.endswith(bundle_tool.MANIFEST_NAME):
+            doc = json.loads(data)
+            fn(doc)
+            data = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
+        out.append((name, data))
+    return out
+
+
+def _lie(field, value):
+    return lambda entries: _edit_manifest(entries, lambda m: m.__setitem__(field, value))
+
+
+def _verify_output(archive, flux_validator):
+    """verify's exit code and what it printed, so a refusal's reason is checked too."""
+    said = io.StringIO()
+    with contextlib.redirect_stdout(said):
+        rc = bundle_tool.verify(archive, flux_validator)
+    return rc, said.getvalue()
+
+
+def _pack_as(version, source, work, out):
+    """Pack *source* the way flux-spec *version* did: that release's schema
+    validates it and its $id is the schemaId (pack is otherwise unchanged)."""
+    schema_path = REPO / "schema" / f"flux-schema-{version}.json"
+    then = Draft202012Validator(json.loads(schema_path.read_text()), format_checker=FormatChecker())
+    shutil.copytree(source, work)
+    current = bundle_tool.SCHEMA_PATH
+    bundle_tool.SCHEMA_PATH = schema_path
+    try:
+        rc = bundle_tool.pack(work, out, then)
+    finally:
+        bundle_tool.SCHEMA_PATH = current
+    return rc, out / f"{work.name}.flux.tgz"
+
+
+def check_packs_across_releases(flux_validator) -> list[str]:
+    """RFC-09 across releases: a pack names the schema it was validated against
+    (schemaId), and verify re-validates against that schema while it is inside
+    this toolchain's compatibility window (VERSIONING.md). Re-packing is no
+    remedy: it changes the manifest bytes a detached signature covers."""
+    failures = []
+    accepted = bundle_tool.accepted_schemas()
+    if [version for version, _ in accepted.values()] != WINDOW or any(
+        schema_id != f"{SCHEMA_ID_BASE}/flux-schema-{version}.json" for schema_id, (version, _) in accepted.items()
+    ):
+        failures.append(f"[bundle] the window {WINDOW} does not resolve to one shipped schema per version: {sorted(accepted)}")
+
+    # the releases that shipped the bundler before this one: their packs are in the wild
+    for version in ("0.5.0", "0.5.1"):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+            rc, archive = _pack_as(version, EXAMPLES, work, out)
+            named = json.loads((work / bundle_tool.MANIFEST_NAME).read_text())["schemaId"] if rc == 0 else None
+            if named != f"{SCHEMA_ID_BASE}/flux-schema-{version}.json":
+                failures.append(f"[bundle] could not pack the example the way flux-spec {version} did (schemaId {named})")
+                continue
+            rc, said = _verify_output(archive, flux_validator)
+            if rc != 0 or f"re-validated against flux-schema-{version}.json" not in said:
+                failures.append(f"[bundle] a pack made under the {version} schema does not verify: {said.strip()}")
+    return failures
+
+
+def check_schema_id_refusals(flux_validator) -> list[str]:
+    """The schemaId picks the schema that re-validates, and only inside the
+    window; the window is read from the current schema, never restated."""
+    failures = []
+    accepted_versions = f"compatibility window (FLUX {', '.join(WINDOW)})"
+    lies = {
+        # the towers bundle pins fluxVersion 0.5.1 and FLUID 0.7.6, which the 0.5.0 schema refuses
+        "0.5.0 for the towers bundle": (TOWERS_EXAMPLE, "0.5.0", "no longer validates against flux-schema-0.5.0.json"),
+        # outside the window: the 0.2.0 draft before it, and a release after this toolchain
+        "the 0.2.0 draft": (EXAMPLES, "0.2.0", accepted_versions),
+        "a release this toolchain predates": (EXAMPLES, "9.9.9", accepted_versions),
+    }
+    for label, (source, version, expected) in lies.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+            shutil.copytree(source, work)
+            claims = _lie("schemaId", f"{SCHEMA_ID_BASE}/flux-schema-{version}.json")
+            rc, said = _verify_output(_repack(work, out, claims, flux_validator), flux_validator)
+            if rc == 0 or expected not in said:
+                failures.append(f"[bundle] a schemaId naming {label} was not refused with '{expected}': {said.strip()}")
+
+    # a breaking release that resets the window refuses a 0.5.1 pack and names what it accepts
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        _, archive = _pack_as("0.5.1", EXAMPLES, work, out)
+        reset = copy.deepcopy(SCHEMA)
+        reset["properties"]["fluxVersion"]["enum"] = [WINDOW[-1]]
+        reset_path = Path(tmp) / "flux-schema-latest.json"
+        reset_path.write_text(json.dumps(reset))
+        current = bundle_tool.SCHEMA_PATH
+        bundle_tool.SCHEMA_PATH = reset_path
+        try:
+            rc, said = _verify_output(archive, flux_validator)
+        finally:
+            bundle_tool.SCHEMA_PATH = current
+        if rc == 0 or f"compatibility window (FLUX {WINDOW[-1]})" not in said:
+            failures.append(f"[bundle] a reset window did not refuse a pack made before it: {said.strip()}")
+    return failures
+
+
+def check_pack_refuses_symlinks(flux_validator) -> list[str]:
+    """pack refuses a link anywhere in the bundle before reading through it: a
+    linked file would put its target's bytes into a signed archive, and a
+    planted flux-manifest.json link would aim the manifest write at its target."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        outside = Path(tmp) / "outside"
+        outside.mkdir()
+        secret = outside / "secret.txt"
+        secret.write_text("TOP-SECRET\n")
+        cases = {
+            "a linked file outside the bundle": ("notes.txt", secret),
+            "a linked directory": ("more", outside),
+            "a planted flux-manifest.json link": (bundle_tool.MANIFEST_NAME, secret),
+        }
+        for i, (label, (name, target)) in enumerate(cases.items()):
+            work, out = Path(tmp) / f"bundle{i}", Path(tmp) / f"dist{i}"
+            shutil.copytree(EXAMPLES, work)
+            (work / name).unlink(missing_ok=True)   # a manifest left by an earlier pack of the example
+            (work / name).symlink_to(target)
+            said = io.StringIO()
+            with contextlib.redirect_stdout(said):
+                rc = bundle_tool.pack(work, out, flux_validator)
+            refused = rc != 0 and f"unsupported bundle entry (symlink): {name}" in said.getvalue()
+            if not refused or out.exists() or secret.read_text() != "TOP-SECRET\n":
+                failures.append(f"[bundle] pack did not refuse {label} before reading it: {said.getvalue().strip()}")
+    return failures
+
+
+def check_manifest_write_never_follows_a_link(flux_validator) -> list[str]:
+    """The manifest write itself opens with O_NOFOLLOW (POSIX): a link that
+    appears after pack's symlink refusal fails the pack, never its target."""
+    if not hasattr(os, "O_NOFOLLOW"):
+        return []
+    with tempfile.TemporaryDirectory() as tmp:
+        victim = Path(tmp) / "victim.txt"
+        victim.write_text("untouched\n")
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        (work / bundle_tool.MANIFEST_NAME).unlink(missing_ok=True)
+        (work / bundle_tool.MANIFEST_NAME).symlink_to(victim)
+        scan = bundle_tool._symlink_entries
+        bundle_tool._symlink_entries = lambda directory: []   # as if the link appeared after the scan
+        said = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(said):
+                rc = bundle_tool.pack(work, out, flux_validator)
+        finally:
+            bundle_tool._symlink_entries = scan
+        if rc == 0 or f"cannot write {bundle_tool.MANIFEST_NAME}" not in said.getvalue() or victim.read_text() != "untouched\n":
+            return [f"[bundle] the manifest write followed a planted link: {said.getvalue().strip()}"]
+    return []
+
+
+def _member(name: str, kind=tarfile.REGTYPE, linkname: str = "") -> tarfile.TarInfo:
+    info = tarfile.TarInfo(name)
+    info.type, info.linkname, info.mode = kind, linkname, 0o644
+    info.size = 1 if kind == tarfile.REGTYPE else 0
+    return info
+
+
+def _append_member(work: Path, out: Path, member: tarfile.TarInfo, flux_validator) -> Path:
+    """The packed archive plus one more member, as an attacker would add it."""
+    bundle_tool.pack(work, out, flux_validator)
+    attacked = out / "attacked.flux.tgz"
+    with tarfile.open(out / f"{work.name}.flux.tgz", "r:gz") as src, tarfile.open(attacked, "w:gz") as dst:
+        for m in src.getmembers():
+            dst.addfile(m, src.extractfile(m))
+        dst.addfile(member, io.BytesIO(b"x") if member.isfile() else None)
+    return attacked
+
+
+def check_verify_refuses_unsafe_members(flux_validator) -> list[str]:
+    """verify's _extract_safely refusals, each pinned by its message, with
+    nothing written outside verify's own scratch directory."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        # verify's scratch directory goes under `scratch`, so bundle/../../escape.txt
+        # would land at scratch/escape.txt if the refusal ever stopped working
+        scratch, escape = Path(tmp) / "scratch", Path(tmp) / "absolute-escape.txt"
+        scratch.mkdir()
+        attacks = {
+            "a member with ..": (_member("bundle/../../escape.txt"), "unsafe archive path: bundle/../../escape.txt"),
+            "an absolute member": (_member(str(escape)), f"unsafe archive path: {escape}"),
+            "a symlink member": (_member("bundle/link", tarfile.SYMTYPE, "/etc/passwd"),
+                                 "unsupported archive entry (symlink): bundle/link"),
+            "a hard link member": (_member("bundle/hard", tarfile.LNKTYPE, "bundle/world.flux.yml"),
+                                   "unsupported archive entry"),
+            "a FIFO member": (_member("bundle/fifo", tarfile.FIFOTYPE), "unsupported archive entry (special): bundle/fifo"),
+            "a file beside the bundle directory": (_member("bundle"), "entry outside the bundle directory: bundle"),
+        }
+        for i, (label, (member, expected)) in enumerate(attacks.items()):
+            work, out = Path(tmp) / f"w{i}" / "bundle", Path(tmp) / f"d{i}"
+            shutil.copytree(EXAMPLES, work)
+            attacked = _append_member(work, out, member, flux_validator)
+            tempfile.tempdir = str(scratch)
+            try:
+                rc, said = _verify_output(attacked, flux_validator)
+            except Exception as exc:  # noqa: BLE001 (a traceback is the failure)
+                failures.append(f"[bundle] CRASHED ({type(exc).__name__}: {exc}) on {label}")
+                continue
+            finally:
+                tempfile.tempdir = None
+            escaped = [p for p in (escape, scratch / "escape.txt") if p.exists()]
+            if rc == 0 or expected not in said or escaped:
+                failures.append(f"[bundle] verify did not refuse {label} with '{expected}': {said.strip()}")
+            for path in escaped:   # so one broken refusal does not fail the cases after it
+                path.unlink()
+
+        work, out = Path(tmp) / "capped" / "bundle", Path(tmp) / "capped-dist"
+        shutil.copytree(EXAMPLES, work)
+        bundle_tool.pack(work, out, flux_validator)
+        cap = bundle_tool.MAX_MEMBERS
+        bundle_tool.MAX_MEMBERS = 5
+        try:
+            rc, said = _verify_output(out / "bundle.flux.tgz", flux_validator)
+        finally:
+            bundle_tool.MAX_MEMBERS = cap
+        if rc == 0 or "members, above the 5 cap" not in said:
+            failures.append(f"[bundle] verify did not refuse an archive above the member cap: {said.strip()}")
+    return failures
+
+
 def main() -> int:
     failures = []
 
@@ -976,43 +1226,14 @@ def main() -> int:
         failures.append("[bundle] merkle root is blind to swapping two files' digests")
 
     # ---- RFC-09 negative fixtures: every attack yields [FAIL], never a traceback
-    def _repack(work: Path, out: Path, mutate):
-        """Rebuild a packed archive, applying `mutate(members) -> members`."""
-        bundle_tool.pack(work, out, flux_validator)
-        src_path = out / f"{work.name}.flux.tgz"
-        entries = []
-        with tarfile.open(src_path, "r:gz") as src:
-            for m in src.getmembers():
-                entries.append((m.name, src.extractfile(m).read()))
-        entries = mutate(entries)
-        attacked = out / "attacked.flux.tgz"
-        with tarfile.open(attacked, "w:gz") as dst:
-            for name, data in entries:
-                info = tarfile.TarInfo(name)
-                info.size, info.mtime, info.mode = len(data), 0, 0o644
-                dst.addfile(info, io.BytesIO(data))
-        return attacked
-
-    def _edit_manifest(entries, fn):
-        out = []
-        for name, data in entries:
-            if name.endswith(bundle_tool.MANIFEST_NAME):
-                doc = json.loads(data)
-                fn(doc)
-                data = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
-            out.append((name, data))
-        return out
-
-    def _lie(field, value):
-        return lambda entries: _edit_manifest(entries, lambda m: m.__setitem__(field, value))
-
     BUNDLE_ATTACKS = {
         "file smuggled outside the bundle directory":
             (lambda e: e + [("stray-payload.bin", b"undeclared")], "one bundle directory"),
         "manifest lies about fluxVersions":
             (_lie("fluxVersions", ["9.9.9"]), "does not match the documents"),
         "manifest lies about schemaId":
-            (_lie("schemaId", "https://evil.example/never-published.json"), "not this toolchain's schema"),
+            (_lie("schemaId", "https://evil.example/never-published.json"),
+             "is not a FLUX schema inside this toolchain's compatibility window"),
         "manifest claims the unclaimable runtime profile":
             (lambda e: _edit_manifest(e, lambda m: m["attestation"].__setitem__("profile", "runtime")),
              "violates the manifest schema"),
@@ -1027,13 +1248,15 @@ def main() -> int:
             work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
             shutil.copytree(EXAMPLES, work)
             try:
-                attacked = _repack(work, out, mutate)
-                rc = bundle_tool.verify(attacked, flux_validator)
+                attacked = _repack(work, out, mutate, flux_validator)
+                rc, said = _verify_output(attacked, flux_validator)
             except Exception as exc:  # noqa: BLE001 — a traceback IS the failure
                 failures.append(f"[bundle] CRASHED ({type(exc).__name__}: {exc}) — {label}")
                 continue
             if rc == 0:
                 failures.append(f"[bundle] verify accepted an archive where: {label}")
+            elif expected not in said:
+                failures.append(f"[bundle] verify refused an archive where {label}, but not for that: {said.strip()}")
 
     # malformed inputs that never reach the manifest at all
     with tempfile.TemporaryDirectory() as tmp:
@@ -1051,7 +1274,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
         shutil.copytree(EXAMPLES, work)
-        bomb = _repack(work, out, lambda e: e + [("bundle/bomb.bin", b"\0" * (2 * 1024 * 1024))])
+        bomb = _repack(work, out, lambda e: e + [("bundle/bomb.bin", b"\0" * (2 * 1024 * 1024))], flux_validator)
         original_cap = bundle_tool.MAX_BUNDLE_BYTES
         bundle_tool.MAX_BUNDLE_BYTES = 1024 * 1024
         try:
@@ -1059,6 +1282,12 @@ def main() -> int:
                 failures.append("[bundle] verify accepted an archive above the size cap")
         finally:
             bundle_tool.MAX_BUNDLE_BYTES = original_cap
+
+    failures += check_packs_across_releases(flux_validator)
+    failures += check_schema_id_refusals(flux_validator)
+    failures += check_pack_refuses_symlinks(flux_validator)
+    failures += check_manifest_write_never_follows_a_link(flux_validator)
+    failures += check_verify_refuses_unsafe_members(flux_validator)
 
     # a bundle that does not validate must never be packed
     with tempfile.TemporaryDirectory() as tmp:
@@ -1100,6 +1329,12 @@ def main() -> int:
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
         + 9   # RFC-09 negative fixtures: 6 archive attacks + 2 malformed inputs + size cap
+        + 7   # RFC-09 across releases: window resolves, 0.5.0 and 0.5.1 packs verify, named schema
+              # applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
+        + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link
+        + 1   # RFC-09 the manifest write never follows a link that appears after that refusal
+        + 7   # RFC-09 verify refuses .., absolute, symlink, hard link, FIFO, beside-the-directory
+              # members and an archive above the member cap
     )
     if failures:
         print(f"FAIL — {len(failures)}/{total} checks failed")

@@ -171,8 +171,9 @@ recipe, a
 [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json)
 with per-file digests and an [RFC 6962](https://datatracker.ietf.org/doc/html/rfc6962#section-2.1)
 Merkle root, and an attestation (profile, validator status, scorecards, seam
-crossings) that `verify` recomputes from scratch — along with `schemaId` and
-`fluxVersions`, so nothing the manifest asserts is taken on trust. Each pack
+crossings) that `verify` recomputes from scratch, along with `fluxVersions`,
+against the schema the manifest's `schemaId` names inside the toolchain's
+compatibility window, so nothing the manifest asserts is taken on trust. Each pack
 also emits an [in-toto Statement v1](https://github.com/in-toto/attestation),
 so cosign and other supply-chain tooling can carry and sign FLUX evidence
 natively. Signing is detached over the manifest bytes, so a regulator or
