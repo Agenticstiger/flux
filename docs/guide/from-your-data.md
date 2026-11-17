@@ -18,11 +18,11 @@ never a record.
 
 ::: tip What a profile checks today
 `fluid profile` writes, for each number column, the statistic a FLUX `mean`
-property is checked against, so this guide's run is checked and packed against
-the profile alone. A property that needs another statistic, such as a `support`
-property or a mean over a date or timestamp column, waits for
-`fluid profile --bundle`, which is not released. Step 6 shows how to check those
-against a slice of your records instead.
+property is checked against, unless the output checks withhold it, so this
+guide's run is checked and packed against the profile alone. A property that
+needs another statistic, such as a `support` property or a mean over a date or
+timestamp column, waits for `fluid profile --bundle`, which is not released.
+Step 6 shows how to check those against a slice of your records instead.
 :::
 
 ## 1. Install
@@ -476,18 +476,23 @@ The pack holds the rows and the evidence for them, the scorecard included;
 ### When the profile cannot answer a property
 
 `fluid profile` writes one ungrouped `mean/1` for each number column it
-profiles, and nothing else the fidelity check compares. A property that needs another
-statistic, such as a `support` property over `country` or a `mean` over
+profiles, and nothing else the fidelity check compares. A property that needs
+another statistic, such as a `support` property over `country` or a `mean` over
 `created_at`, is refused against the profile with
 [FLX-5037](../engine/reference/errors/FLX-5037.md), which names the statistic the
 profile lacks, and `ship` withholds the run. `fluid profile --bundle`, which is
 to write the statistics a Simulation declares, is not released.
 
-Until it is, check such a property against a committed slice: a file of the
-records themselves, from which the engine forms the statistics it compares. The
-engine then reads those records, which gives up the aggregate-only path this
-guide follows, so use it only where the records may reach the engine, on your
-own machine for example.
+A `mean` whose sum the output checks withheld, for example because one or two
+records dominate it, cannot be scored against the profile either. With this
+guide's one property, `verify` then says the pinned profile withheld every group
+of every declared property, so nothing was scored, and `ship` withholds the run.
+
+Check a `support` property or a mean over a date or timestamp column against a
+committed slice instead: a file of the records themselves, from which the engine
+forms the statistics it compares. The engine then reads those records, which
+gives up the aggregate-only path this guide follows, so use it only where the
+records may reach the engine, on your own machine for example.
 
 1. Take the `profile:` line out of the Simulation: once a profile is pinned,
    `run` and `ship` need it with `--profile`, and with it the check runs
@@ -514,11 +519,13 @@ own machine for example.
    ```bash
    fluxsim run bundle
    fluxsim verify bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson
-   fluxsim ship bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson -o out
+   fluxsim ship bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson -o out-slice
    ```
 
    `verify` reports `fidelity orders: passed`, and `ship` writes
-   `out/bundle.flux.tgz`.
+   `out-slice/bundle.flux.tgz`. It packs into a folder of its own: `ship`
+   refuses to replace the pack step 6 wrote in `out`, which holds another
+   run's evidence.
 
 A run with neither a profile nor a slice is not checked at all: `fluxsim verify`
 says `fidelity orders: declared, not checked -- declares a fidelity block; pass
