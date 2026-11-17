@@ -26,18 +26,20 @@ jobs:
           python - <<'EOF'
           import json, pathlib
           from jsonschema import validators
-          for p in sorted(pathlib.Path("schema").glob("flux-schema-*.json")) + sorted(pathlib.Path("vendor/fluid").glob("*.json")):
+          for p in (sorted(pathlib.Path("schema").glob("flux-schema-*.json"))
+                    + sorted(pathlib.Path("vendor/fluid").glob("*.json"))
+                    + sorted(pathlib.Path("vendor/fluid-preview").glob("fluid-schema-*.json"))):
               s = json.loads(p.read_text())
               validators.validator_for(s).check_schema(s)
               print(f"ok  {p}")
           EOF
       - name: latest alias matches current release
-        run: cmp schema/flux-schema-0.5.1.json schema/flux-schema-latest.json
+        run: cmp schema/flux-schema-0.5.2.json schema/flux-schema-latest.json
       - name: Generated artifacts are in sync (kinds doc + UI hints)
         run: |
           python scripts/generate-kinds-doc.py
           python scripts/generate-ui-hints.py
-          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.5.1.json
+          git diff --exit-code docs/schema/kinds.md schema/flux-ui-hints-0.5.2.json
       # Placed AFTER the generated-artifact sync check above, so docs/schema/
       # kinds.md is the freshly regenerated one by the time this reads it —
       # and BEFORE the bundle validation below, so a vocabulary failure is not
@@ -89,6 +91,39 @@ jobs:
         run: |
           /tmp/flux-spec-wheel-venv/bin/python -m flux_spec.enforce
           /tmp/flux-spec-wheel-venv/bin/python -c "from flux_spec.validate import Bundle"
+      - name: The wheel ships the pinned FLUID previews
+        working-directory: /tmp
+        run: |
+          /tmp/flux-spec-wheel-venv/bin/python - <<'EOF'
+          import json
+          from flux_spec._paths import vendor_fluid_preview_dir
+          from flux_spec.validate import fluid_schema_file
+          pins = json.loads((vendor_fluid_preview_dir() / "pins.json").read_text())["previews"]
+          assert pins, "no pinned FLUID preview in the wheel"
+          for pin in pins:
+              path = fluid_schema_file(pin["fluidVersion"])
+              assert path is not None and path.name == pin["file"], f"FLUID {pin['fluidVersion']} preview is missing"
+              print(f"ok  {path}")
+          EOF
+
+  fluid-preview-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Re-create vendor/fluid-preview from its pins
+        run: python3 scripts/sync-fluid-preview.py
+      - name: vendor/fluid-preview is exactly what the pins name
+        run: |
+          git diff --exit-code vendor/fluid-preview
+          untracked="$(git ls-files --others --exclude-standard vendor/fluid-preview)"
+          if [ -n "$untracked" ]; then
+            echo "the sync creates files that are not committed:"
+            echo "$untracked"
+            exit 1
+          fi
 
   engine-docs-in-sync:
     # docs/engine/ is a generated mirror of the engine's docs, pinned by

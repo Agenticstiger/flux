@@ -2,8 +2,9 @@
 """Sync canonical spec artifacts into flux_spec/data/ for the flux-spec package.
 
 The canonical, hand-edited copies of the schema, the vendored FLUID schemas
-and the enforcement conformance vectors stay where contributors already
-expect them: schema/, vendor/fluid/, tests/enforcement-vectors.json. This
+(releases and pinned previews) and the enforcement conformance vectors stay
+where contributors already expect them: schema/, vendor/fluid/,
+vendor/fluid-preview/, tests/enforcement-vectors.json. This
 script mirrors them into flux_spec/data/, where they ship inside the
 flux-spec wheel/sdist and are read back at runtime via importlib.resources
 (see flux_spec/_paths.py) whenever flux_spec is installed rather than run
@@ -29,6 +30,7 @@ DATA_DIR = REPO / "flux_spec" / "data"
 DIR_MIRRORS = [
     (REPO / "schema", DATA_DIR / "schema", "*.json"),
     (REPO / "vendor" / "fluid", DATA_DIR / "vendor" / "fluid", "*.json"),
+    (REPO / "vendor" / "fluid-preview", DATA_DIR / "vendor" / "fluid-preview", "*.json"),
 ]
 
 # (source file, dest directory under flux_spec/data/)

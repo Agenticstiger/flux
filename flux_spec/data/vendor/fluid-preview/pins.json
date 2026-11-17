@@ -1,0 +1,13 @@
+{
+  "description": "The FLUID preview schemas vendored in this directory, each pinned to the commit of the repository it was copied from and to the sha256 of its bytes. scripts/sync-fluid-preview.py re-creates every file from its pin, and CI fails on any byte difference. A pin moves only through a flux-spec PR (VERSIONING.md, FLUID previews).",
+  "previews": [
+    {
+      "file": "fluid-schema-0.7.7.json",
+      "fluidVersion": "0.7.7",
+      "repository": "https://github.com/Agenticstiger/forge-cli",
+      "path": "fluid_build/schemas/fluid-schema-0.7.7.json",
+      "commit": "32fce8e3ae0a5bcb104af048a6fc67938c198f31",
+      "sha256": "4c72dea22a5f3c31dc1882723b07cc16de0bb52e0199db0f5daba8fdc480b4da"
+    }
+  ]
+}

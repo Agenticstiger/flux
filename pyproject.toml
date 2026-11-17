@@ -50,5 +50,6 @@ include = ["flux_spec*"]
 flux_spec = [
   "data/schema/*.json",
   "data/vendor/fluid/*.json",
+  "data/vendor/fluid-preview/*.json",
   "data/vectors/*.json",
 ]

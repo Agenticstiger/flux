@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+Specification 0.5.2, additive
+([schema-diffs/diff-0.5.1-to-0.5.2.md](schema-diffs/diff-0.5.1-to-0.5.2.md)):
+
+- **seam**: the FLUID 0.7.7 preview, which carries expose relationships
+  (composite keys included) and validity windows, is vendored verbatim in
+  `vendor/fluid-preview/fluid-schema-0.7.7.json`, pinned in
+  `vendor/fluid-preview/pins.json` to forge-cli commit `32fce8e3` and the
+  sha256 of its bytes. `Simulation.emits[].fluidVersion` accepts the exact pin
+  `"0.7.7"`; a range never selects a preview, and the validator refuses one
+  that would, with the fix in the message.
+- **schema**: `schema/flux-schema-0.5.2.json`, with the `fluxVersion` window
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2"]`;
+  `flux-schema-latest.json` aliases it and `flux_spec.SCHEMA_VERSION` is
+  `0.5.2`. The package version is set when the release is cut.
+- **tooling**: `scripts/sync-fluid-preview.py` re-creates every preview from
+  its pin and checks the sha256 (`--repin VERSION COMMIT` moves a pin), and a
+  CI job fails when the committed copy differs from what the pin names. The
+  wheel ships the previews under `flux_spec/data/vendor/fluid-preview/`.
+- **docs**: VERSIONING.md says how a FLUID preview is vendored, selected,
+  re-pinned and replaced by its release.
+- **tests**: the regression suite checks the pin (bytes, commit, path, one pin
+  per file), the exact 0.7.7 pin, a 0.7.7 contract with a composite-key
+  relationship, a broken one, the range refusal, a 0.7.6 contract that uses
+  relationships, a moved key changing the contract digest, and that the
+  immutable 0.5.1 file still refuses the pin.
+
 - **examples**: the towers contract declares `tenancy_count`,
   `chronic_sla_breaches` and `months_to_lease_expiry` as `INTEGER` instead of
   `DECIMAL(10,0)` and `DECIMAL(6,0)`, and `simulation.flux.yml` re-pins its

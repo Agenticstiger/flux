@@ -12,6 +12,9 @@ Two ways to run this package, one set of bytes:
   Those are read back via `importlib.resources` rather than a hardcoded
   site-packages path.
 
+FLUID previews sit beside the releases, in `vendor/fluid-preview/`, and are
+mirrored the same way.
+
 Detection is a single filesystem check: does `schema/` exist next to this
 package's parent directory?
 """
@@ -30,12 +33,22 @@ def _packaged(*parts: str) -> Path:
     return Path(importlib.resources.files("flux_spec").joinpath("data", *parts))
 
 
+def _resource(*parts: str) -> Path:
+    """A canonical directory of the checkout, or its packaged copy when installed."""
+    return REPO.joinpath(*parts) if _SOURCE_CHECKOUT else _packaged(*parts)
+
+
 def schema_dir() -> Path:
-    return (REPO / "schema") if _SOURCE_CHECKOUT else _packaged("schema")
+    return _resource("schema")
 
 
 def vendor_fluid_dir() -> Path:
-    return (REPO / "vendor" / "fluid") if _SOURCE_CHECKOUT else _packaged("vendor", "fluid")
+    return _resource("vendor", "fluid")
+
+
+def vendor_fluid_preview_dir() -> Path:
+    """FLUID previews, each pinned to a commit and a sha256 (vendor/fluid-preview/pins.json)."""
+    return _resource("vendor", "fluid-preview")
 
 
 def enforcement_vectors_path() -> Path:

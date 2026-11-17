@@ -2,6 +2,27 @@
 
 One human-written diff per released version pair. The regression suite pins every behavioral change.
 
+## 0.5.1 → 0.5.2
+
+**Additive, non-breaking.** Every valid 0.3.0 to 0.5.1 document validates
+unchanged under 0.5.2 (regression-asserted). One change: the FLUID seam window
+gains FLUID 0.7.7, a preview, which only an exact pin selects.
+
+- `vendor/fluid-preview/fluid-schema-0.7.7.json` is the FLUID 0.7.7 preview,
+  verbatim from forge-cli at commit `32fce8e3`, pinned with the sha256 of its
+  bytes in `vendor/fluid-preview/pins.json`. It carries expose relationships,
+  composite keys included, and validity windows. A `.fluid.yml` that declares
+  `fluidVersion: "0.7.7"` is validated against it.
+- `Simulation.emits[].fluidVersion` accepts the exact pin `"0.7.7"`. A range
+  never selects a preview: `^0.7.3` still resolves against the releases
+  0.7.3 to 0.7.6, and the validator refuses an emit whose range would reach a
+  0.7.7 contract.
+- `fluxVersion` enum widens to
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2"]`.
+- `$id` → `flux-schema-0.5.2.json`; `flux-schema-latest.json` aliases 0.5.2;
+  UI hints regenerate as `flux-ui-hints-0.5.2.json`. The enforcement and
+  manifest contracts are unchanged and keep their 0.5.0 files.
+
 ## 0.5.0 → 0.5.1
 
 **Additive, non-breaking.** Every valid 0.3.0–0.5.0 document validates
