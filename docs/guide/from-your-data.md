@@ -135,9 +135,9 @@ Pin it in the FLUX Simulation:
   profile: {digest: sha256:bd2f9a689d119e6a489f1878891c695c3f6c7dd602c365a92fff491905b416a5}
 ```
 
-The digest follows the data and the forge-cli build, which the document names:
-other data or another release writes another digest.
-For the sample data, the profile holds these values:
+On data-product-forge 0.31.0 the sample data gives this digest. Other data, or
+another release, writes another, because the profile names the build that wrote
+it. For the sample data, the profile holds these values:
 
 | Column | Published | Withheld |
 |---|---|---|
@@ -524,8 +524,12 @@ records may reach the engine, on your own machine for example.
 
    `verify` reports `fidelity orders: passed`, and `ship` writes
    `out-slice/bundle.flux.tgz`. It packs into a folder of its own: `ship`
-   refuses to replace the pack step 6 wrote in `out`, which holds another
+   refuses to replace the pack written above in `out`, which holds another
    run's evidence.
+
+Where the records may not reach the engine at all, a property the profile
+cannot answer gets no pack: use the rows without one. They follow the contract
+and your declarations, and the same bundle gives the same rows again.
 
 A run with neither a profile nor a slice is not checked at all: `fluxsim verify`
 says `fidelity orders: declared, not checked -- declares a fidelity block; pass
