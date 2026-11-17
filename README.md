@@ -160,8 +160,8 @@ To start from a table of your own, follow
 [From your data to a synthetic copy](https://agenticstiger.github.io/flux/guide/from-your-data.html):
 forge-cli writes a FLUID contract and a profile of aggregates from the data,
 you write the Simulation from the profile's numbers, and the engine generates
-the rows. Parts of it need builds from `main` until the next releases; the
-guide says which.
+the rows. Its profiling step needs forge-cli's `main` branch until the next
+forge-cli release; the guide says how to install it.
 
 ## Example
 

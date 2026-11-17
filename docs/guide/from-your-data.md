@@ -17,9 +17,9 @@ the schema, and the profile, which holds aggregates. The engine reads those and
 never a record.
 
 ::: warning What works today
-- `fluid profile` (step 3) and the engine's support for a profile (steps 5 and
-  6) are on the `main` branches of forge-cli and flux-engine, not in a release
-  yet. The other steps work with the released packages.
+- `fluid profile` (step 3) is on forge-cli's `main` branch, not in a release
+  yet. Every other step works with the released packages: flux-sim-engine reads
+  a profile from 0.6.0.
 - The engine cannot yet pass a run checked against a profile that
   `fluid profile` wrote, so `ship` withholds it. Step 6 says why, and shows how
   to ship today with a slice of your records instead.
@@ -30,21 +30,21 @@ never a record.
 | Package | Latest on PyPI | Used here for | Status |
 |---|---|---|---|
 | `flux-spec` | 0.5.2 | validating the bundle (the engine installs it) | released |
-| `flux-sim-engine` | 0.5.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; the `--profile` option and the `profile` pin are on `main` only until the next release |
-| `data-product-forge` | 0.30.1 | `fluid init --discover` and `fluid profile` | `--discover` released; `fluid profile` on `main` only until the next release |
-| `flux-stats` | 0.0.1, a placeholder with no code | the statistics behind `fluid profile` and the engine | on `main` only, installed from flux-engine's repository |
+| `flux-sim-engine` | 0.6.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; 0.6.0 is the first release that reads a profile |
+| `data-product-forge` | 0.30.1 | `fluid init --discover` and `fluid profile` | `--discover` released; `fluid profile` on forge-cli `main` only, until a release pins flux-stats 0.6.0 |
+| `flux-stats` | 0.6.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; forge-cli `main` installs a commit of its own from git |
 
-The engine needs Python 3.11 or newer. The released packages cover steps 2 and
-4, and step 6 with a slice of your records:
+The engine needs Python 3.11 or newer. The released packages cover every step
+but step 3:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install flux-sim-engine "data-product-forge[local]"
 ```
 
-For steps 3 and 5, and step 6 with a profile, install both tools from `main`,
-each in an environment of its own: each installs flux-stats from a commit of its
-own. `pip` needs `git` for these.
+For step 3, install forge-cli from `main` in an environment of its own, with
+the flux-stats commit it names: flux-sim-engine 0.6.0 needs flux-stats 0.6.0,
+and forge-cli `main` pins an earlier commit. `pip` needs `git` for these.
 
 ```bash
 python3 -m venv .venv-forge
@@ -55,18 +55,10 @@ python3 -m venv .venv-forge
 The second line installs flux-stats at the commit forge-cli names. If it is
 missing, `fluid profile` stops before it reads anything and prints the command.
 
-```bash
-python3 -m venv .venv-engine
-.venv-engine/bin/pip install \
-  "flux-stats @ git+https://github.com/Agenticstiger/flux-engine.git#subdirectory=packages/flux-stats" \
-  "flux-sim-engine @ git+https://github.com/Agenticstiger/flux-engine.git"
-```
-
-With these, run `fluid` from `.venv-forge` and `fluxsim` from `.venv-engine`:
-activate one at a time (`. .venv-forge/bin/activate`), or call the command by
-its path (`.venv-engine/bin/fluxsim`). The commands below are written bare.
-`fluxsim --version` prints 0.5.0 for both engines. `fluxsim verify --help`
-lists `--profile` only on the one built from `main`.
+Run `fluid profile` from `.venv-forge`, by its path
+(`.venv-forge/bin/fluid profile ...`) or with that environment activated, and
+every other command, the Python snippets included, from `.venv`. The commands
+below are written bare. `fluxsim --version` prints 0.6.0.
 
 ## 2. Get a FLUID contract from your data
 
@@ -140,7 +132,7 @@ lists every source `--discover` reads.
 
 ## 3. Profile the data where it lives
 
-*Needs forge-cli from `main` until its next release: run it from `.venv-forge`.*
+*Needs forge-cli from `main` until a release pins flux-stats 0.6.0: run it from `.venv-forge`.*
 
 Run the profiler inside the environment that holds the data. It reads every
 record once and writes only aggregates that passed its output checks:
@@ -155,7 +147,7 @@ Profiled exposes[orders]: 4 columns, 13 values published, 7 withheld.
 Withheld, by CL_CONF_STATUS code: A (small count) 7.
 Wrote /work/orders.profile.json (readable by you alone; read it before you share it).
 Pin it in the FLUX Simulation:
-  profile: {digest: sha256:0913d5e6103f87bcfb15cf2669c68ee6a85eacf6d7fd2f4dfcc394ab61bb1ad8}
+  profile: {digest: sha256:0f11e6ceb5e6116d50082efbcf396612deef467d5d73cf5e36fec0b8a4bed8d7}
 ```
 
 Your digest will differ: the document names the forge-cli build that wrote it.
@@ -393,15 +385,13 @@ order_id:
 
 ## 5. Pin the profile's digest
 
-*Needs the engine from `main` until its next release: run it from `.venv-engine`.*
-
 Copy the line `fluid profile` printed into the Simulation's
 `com.agentics.flux/1` namespace, indented to sit beside `emits`:
 
 ```yaml
 extensions:
   com.agentics.flux/1:
-    profile: {digest: sha256:0913d5e6103f87bcfb15cf2669c68ee6a85eacf6d7fd2f4dfcc394ab61bb1ad8}
+    profile: {digest: sha256:0f11e6ceb5e6116d50082efbcf396612deef467d5d73cf5e36fec0b8a4bed8d7}
     emits:
       orders:
         rows: 600
@@ -411,14 +401,12 @@ extensions:
 The digest is the sha256 of the profile's canonical JSON (RFC 8785), which is
 the file exactly as `fluid profile` writes it, so re-indenting the file keeps
 its digest. It binds the run to that document: given another profile the plan
-refuses to run with FLX-3110, and given none with FLX-3109. Both codes are new
-on the engine's `main`, so their pages reach this site with the next release.
-flux-sim-engine 0.5.0 accepts the pin but does not read it, and its commands
-have no `--profile`.
+refuses to run with [FLX-3110](../engine/reference/errors/FLX-3110.md), and given
+none with [FLX-3109](../engine/reference/errors/FLX-3109.md). flux-sim-engine
+0.5.0 and earlier accept the pin but do not read it, and their commands have no
+`--profile`: use 0.6.0 or later.
 
 ## 6. Run, verify, ship
-
-*`--profile` needs the engine from `main` until its next release.*
 
 Generate the rows:
 
@@ -427,10 +415,10 @@ fluxsim run bundle --profile orders.profile.json
 ```
 
 ```text
-plan written to .flux/runs/dc7263d0ac826695/plan.json (runId=dc7263d0ac826695, planDigest=sha256:...)
-applied to .flux/runs/dc7263d0ac826695 (runDigest=sha256:...)
+plan written to .flux/runs/b177f268004765b7/plan.json (runId=b177f268004765b7, planDigest=sha256:...)
+applied to .flux/runs/b177f268004765b7 (runDigest=sha256:...)
 emitted orders: 600 rows (generator)
-run dc7263d0ac826695 complete
+run b177f268004765b7 complete
 ```
 
 The run writes under `.flux/runs/` in the current folder. Each row is a JSON
@@ -438,9 +426,9 @@ array in the contract's column order:
 
 ```console
 $ head -n 3 .flux/runs/*/emits/orders.ndjson
-["458b8ff82fe5f8beb5720db41dbd4fac","DE","27.05","2026-07-21T23:05:36.517Z"]
-["6508878ce94df9745e2ddbd65e1932d0","GB","19.31","2026-07-27T11:47:09.792Z"]
-["080cfb50abb80cb40c05483ec254eeaa","DE","16.78","2026-09-24T22:27:28.569Z"]
+["0e6a9b730dec8af295479e8eafe30f72","GB","19.26","2026-09-17T05:55:26.412Z"]
+["8923abbc7c9740d3bfb27afb47e8b86a","FR","19.66","2026-08-01T23:21:16.842Z"]
+["05ba68829245d7e593703335cd8bb328","IE","26.72","2026-07-11T04:14:34.165Z"]
 ```
 
 The same bundle gives the same bytes on any machine. Your run id and rows
@@ -462,7 +450,7 @@ reproducible: not checked | validity: not asserted
   fidelity orders: failed -- 1 fail-closed condition met against the pinned profile
     property 000:mean:amount (mean of amount): refused, not within the declared margin
     refusal FLX-5037 on property 000:mean:amount: the profile holds no mean/1 statistic over this property's columns with its groupBy, bins, levels and level
-  scorecard: overall not measured against profile sha256:0913d5e6...
+  scorecard: overall not measured against profile sha256:0f11e6ce...
     ...
     shape: no flags in 4 profiled columns (3 tests at 1/1000 per run)
 ```
@@ -473,7 +461,8 @@ Three things happened:
   recorded and one value per contract column.
 - The shape flags compared each profiled column with the run, for example its
   distinct count against the one the profile allows, and found nothing unlikely.
-- The `mean` property was refused, with FLX-5037. The engine compares a
+- The `mean` property was refused, with
+  [FLX-5037](../engine/reference/errors/FLX-5037.md). The engine compares a
   property with a statistic the profile carries for it, such as `mean/1` or a
   histogram over the declared bins. `fluid profile` writes the column metrics
   shown in step 3, and none of those statistics yet.
@@ -491,6 +480,14 @@ withheld: orders
 nothing was written to the output directory
 FLX-8001: withheld orders
 ```
+
+Without a profile, which is where the released packages alone leave you, the
+fidelity block is not checked at all: `fluxsim verify bundle --run-id ...` says
+`fidelity orders: declared, not checked -- declares a fidelity block; pass
+--committed-slice orders=file://<path> to run the check`, and `fluxsim ship`
+withholds the run with `committed-slice.present: orders declares a fidelity
+block; ship needs --committed-slice for it`. The slice below is the way on in
+both cases.
 
 ### Ship today, with a slice of your records
 
@@ -541,7 +538,7 @@ released packages.
    shipped out/bundle.flux.tgz
    ```
 
-The run's mean amount lands within 10% of the records' (45.83 against 46.25 in
+The run's mean amount lands within 10% of the records' (45.94 against 46.25 in
 our run), so the `mean` property passes and the pack is written.
 [Ship with evidence](../engine/how-to/ship-with-evidence.md) says what the pack
 holds. Where the records may not reach the engine at all, use the rows without
