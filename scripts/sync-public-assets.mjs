@@ -74,12 +74,22 @@ if (existsSync(engineSpec)) {
       console.warn(`[sync-assets] docs/engine/spec/${name}: $id ${id} is not a plain path under /flux/engine/spec/; not served there`)
       continue
     }
+    if (rel === `engine/spec/${name}`) {
+      console.log(`[sync-assets] docs/engine/spec/${name} -> ${id}`) // its own name already
+      continue
+    }
     if (served.has(rel)) {
       console.warn(`[sync-assets] docs/engine/spec/${name}: $id ${id} is served by another file already; not served there`)
       continue
     }
+    try {
+      place(bytesOf.get(name), dest)
+    } catch (error) {
+      // A path under another served file's name, for one, cannot be made.
+      console.warn(`[sync-assets] docs/engine/spec/${name}: $id ${id} cannot be served (${error.code || error.message}); not served there`)
+      continue
+    }
     served.add(rel)
-    place(bytesOf.get(name), dest)
     console.log(`[sync-assets] docs/engine/spec/${name} -> ${id}`)
   }
 }
