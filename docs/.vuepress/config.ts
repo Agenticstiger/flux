@@ -60,6 +60,7 @@ export default defineUserConfig({
         children: [
           { text: 'Introduction', link: '/guide/' },
           { text: 'Quickstart', link: '/guide/quickstart' },
+          { text: 'From Your Data to a Synthetic Copy', link: '/guide/from-your-data' },
         ],
       },
       {
@@ -103,7 +104,7 @@ export default defineUserConfig({
         children: [
           { text: 'The vNext Plan', link: '/roadmap/' },
           { text: 'The Nine RFCs', link: '/roadmap/rfcs' },
-          { text: 'RFC-10 (proposed)', link: '/roadmap/rfc-10-playback-source' },
+          { text: 'Playback Source (proposed)', link: '/roadmap/rfc-10-playback-source' },
           { text: 'Conformance Profiles', link: '/roadmap/profiles' },
         ],
       },
@@ -116,7 +117,7 @@ export default defineUserConfig({
       '/guide/': [
         {
           text: 'Guide',
-          children: ['/guide/README.md', '/guide/quickstart.md'],
+          children: ['/guide/README.md', '/guide/quickstart.md', '/guide/from-your-data.md'],
         },
       ],
       '/concepts/': [
@@ -161,7 +162,9 @@ export default defineUserConfig({
             '/engine/how-to/add-a-journey.md',
             '/engine/how-to/use-the-fluid-seam.md',
             '/engine/how-to/calibrate-from-aggregates.md',
+            '/engine/how-to/draw-a-column-given-another.md',
             '/engine/how-to/ship-with-evidence.md',
+            '/engine/how-to/load-a-simulation-into-a-database.md',
           ],
         },
         {
@@ -195,6 +198,20 @@ export default defineUserConfig({
             '/engine/reference/errors/README.md',
             '/engine/reference/python-api.md',
             '/engine/reference/schemas.md',
+            {
+              text: 'Specifications',
+              collapsible: true,
+              children: [
+                '/engine/spec/KERNEL-SPEC.md',
+                '/engine/spec/SEAM-FIDELITY-SPEC.md',
+                '/engine/spec/PROFILE-SPEC.md',
+                '/engine/spec/SCORECARD-SPEC.md',
+                '/engine/spec/SAMPLE-SPEC.md',
+                '/engine/spec/PARAMETER-REGISTER-SPEC.md',
+                '/engine/spec/EXPR-SPEC.md',
+                '/engine/spec/EXPR-SPEC-2.md',
+              ],
+            },
           ],
         },
         {
@@ -232,7 +249,7 @@ export default defineUserConfig({
       '/releases/': [
         {
           text: "What's New",
-          children: ['/releases/README.md', '/releases/0.5.0.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
+          children: ['/releases/README.md', '/releases/0.5.2.md', '/releases/0.5.1.md', '/releases/0.5.0.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
         },
       ],
       '/contributing/': [

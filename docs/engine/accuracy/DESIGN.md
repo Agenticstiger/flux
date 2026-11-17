@@ -119,9 +119,13 @@ The fidelity check compares a synthetic dataset with a committed state through
 the derived statistic S. S holds bucket counts on the declared edges, the
 moment sums (`Sx`, `Sy`, `Sxy`, `Sxx`, `Syy`), the sorted support, the
 quantile witness, `n` and `k`
-(`flux_engine/concordance/boundary/statistic.py`). Family 1 scores the same
-comparison with the metrics a synthetic-data practitioner already reads, and
-computes them from S alone. It never reads a record.
+(`packages/flux-stats/src/flux_stats/reading.py` reads the records,
+`flux_engine/concordance/boundary/statistic.py` picks the columns each
+property reads, and `packages/flux-stats/src/flux_stats/definitions.py` holds
+one definition per statistic).
+Family 1 scores the same comparison with the metrics a synthetic-data
+practitioner already reads, and computes them from S alone. It never reads a
+record.
 
 The definitions are borrowed from SDMetrics 0.33.0 (MIT): KSComplement,
 TVComplement, CorrelationSimilarity and ContingencySimilarity. SDMetrics
@@ -133,7 +137,7 @@ computes them from DataFrames. Here they are reimplemented on aggregates
 | TVComplement | `1 - 1/2 * sum(abs(c_a/k_a - c_b/k_b))` over the bins of a histogram property | Equal, with the bins as categories |
 | KSComplement | `1 - max(abs(F_a(e) - F_b(e)))` over the declared edges, from cumulative bin counts | A lower bound on the record-level KS distance: the supremum taken only at the edges |
 | CorrelationSimilarity | `1 - abs(r_a - r_b)/2`, with Pearson's r from `k`, `Sx`, `Sy`, `Sxx`, `Syy`, `Sxy` | Equal for Pearson, up to the declared grid's quantisation |
-| ContingencySimilarity | TVComplement of the (group, bin) table of a grouped histogram property | Equal, with the groups and bins as the two columns' categories |
+| ContingencySimilarity | TVComplement of the (group, bin) table of a grouped histogram property, or of the (group, level) table of a grouped level histogram | Equal, with the groups and the bins or levels as the two columns' categories |
 
 Pass criteria:
 
@@ -161,10 +165,35 @@ Pass criteria:
     synthetic mean must sit within four standard errors of the within-bin
     uniform prediction, which shows that the whole shift comes from the
     declared shape.
-  - The generator draws columns independently. When the committed markets
-    differ in their amounts, ContingencySimilarity is capped by the committed
-    table's own distance from independence. The measured score must sit within
-    three sampling distances of that cap.
+  - Without `given`, the generator draws columns independently. When the
+    committed markets differ in their amounts, ContingencySimilarity is capped
+    by the committed table's own distance from independence. The measured
+    score must sit within three sampling distances of that cap.
+- **Conditional draws lift the cap.** The same dependent markets, with
+  `amount` declared `given` `market` and one bin-weight list per market taken
+  from the grouped histogram's (group, bin) counts, draw D' from S's own joint
+  table. ContingencySimilarity must then sit within three one-sample sampling
+  distances of 1, and the fixture must discriminate: its independence cap lies
+  further below 1 than that. The ungrouped histogram's TVComplement must stay
+  within its own sampling distance too, because the joint implies it. A chain (channel, then market given channel, then
+  amount given market) is declared from the tree
+  `flux_engine.calibrate.structure` suggests from the two-way count tables
+  (`tests/accuracy/fidelity/test_tree_draws.py`). The suggested tree must be
+  the true chain. Each table on a tree edge must sit within three one-sample
+  distances of the committed table, and the table off the tree and the
+  three-way table within three two-sample distances.
+- **A categorical link, declared from S and checked by the gate.** A
+  committed pair draws market given channel, and S counts it with a grouped
+  `levelHistogram` (`tests/accuracy/fidelity/test_level_pair_draws.py`).
+  `pair_table_from_level_groups` reads that table back, and the tree and the
+  declarations come from it alone. The suggested tree must be the true link.
+  Drawn with `levelWeightsGiven`, the fidelity check must find every property
+  within, and ContingencySimilarity must sit within three one-sample
+  distances of 1. Drawn independently, the check must withhold on the grouped
+  property alone, and ContingencySimilarity must sit within three two-sample
+  distances of the independence cap. In both cases every group's verdict must
+  equal `TV <= margin` computed from the two S values, and the score from S
+  must equal the record-level crosstab value.
 
 ### 2. Goodness of fit, for every sampler and every declared distribution
 
@@ -256,7 +285,12 @@ Pass criteria:
   own rows ships with exit 0. The same slice with every amount raised by 200
   exits 1 with `FLX-8001` and writes no bundle. In both cases the outcome
   must match the declared rule, `|mean_synthetic - mean_committed| <= 50`,
-  evaluated on the two record sets.
+  evaluated on the two record sets. Through `python -m flux_engine.cli verify
+  --committed-slice` on a copy of that bundle whose `market` is drawn given a
+  new `channel` column with `levelWeightsGiven`, a slice holding the declared
+  (channel, market) counts passes with exit 0, and the same slice with the
+  two channels' market shares swapped fails with exit 1
+  (`tests/accuracy/fidelity/test_gate_verify_level_pair.py`).
 
 The rates near the tolerance itself, at 0.9 and 1.1 times it, are reported but
 not gated. They measure the sampling noise at the stated sizes, which is a
@@ -266,7 +300,7 @@ property of `n` and `τ`, not of the gate.
 
 - **Schema-driven properties.** hypothesis-jsonschema 0.23.2 (MPL-2.0,
   test-only, never vendored) generates documents that validate against the
-  vendored FLUX 0.5.0 and FLUID 0.7.5 schemas. Each one is spliced into a
+  FLUX 0.5.0 and FLUID 0.7.5 schemas flux-spec ships. Each one is spliced into a
   known-good bundle and run. The engine must either refuse with a typed
   `FLX-` error or produce output that conforms to its contract. It must
   never crash.
@@ -286,14 +320,26 @@ property of `n` and `τ`, not of the gate.
   5. *Adding a column leaves sibling streams untouched*: under a fixed root
      for the generator, and end to end for a Persona trait, which is not part
      of `H`.
+  6. *A forest of conditional draws keeps every generator invariant*:
+     Hypothesis draws random valid forests of 2 to 7 columns (`given` links
+     from categorical columns of every kind, histogram leaves, chains, NFC
+     and NFD spellings of a parent's levels, zero weights, a shuffled declared
+     order). Two runs agree byte for byte; permuting the declared order
+     changes no column; column-first equals row-first; slices join; a longer
+     plan extends a shorter one; every drawn level and bin carries weight in
+     the row of its parent's level; replacing every conditional declaration
+     with an unconditional one leaves the root columns unchanged; and a
+     single corruption of a valid forest is refused at plan time with
+     `FLX-3402`, never with another exception type.
 - **Counterexamples** become regression cases. A falsifying example is written
   to `FLUX_ACCURACY_COUNTEREXAMPLES` and uploaded with the nightly artefact.
   Each one is then committed under `tests/accuracy/properties/regressions/`,
   where a replay test runs it on every pull request.
 - **Mutation testing** runs weekly with mutmut 3.8.1 over the kernel's numeric
-  core: `core/lrm.py`, `core/rng.py`, `core/seedtree.py`,
-  `core/fixedpoint.py` and the S statistic. The target and its justification
-  are in the [mutation section](#mutation-testing-target).
+  core: `core/lrm.py`, `core/rng.py`, `core/seedtree.py`, the S statistic,
+  and flux-stats's fixed-point grid, statistic registry and record reader
+  (`flux_stats/fixedpoint.py`, `definitions.py`, `registry.py`, `reading.py`). The target
+  and its justification are in the [mutation section](#mutation-testing-target).
 
 ### 5. Seed-tree stream quality
 
@@ -429,21 +475,87 @@ The baseline was measured with mutmut 3.8.1 and `mutate_only_covered_lines`,
 on a development machine. The weekly job's own first run replaces it in the
 report.
 
-Two of the floors sit below the 75% that is a common expectation for core
+On 2026-11-16 the arithmetic of S moved out of `statistic.py` into the
+statistic registry (`flux_engine/stats`), whose two modules joined the run.
+`statistic.py` kept the code that reads records, whose survivors were nearly
+all diagnostics, and it scored 90.6% (377 of 416). Pinning those diagnostics
+(`tests/concordance/test_statistic_diagnostics.py`) killed all but the
+equivalent ones, so its floor went up. Measured the same way that day:
+
+| Module | Baseline (2026-11-16) | Floor |
+|---|---|---|
+| `flux_engine/concordance/boundary/statistic.py` | 97.8% (407 of 416) | 95% |
+| `flux_engine/stats/definitions.py` | 96.6% (285 of 295) | 95% |
+| `flux_engine/stats/registry.py` | 100% (57 of 57) | 95% |
+
+The registry's floor sits one step below its baseline: with 57 mutants, one
+new survivor costs it almost two points, and the five-point drop rule still
+holds it to the published score.
+
+Later the same day the fixed-point grid and the registry moved into flux-stats,
+a distribution of their own (ADR 0009). mutmut 3.8.1 names a mutant by its
+path and strips only a `src/` prefix, so the weekly job runs it twice: from the
+repository root for the engine's modules, as before, and from
+`packages/flux-stats` for `flux_stats.fixedpoint`, `flux_stats.definitions` and
+`flux_stats.registry`, against flux-stats's own tests. Those tests run without
+the engine, so the suite that ships with flux-stats now holds the floors alone.
+The tests that moved with the modules fell short of them, because part of what
+killed these mutants was the engine's suite. New tests in
+`packages/flux-stats/tests` (`test_definitions.py`, `test_fixedpoint_edges.py`)
+pin the refusals by code and subject, the boundaries and the exact bounds.
+Measured the day of the move:
+
+| Module | The tests that moved | With the added tests | Floor |
+|---|---|---|---|
+| `flux_stats/definitions.py` | 93.7% (268 of 286) | 98.3% (281 of 286) | 95% |
+| `flux_stats/registry.py` | 86.9% (152 of 175) | 96.5% (191 of 198) | 95% |
+| `flux_stats/fixedpoint.py` | 63.2% (497 of 787) | 98.3% (774 of 787) | 95% |
+
+The registry has more mutants than its first baseline's 57 because the profile
+document added its column metrics and its readers to it, and more again with
+the added tests, because `mutate_only_covered_lines` mutates only the lines a
+test reaches. Of the 25 survivors left in the three modules (5, 7 and 13), 15
+are equivalent (for example the `strict` flag of a `zip` over two sequences of
+one length) and 10 change only the prose of a refusal. The fixed-point grid's floor went up from
+65% to 95% with them, the ratchet rule below.
+
+On 2026-11-17 the reading of a record followed (ADR 0009, amended):
+`flux_stats.reading` joined the flux-stats run at the reader's floor, and
+`statistic.py` kept the code that picks the columns a property reads and the
+definition that measures them. Measured the same way that day:
+
+| Module | Baseline (2026-11-17) | Floor |
+|---|---|---|
+| `packages/flux-stats/src/flux_stats/reading.py` | 98.3% (354 of 360) | 95% |
+| `flux_engine/concordance/boundary/statistic.py` | 97.3% (252 of 259) | 95% |
+
+Every survivor is equivalent. In the reader: an offset slice whose end runs
+past the six characters it reads, a microsecond count scaled by 1001 that the
+floor to milliseconds removes, two spellings of the subject of a quantise
+that cannot refuse an exact rational, and two spellings of `exponent >= 0` in
+the digit count, which agree because an exponent of zero counts
+`max(digits, 0)`, the same number. In `statistic.py`: three `Parameters()`
+that the definitions they reach do not read, and four spellings of the
+"bin edge" subject, for the same reason.
+
+Two of the floors sat below the 75% that is a common expectation for core
 logic, for reasons that were measured, not assumed. In a sample of 40
 survivors per module, 17 in `fixedpoint.py` and 18 in `seedtree.py` changed
 nothing but a string literal. These modules spell out their refusals in long
 diagnostic messages, and the suite checks the error code rather than its
-prose, by design. With those mutants set aside, both modules come to about
-80%. The floors work as a ratchet rather than a target: a week whose score
+prose, by design. With those mutants set aside, both modules came to about
+80%. `seedtree.py` still sits there; the fixed-point grid's floor rose when
+flux-stats's tests killed its survivors (above). The floors work as a ratchet rather than a target: a week whose score
 drops fails, and a floor goes up when the survivors behind it are killed.
 Equivalent mutants account for the rest of the gap. For example, a mutated
 rounding mode on a value that is already on the grid changes nothing that
 can be observed.
 
-The tests mutmut runs are the kernel's own unit tests (`tests/core`,
-`tests/concordance`), plus the two fast, deterministic accuracy modules
-(`gof/test_kernel_numerics.py` and `fidelity/test_s_metric_definitions.py`).
+The tests mutmut runs from the root are the kernel's own unit tests
+(`tests/core`, `tests/concordance`, `tests/stats`), plus the two fast,
+deterministic accuracy modules (`gof/test_kernel_numerics.py` and
+`fidelity/test_s_metric_definitions.py`). From `packages/flux-stats` it runs
+that package's own tests.
 The statistical batteries are left out. Each one recomputes tens of
 thousands of draws in a module-scoped fixture, so running them for every
 mutant would cost hours a week, on mutants the unit tests already settle.
@@ -483,9 +595,16 @@ definitions, not code.
   construction, and its privacy is outside this program.
 - **The agentic tier and the stochastic sweep executor** are not built. The
   engine refuses them, and the existing suite tests those refusals.
-- **Joint structure in generated data**: the generator draws each column
-  independently. Family 1 measures the shortfall in ContingencySimilarity
-  and CorrelationSimilarity, and nothing here claims joint fidelity.
+- **Joint structure in generated data**: without `given`, the generator
+  draws each column independently, and Family 1 measures the shortfall in
+  ContingencySimilarity and CorrelationSimilarity. With `given`, Family 1
+  measures the declared links: a histogram drawn given a categorical, a
+  categorical drawn given a categorical, and a three-column chain. The
+  fidelity check tests each declared link through a grouped property: a
+  grouped `marginalHistogram` for a histogram link, a grouped
+  `levelHistogram` for a categorical one. Two numeric columns are never
+  linked directly, because a histogram column is a leaf. Nothing here claims
+  joint fidelity beyond the declared links.
 - **Real data**: every record set here is synthetic, drawn from stated
   parameters (ADR 0003). A fit to an owner's real committed state is
   measured only by that owner's own fidelity check.

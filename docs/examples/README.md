@@ -17,7 +17,7 @@ the underlying real-time signal?
 | Document | Kind | Role |
 |---|---|---|
 | `world.flux.yml` | World | 25,000 subscribers, 3 markets, 20% at risk, seeded |
-| `persona.flux.yml` | Persona | traits as RFC-01 distributions (scalar + categorical + bounded normal) |
+| `persona.flux.yml` | Persona | traits as typed distributions (scalar + categorical + bounded normal) |
 | `segment.flux.yml` | Segment | `lifecycle == 'atrisk' && products.has('tv')` |
 | `signal.flux.yml` | Signal | `com.telco.payment.aborted` as a CloudEvents type |
 | `detector.flux.yml` | Detector | two aborted payments inside 15 minutes |
@@ -27,12 +27,12 @@ the underlying real-time signal?
 | `treatment-standard.flux.yml` | Treatment | the dunning-letter control arm |
 | `channel.flux.yml` / `consent.flux.yml` | Channel, ConsentProfile | consented SMS reach, EU jurisdictions |
 | `campaign.flux.yml` | Campaign | treatment × segment × channel × consent |
-| `experiment.flux.yml` | Experiment | 50/50 A/B, largest-remainder assignment, RFC-07 governed metric |
+| `experiment.flux.yml` | Experiment | 50/50 A/B, largest-remainder assignment, a metric bound through the semantic-model port |
 | `catalog.flux.yml` / `offer.flux.yml` | Catalog, Offer | the winback offer surface |
 | `playback.flux.yml` | Playback | calibrates the World from billing telemetry, PSI drift |
 | `module.flux.yml` / `verticalpack.flux.yml` / `blueprint.flux.yml` | Composition | packaging and topology |
-| `simulation.flux.yml` | Simulation | the root: fidelity, golden digest, skills, RFC-02 extensions, RFC-03 versioned moduleRef — and the seam |
-| `flux.lock` | — | RFC-03 lockfile pinning `module-payment-recovery@^2.1` to 2.1.3 + a content digest |
+| `simulation.flux.yml` | Simulation | the root: fidelity, golden digest, skills, extensions, versioned moduleRef, and the seam |
+| `flux.lock` | n/a | Lockfile pinning `module-payment-recovery@^2.1` to 2.1.3 + a content digest |
 | `payment-recovery.fluid.yml` | **FLUID DataProduct** | the contract the twin proves and production ships |
 
 ## Run it

@@ -13,7 +13,7 @@ fluxVersion: "0.4.0"   # enum of the versions this schema file accepts
 kind: World            # discriminator: one of nineteen
 id: q3-retention-world # $defs/identifier — the target other documents reference
 name: Q3 Retention World
-version: 2.1.3         # optional semver — the RFC-03 lockfile anchor
+version: 2.1.3         # optional semver, the `flux.lock` lockfile anchor
 description: …         # optional
 tags: […]              # optional
 labels: { k: v }       # optional string map
@@ -23,7 +23,7 @@ metadata:
   createdAt: …         # optional RFC 3339
 agentPolicy: …         # optional; required if skills are declared
 skills: […]            # optional agentic extension point (any kind)
-extensions:            # optional RFC-02 port — the one sanctioned escape hatch
+extensions:            # optional extension port, the one sanctioned escape hatch
   com.acme.flux/1: { … }
 spec: …                # the kind-specific block
 ```
@@ -56,9 +56,9 @@ The schema carries one `if/then` branch per kind, each guarded with
 | `agentPolicy` | model allow-list, token budget, use-case limits — FLUID-aligned vocabulary |
 | `skillBinding` | name, skillRef, purpose, optional model/budget |
 | `edge` | `{from, to}`, both required — taxonomy transitions, blueprint edges |
-| `trait` | RFC-01: scalar 0..1, categorical distribution, or bounded normal |
-| `versionedRef` | RFC-03: `name` or `name@<semver-range>`; versioned refs resolve through `flux.lock` |
-| `semanticRef` | RFC-07: `<model>/<measure>` into the bundle's bound semantic model |
+| `trait` | Trait distributions: scalar 0..1, categorical distribution, or bounded normal |
+| `versionedRef` | Module supply chain: `name` or `name@<semver-range>`; versioned refs resolve through `flux.lock` |
+| `semanticRef` | Semantic-model port: `<model>/<measure>` into the bundle's bound semantic model |
 
 ## The offline validator
 
@@ -73,9 +73,9 @@ enforces — offline, no cloud, no engine:
 | Transitions ⊆ states, edges ⊆ nodes | unreachable taxonomy states, phantom topology |
 | `timeBounds.start < end` | inverted simulation windows |
 | skills within `agentPolicy` | model or budget escapes |
-| RFC-01 trait distributions (sum→1, min<max) | populations that don't add up |
-| RFC-03 `flux.lock` (range satisfied, version match, content digest) | irreproducible module reuse |
-| RFC-07 semantic measures resolve | "revenue" meaning three things |
+| Trait distributions (sum→1, min<max) | populations that don't add up |
+| Module supply chain: `flux.lock` (range satisfied, version match, content digest) | irreproducible module reuse |
+| Semantic measures resolve | "revenue" meaning three things |
 | Every `.fluid.yml` valid for its declared version | broken contracts riding along in a bundle |
 | [Seam conformance + consent strictness](/flux/concepts/seam) | proving one thing, shipping another |
 

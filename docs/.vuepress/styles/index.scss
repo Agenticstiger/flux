@@ -341,6 +341,13 @@ div[class*="language-"] {
   border-radius: 10px;
   overflow: hidden;
 
+  // On a phone, a table wider than the screen scrolls inside its own box
+  // instead of widening the whole page.
+  @media (max-width: 719px) {
+    display: block;
+    overflow-x: auto;
+  }
+
   th {
     background: var(--vp-c-bg-alt);
     font-weight: 600;

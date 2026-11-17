@@ -3,6 +3,15 @@
 Author a minimal universe, validate it offline, and cross the FLUID seam — in
 about five minutes. No cloud, no running engine.
 
+::: tip This bundle validates; it does not run
+The quickstart checks a bundle offline and stops there. The engine cannot run
+the bundle it builds: `fluxsim run` also needs a `vertical` on the World, a
+Persona, a time window and a source for every required column. To run a
+bundle, start from the [engine tutorial](../engine/tutorial/first-evidence-pack.md),
+whose starter bundle runs as it is. To start from data of your own, follow
+[From your data to a synthetic copy](./from-your-data.md).
+:::
+
 ## 1. Install
 
 ```bash
@@ -30,7 +39,7 @@ python3 -m flux_spec.validate examples/telco-payment-recovery
 ```
 
 That one line just did two layers of work: every document against the
-[JSON Schema](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json),
+[JSON Schema](https://agenticstiger.github.io/flux/schema/flux-schema-latest.json),
 then the cross-document checks — reference resolution, sums, state membership,
 agentPolicy bounds, and FLUID seam conformance.
 
@@ -124,11 +133,15 @@ Add this line to the top of any `.flux.yml` for instant validation and
 completion in VS Code (with the YAML extension) and friends:
 
 ```yaml
-# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json
+# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-latest.json
 ```
 
 ## Next
 
+- [The engine tutorial](../engine/tutorial/first-evidence-pack.md): run a bundle
+  and ship an evidence pack.
+- [From your data to a synthetic copy](./from-your-data.md): a contract and a
+  profile from your own data, then synthetic rows.
 - [The Six Families](/flux/concepts/families) — what each kind is for.
 - [The FLUID Seam](/flux/concepts/seam) — how discovery hands off to delivery.
 - [Examples](/flux/examples/) — the full 19-kind telco universe, annotated.

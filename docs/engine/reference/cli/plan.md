@@ -8,7 +8,7 @@ editLink: false
 
 # `fluxsim plan`
 
-Execute the whole pipeline once, in memory, and write down what it saw: inputDigest, the seed-tree paths it materialised, the per-emit seam digests. Writes plan.json and seed-paths.ndjson under the run directory.
+Execute the whole pipeline once, in memory, and write down what it saw: inputDigest, the seed-tree paths it materialised, the per-emit seam digests, and each declared fidelity block as it compiled, every epsilon included. Writes plan.json and seed-paths.ndjson under the run directory.
 
 ## Synopsis
 
@@ -38,6 +38,9 @@ fluxsim plan ./bundle --state-dir ./.flux
 |---|---|---|
 | `--simulation-id` | `SIMULATION_ID` | which Simulation document to resolve (default: the bundle's only one) |
 | `--zone` | `ZONE` | declared run zone, for sovereignty checks |
+| `--jobs` | `N` | the most processes that may generate the rows of an emit declared by statistics: a number (never more than one per CPU) or auto for one per CPU; the run summary says how many it used, and the rows and every digest are the same whatever the number (default: FLUX_JOBS, else 1) |
+| `--strict-coverage` |  | refuse the run when a column falls back to a type default (an optional column nothing maps onto, a DATE or TIMESTAMP column with no declaration of its own), with a table of every such column, before any row is drawn; a Simulation can ask for the same with strictCoverage: true in its extensions; without either the plan names those columns and goes on, and with this flag the rows and every digest are the same either way |
+| `--profile` | `PATH` | the profile document the Simulation pins under extensions['com.agentics.flux/1'].profile (docs/spec/PROFILE-SPEC.md); refused when its digest is not the pinned one, and when the Simulation pins none |
 | `--state-dir` | `STATE_DIR` | run-state directory (default: ./.flux) |
 | `-j, --json` |  | emit machine-readable JSON |
 

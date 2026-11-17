@@ -7,7 +7,7 @@ FLUX is built on three non-negotiable properties. *Declarative* is covered in
 
 Given a `seed`, every output is reproducible byte-for-byte: the same dials
 compile to the same world, the same world materialises to the same population,
-the same seed replays the same stochastic run.
+and the same seed replays the same run.
 
 Schema surfaces:
 
@@ -17,12 +17,18 @@ Schema surfaces:
   - **`deterministic`** — every agent is a pure function of the seed. The mode
     certification and legal-grade lineage rely on: identical submission,
     identical verdict.
-  - **`stochastic`** — `sweep: { runs, baseSeed }` turns the same population
-    into a Monte-Carlo ensemble: full distributions, tail risk, confidence
-    intervals — while every individual run stays replayable from its own seed.
-  - **`agentic`** — selected synthetic actors are backed by language models
-    under `agentPolicy`, producing the messy, adaptive behaviour no author
-    scripts — still seeded, still contract-conformant.
+  - **`stochastic`**, spec only: the engine refuses it today
+    ([FLX-4103](../engine/reference/errors/FLX-4103.md)), because it has no
+    sweep executor yet. In the spec, `sweep: { runs, baseSeed }` turns the same
+    population into a Monte-Carlo ensemble (full distributions, tail risk,
+    confidence intervals), and every individual run stays replayable from its
+    own seed.
+  - **`agentic`**, spec only: the engine refuses it today
+    ([FLX-4101](../engine/reference/errors/FLX-4101.md)), because the extension
+    that would reach a language model is not published. In the spec, selected
+    synthetic actors are backed by language models under `agentPolicy`,
+    producing the messy, adaptive behaviour no author scripts, still seeded and
+    still contract-conformant.
 - `Simulation.spec.golden.baselineDigest` — the golden-regression anchor: the
   verify gate fails the build on a single byte of drift.
 - `Experiment.spec.assignment` — `method: largest_remainder` allocates integer

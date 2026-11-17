@@ -1,7 +1,7 @@
 # The vNext Roadmap
 
-FLUX 0.5.0 is a rigorous core, and the nine RFCs have shipped, apart from
-RFC-08's LSP specification, which is still open. The roadmap began at 0.3.x,
+The nine RFCs shipped by FLUX 0.5.0, apart from RFC-08's LSP specification,
+which is still open. The roadmap began at 0.3.x,
 where the most advanced private implementations of this idea were already
 **ahead of it** in places — richer population models, versioned module reuse,
 runtime policy enforcement, graded calibration. The roadmap's bet:

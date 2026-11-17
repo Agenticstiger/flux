@@ -40,6 +40,10 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-2112](./FLX-2112.md) | the run id is not a safe identifier |
 | [FLX-2113](./FLX-2113.md) | the run directory does not belong to the plan it holds |
 | [FLX-2114](./FLX-2114.md) | the run digest moved from the recorded golden baseline |
+| [FLX-2115](./FLX-2115.md) | the recorded column provenance is missing or no longer matches the plan |
+| [FLX-2116](./FLX-2116.md) | the recorded parameter register is missing or no longer matches the plan |
+| [FLX-2117](./FLX-2117.md) | a run file is a link or is not a regular file |
+| [FLX-2118](./FLX-2118.md) | a state directory is a link, or holds one |
 | [FLX-2201](./FLX-2201.md) | run touched a seed-tree path the plan did not anticipate |
 | [FLX-2202](./FLX-2202.md) | seed-tree input outside its declared domain |
 | [FLX-2301](./FLX-2301.md) | the run's cast does not resolve |
@@ -54,6 +58,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-3002](./FLX-3002.md) | binary floating-point value at the seam |
 | [FLX-3003](./FLX-3003.md) | value cannot be rendered as its declared logical type |
 | [FLX-3004](./FLX-3004.md) | expose schema cannot be compiled into an ordered column set |
+| [FLX-3005](./FLX-3005.md) | a key the contract declares does not resolve |
 | [FLX-3101](./FLX-3101.md) | declared contractDigest does not match the in-bundle contract |
 | [FLX-3102](./FLX-3102.md) | emit productRef resolves to no FLUID document in the bundle |
 | [FLX-3103](./FLX-3103.md) | emit exposeId is not an expose of the referenced product |
@@ -62,13 +67,27 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-3106](./FLX-3106.md) | run artifact would be written inside the bundle |
 | [FLX-3107](./FLX-3107.md) | bundle directory not found |
 | [FLX-3108](./FLX-3108.md) | the bundle directory holds a file this engine does not recognise |
+| [FLX-3109](./FLX-3109.md) | the profile the Simulation pins and the profile supplied do not pair |
+| [FLX-3110](./FLX-3110.md) | the supplied profile is not the one the Simulation pins |
+| [FLX-3111](./FLX-3111.md) | the Simulation restates a key the contract declares |
+| [FLX-3112](./FLX-3112.md) | an emit whose contract declares keys pins no contract digest |
+| [FLX-3113](./FLX-3113.md) | a parameter cites a statistic the pinned profile does not publish |
 | [FLX-3201](./FLX-3201.md) | row carries a column the expose does not declare |
 | [FLX-3202](./FLX-3202.md) | row is missing a required column |
 | [FLX-3203](./FLX-3203.md) | positional row does not match the declared column count |
 | [FLX-3301](./FLX-3301.md) | emit writer used out of order |
 | [FLX-3302](./FLX-3302.md) | a required expose column has no runtime attribute mapped onto it |
+| [FLX-3303](./FLX-3303.md) | an INT expose column is mapped onto a source that is not always a whole number |
+| [FLX-3304](./FLX-3304.md) | a column fell back to a type default and coverage is strict |
 | [FLX-3401](./FLX-3401.md) | no distribution family is available for this column |
 | [FLX-3402](./FLX-3402.md) | declared statistics do not parameterise the chosen family |
+| [FLX-3501](./FLX-3501.md) | a sink needs an optional extra that is not installed |
+| [FLX-3502](./FLX-3502.md) | a value has no exact representation in the sink's format |
+| [FLX-3503](./FLX-3503.md) | the data read back is not the stream it is read as |
+| [FLX-3504](./FLX-3504.md) | a sink was given a target or an option it cannot use |
+| [FLX-3505](./FLX-3505.md) | a sink could not finish writing a stream |
+| [FLX-3506](./FLX-3506.md) | the database sink will not touch a table it does not manage |
+| [FLX-3507](./FLX-3507.md) | there is no sink by that name |
 
 ## 4000: governance/sovereignty
 
@@ -106,6 +125,8 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-5033](./FLX-5033.md) | a correlation property is incompletely declared |
 | [FLX-5034](./FLX-5034.md) | a parameter the declared property needs is absent |
 | [FLX-5035](./FLX-5035.md) | the committed slice cannot be read as a committed state |
+| [FLX-5036](./FLX-5036.md) | profile document refused |
+| [FLX-5037](./FLX-5037.md) | the profile does not answer a declared property |
 | [FLX-5040](./FLX-5040.md) | population declaration cannot be materialised |
 | [FLX-5041](./FLX-5041.md) | value is outside the domain the kernel can hash |
 
@@ -118,6 +139,22 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-6003](./FLX-6003.md) | literal outside the declared closed set |
 | [FLX-6004](./FLX-6004.md) | unknown path for this scope |
 | [FLX-6005](./FLX-6005.md) | type mismatch |
+| [FLX-6101](./FLX-6101.md) | a FLUX-side rule declares no language |
+| [FLX-6102](./FLX-6102.md) | the declared language is not one this entry accepts |
+| [FLX-6103](./FLX-6103.md) | outside the core grammar and the extensions, or past a limit |
+| [FLX-6104](./FLX-6104.md) | a reserved word or the NULL literal used where it has no meaning |
+| [FLX-6105](./FLX-6105.md) | a first name that is a root and also a column or relationship |
+| [FLX-6106](./FLX-6106.md) | a path that does not resolve as written |
+| [FLX-6107](./FLX-6107.md) | an aggregate or window where it is not allowed |
+| [FLX-6108](./FLX-6108.md) | a window whose value depends on ties has an order that is not total |
+| [FLX-6109](./FLX-6109.md) | a type error |
+| [FLX-6110](./FLX-6110.md) | a derived value does not fit its column, or a sum has an unbounded scale |
+| [FLX-6111](./FLX-6111.md) | a name for a column that has no FLUID SQL/1 type |
+| [FLX-6112](./FLX-6112.md) | a value does not fit its column when the row is made |
+| [FLX-6113](./FLX-6113.md) | a name that the row scope does not know |
+| [FLX-6201](./FLX-6201.md) | a rule has no id, a repeated id, or an id that is not an identifier |
+| [FLX-6206](./FLX-6206.md) | a rule's check, when, or the expr of a bool column is not bool |
+| [FLX-6209](./FLX-6209.md) | a FLUX-side rule the contract can carry |
 
 ## 7000: calibration
 
@@ -129,6 +166,9 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-7004](./FLX-7004.md) | no prediction was registered at that registration timestamp |
 | [FLX-7005](./FLX-7005.md) | accuracy document does not have the required shape |
 | [FLX-7006](./FLX-7006.md) | an input document named on the command line does not exist |
+| [FLX-7007](./FLX-7007.md) | prediction id is already registered with a different seal |
+| [FLX-7008](./FLX-7008.md) | sealed prediction record does not verify |
+| [FLX-7009](./FLX-7009.md) | accuracy store entry is a link or the wrong type of file |
 | [FLX-7010](./FLX-7010.md) | seam credibility gate not met |
 | [FLX-7011](./FLX-7011.md) | promotion policy document is malformed |
 

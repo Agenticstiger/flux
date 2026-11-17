@@ -34,8 +34,8 @@ $ fluxsim validate .
 
 ```console
 $ fluxsim plan .
-plan written to .flux/runs/8dec55892096169f/plan.json (runId=8dec55892096169f, planDigest=sha256:8dec55892096169f5b6a9281a379f5dc9c085418ad2d22d52543a34835c26bb3)
-$ ls .flux/runs/8dec55892096169f
+plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
+$ ls .flux/runs/8835218acf7b4f8e
 emits
 plan.json
 seed-paths.ndjson
@@ -44,10 +44,11 @@ seed-paths.ndjson
 `apply` runs the plan and writes everything else.
 
 ```console
-$ fluxsim apply . --run-id 8dec55892096169f
-applied to .flux/runs/8dec55892096169f (runDigest=sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f)
+$ fluxsim apply . --run-id 8835218acf7b4f8e
+applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
 emitted payment_recovery_moment: 154 rows (scenario)
-$ ls .flux/runs/8dec55892096169f
+$ ls .flux/runs/8835218acf7b4f8e
+column-provenance.json
 decisions.meta.ndjson
 decisions.ndjson
 emits
@@ -62,13 +63,13 @@ seed-paths.ndjson
 suppressions.ndjson
 ```
 
-The rows are in `emits/`, one file per exposed stream. `receipt.json` is written last, in one atomic rename, and the later steps read its presence as "this run completed".
+The rows are in `emits/`, one file per exposed stream. `column-provenance.json` says how each column of each stream was produced, and from what. `plan.json` holds a digest of it (`columnProvenanceDigest`), the way it holds the digest of `seed-paths.ndjson`, so the plan digest, the run id and the run digest cover it, and `ship` refuses a record that no longer hashes to it. `receipt.json` is written last, in one atomic rename, and the later steps read its presence as "this run completed".
 
 ```console
-$ fluxsim verify . --run-id 8dec55892096169f
+$ fluxsim verify . --run-id 8835218acf7b4f8e
 reproducible: not checked | validity: not asserted
 ...
-$ fluxsim ship . --run-id 8dec55892096169f -o out
+$ fluxsim ship . --run-id 8835218acf7b4f8e -o out
 ...
 shipped out/demo.flux.tgz
 $ ls out
@@ -92,7 +93,7 @@ Even a comment counts, because the digest is over bytes:
 ```console
 $ cp world.flux.yml ../world.orig
 $ echo "# a note" >> world.flux.yml
-$ fluxsim apply . --run-id 8dec55892096169f   # exit 1
+$ fluxsim apply . --run-id 8835218acf7b4f8e   # exit 1
 FLX-2101: the bundle's inputDigest has moved since the plan was recorded -- plan recorded sha256:... bundle is now sha256:...
 ...
 $ cp ../world.orig world.flux.yml
@@ -102,7 +103,7 @@ The rule is strict and has a cost: a harmless edit means a new plan and a new ru
 
 ## Why verify has five legs
 
-`verify` re-checks an applied run without re-running the simulation. First it confirms that the run still belongs to the bundle: it reads `plan.json` back (`FLX-2113`) and recomputes the bundle's `inputDigest` (`FLX-2101`). Then it has five legs, and they are independent on purpose. One leg passing says nothing about another.
+`verify` re-checks an applied run without re-running the simulation. First it confirms that the run still belongs to the bundle: it reads `plan.json` back (`FLX-2113`), checks that `run-digest.json` names that plan (`FLX-2113`) and that `column-provenance.json` still hashes to the plan's `columnProvenanceDigest` (`FLX-2115`), and recomputes the bundle's `inputDigest` (`FLX-2101`). Then it has five legs, and they are independent on purpose. One leg passing says nothing about another.
 
 1. **Artifacts.** Every component of `run-digest.json` is recomputed from the files on disk. This catches an emit stream edited after `apply` wrote it.
 2. **Golden regression.** The run digest is compared with the recorded baseline for the Simulation. It compares digests; nothing is run again. With no baseline it says `not checked`, not "passed".
@@ -113,8 +114,8 @@ The rule is strict and has a cost: a harmless edit means a new plan and a new ru
 Here is a run whose emit stream was edited after the fact:
 
 ```console
-$ echo '{}' >> .flux/runs/8dec55892096169f/emits/payment_recovery_moment.ndjson
-$ fluxsim verify . --run-id 8dec55892096169f   # exit 1
+$ echo '{}' >> .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson
+$ fluxsim verify . --run-id 8835218acf7b4f8e   # exit 1
 reproducible: not checked | validity: not asserted
   golden: not checked (no golden baseline recorded yet -- record one with `--update-golden --reason "<why>"`)
   artifacts: 1 component(s) do not reproduce: emits.payment_recovery_moment
@@ -141,7 +142,7 @@ They are never combined because they are different claims. A run can repeat exac
 If any gate withholds, the whole ship is refused: `FLX-8001`, exit 1, nothing written to the output directory. A pack that exists means the run's artifacts match their digest and every declared fidelity check passed. `ship` does not re-check the golden baseline, and it does not re-check that the bundle's documents are still the ones the run was made from. Those are `verify`'s legs, so run `verify` first, or let `fluxsim run . --verify --ship` run the steps in that order.
 
 ```console
-$ fluxsim ship . --run-id 8dec55892096169f -o out2   # exit 1
+$ fluxsim ship . --run-id 8835218acf7b4f8e -o out2   # exit 1
 FLX-8001: nothing packed -- FLX-2110: run artifacts do not reproduce the recorded run digest -- ...
 ...
 ```

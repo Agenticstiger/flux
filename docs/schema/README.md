@@ -4,9 +4,12 @@ The FLUX schema is **one JSON Schema file per released version** — normative,
 immutable once published, served at a stable URL:
 
 ```
-https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json
+https://agenticstiger.github.io/flux/schema/flux-schema-<version>.json
 https://agenticstiger.github.io/flux/schema/flux-schema-latest.json
 ```
+
+`flux-schema-latest.json` is a byte-identical copy of the current release's
+file; [Versions](/flux/schema/versions) lists every release.
 
 - **[Anatomy](/flux/schema/anatomy)** — the envelope, the kind-branch
   structure, the shared `$defs` grammar, and what the offline validator adds.
@@ -20,7 +23,7 @@ https://agenticstiger.github.io/flux/schema/flux-schema-latest.json
 ## Editor integration
 
 ```yaml
-# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json
+# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-latest.json
 ```
 
 ## Validation is two layers

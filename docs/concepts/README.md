@@ -57,6 +57,19 @@ faithful to reality.
 5. **Determinism as institutional trust** — a board can be shown not a slide
    but a rerunnable artefact.
 
+## Three things called a profile
+
+The word means three different things on this site. A **profile document** is
+what `fluid profile` writes: aggregate statistics of one expose's records,
+computed where the data lives and output-checked before they leave; a
+Simulation pins one by its digest, and the engine checks a run against it (see
+[From your data to a synthetic copy](/flux/guide/from-your-data)). A **FLUID
+`data_profile` expose** is a proposed expose kind that would publish such
+statistics as part of a data product, for a Playback to read in place of a
+stream of records (see [the playback source proposal](/flux/roadmap/rfc-10-playback-source)).
+A **conformance profile** is one of the levels of the standard a tool can
+claim, Core, Enterprise or Runtime (see [Conformance Profiles](/flux/roadmap/profiles)).
+
 Continue: [The Six Families](/flux/concepts/families) ·
 [The FLUID Seam](/flux/concepts/seam) ·
 [Deterministic & Governed](/flux/concepts/determinism-governance)

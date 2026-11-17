@@ -6,10 +6,11 @@
 <p align="center">
   <a href="https://agenticstiger.github.io/flux/">📖 Documentation</a> ·
   <a href="https://agenticstiger.github.io/flux/guide/quickstart.html">🚀 Quickstart</a> ·
+  <a href="https://agenticstiger.github.io/flux/guide/from-your-data.html">🧪 From Your Data</a> ·
   <a href="https://agenticstiger.github.io/flux/schema/kinds.html">🧭 The Nineteen Kinds</a> ·
   <a href="https://agenticstiger.github.io/flux/concepts/seam.html">🔗 The FLUID Seam</a> ·
   <a href="https://agenticstiger.github.io/flux/roadmap/">🗺️ Roadmap</a> ·
-  <a href="https://agenticstiger.github.io/flux/releases/0.5.0.html">✨ What's New</a>
+  <a href="https://agenticstiger.github.io/flux/releases/">✨ What's New</a>
 </p>
 
 ---
@@ -28,11 +29,13 @@ FLUX discovers.  FLUID delivers.  The seam is where the risk goes to die.
 
 ## Status
 
-**v0.5.0 — working draft.** All nine [vNext RFCs](docs/roadmap/rfcs.md) are
-shipped additively on the 0.3.0 core — the spec now carries a runtime
-enforcement contract with conformance vectors and portable, signable evidence
-bundles alongside the declarative core. Pre-1.0: minor versions may break; every release
-ships with a [schema diff](schema-diffs/) and a regression suite. The design
+**FLUX 0.5.2 is the current release**, a working draft, on PyPI as
+`flux-spec`. [docs/schema/versions.md](docs/schema/versions.md) lists every
+release. All nine [vNext RFCs](docs/roadmap/rfcs.md) have shipped additively on
+the 0.3.0 core: the spec carries a runtime enforcement contract with
+conformance vectors and portable, signable evidence bundles beside the
+declarative core. Pre-1.0: minor versions may break; every release ships with a
+[schema diff](schema-diffs/) and a regression suite. The design
 is documented in the position paper *"FLUX and FLUID"* (distributed separately
 under CC BY 4.0); where the paper and this schema disagreed,
 [docs/reconciliation.md](docs/reconciliation.md) is the honest ledger.
@@ -95,16 +98,16 @@ contract file is wrapped around the real estate.
 pip install flux-spec
 git clone https://github.com/Agenticstiger/flux.git && cd flux    # the worked example lives here
 python3 -m flux_spec.validate examples/telco-payment-recovery     # schema + cross-document
-python3 -m flux_spec.enforce                                      # RFC-04 conformance vectors
-python3 -m flux_spec.bundle pack examples/telco-payment-recovery -o dist/   # RFC-09 evidence bundle
+python3 -m flux_spec.enforce                                      # runtime enforcement conformance vectors
+python3 -m flux_spec.bundle pack examples/telco-payment-recovery -o dist/   # signed evidence bundle
 ```
 
 Point the same commands at your own bundle directory; the clone is only for the example.
 
 Two layers, both offline (no cloud, no running engine):
 
-1. **Schema**: every `*.flux.yml` against [`schema/flux-schema-0.5.2.json`](schema/flux-schema-0.5.2.json)
-   (JSON Schema 2020-12, closed specs, typed everything).
+1. **Schema**: every `*.flux.yml` against [`schema/flux-schema-latest.json`](schema/flux-schema-latest.json),
+   the current release's schema (JSON Schema 2020-12, closed specs, typed everything).
 2. **Cross-document** — every reference resolves to the right kind (no
    dangling links), mixes and weights sum to 1, transitions stay inside their
    taxonomies, skills stay inside their `agentPolicy`, and the FLUID seam conforms.
@@ -112,7 +115,7 @@ Two layers, both offline (no cloud, no running engine):
 Use the schema in your editor:
 
 ```yaml
-# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-0.5.0.json
+# yaml-language-server: $schema=https://agenticstiger.github.io/flux/schema/flux-schema-latest.json
 ```
 
 ## As a library
@@ -153,6 +156,13 @@ fluxsim init demo && cd demo && fluxsim run . --verify --ship -o out
 The command is `fluxsim`, and the engine needs Python 3.11 or newer. Documentation:
 [agenticstiger.github.io/flux/engine](https://agenticstiger.github.io/flux/engine/).
 
+To start from a table of your own, follow
+[From your data to a synthetic copy](https://agenticstiger.github.io/flux/guide/from-your-data.html):
+forge-cli writes a FLUID contract and a profile of aggregates from the data,
+you write the Simulation from the profile's numbers, and the engine generates
+the rows. Its profiling step needs forge-cli's `main` branch until the next
+forge-cli release; the guide says how to install it.
+
 ## Example
 
 [`examples/telco-payment-recovery/`](examples/telco-payment-recovery/) is the
@@ -171,7 +181,7 @@ schema-diffs/    one diff document per version pair
 examples/        validated bundles (CI-enforced)
 vendor/fluid/    vendored FLUID schemas the seam validates against
 vendor/fluid-preview/  FLUID previews, pinned to a commit and a sha256 (pins.json)
-flux_spec/       the flux-spec package: validate.py · enforce.py (RFC-04) · bundle.py (RFC-09)
+flux_spec/       the flux-spec package: validate.py · enforce.py (runtime enforcement) · bundle.py (evidence bundles)
 scripts/         validate.py / enforce.py / bundle.py — thin CLI shims onto flux_spec
 tests/           regression suite + published enforcement conformance vectors
 docs/            documentation site (VuePress): guide, concepts, schema, roadmap, releases,

@@ -24,8 +24,10 @@ bundles. The rest of this page is for changing the spec itself.
   FLUID versions are checked against the current FLUID release.
 - **The engine pages are copies.** `docs/engine/` mirrors the engine's own
   repository, [flux-engine](https://github.com/Agenticstiger/flux-engine), at a
-  pinned tag or commit (`scripts/engine-docs.ref`). Change those pages there, then
-  bump the pin and run `scripts/sync-engine-docs.sh`; CI fails if the copy differs.
+  pinned release tag (`scripts/engine-docs.ref`). Change those pages there, then,
+  once a release carries the change, move the pin to its tag and run
+  `scripts/sync-engine-docs.sh`; CI fails if the copy differs or the pin is not a
+  release tag.
 
 ## Start here
 
