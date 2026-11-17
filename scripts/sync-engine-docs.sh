@@ -84,6 +84,10 @@ git -C "$work/engine" checkout -q --detach FETCH_HEAD
 commit="$(git -C "$work/engine" rev-parse HEAD)"
 
 src="$work/engine/docs"
+if [ -L "$src" ]; then
+  echo "REFUSED: docs/ in $ref of the engine is a symbolic link" >&2
+  exit 1
+fi
 if [ ! -d "$src" ]; then
   echo "REFUSED: $ref of the engine has no docs/ directory" >&2
   exit 1

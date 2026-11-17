@@ -45,25 +45,40 @@ const place = (bytes, dest) => {
   mkdirSync(dirname(dest), { recursive: true })
   writeFileSync(dest, bytes)
 }
+// An $id is served only when its path under the site is plain segments of
+// letters, digits, '.', '_' and '-' ending in .json, and only where no other
+// file is served already, so one schema cannot stand in for another.
+const SPEC_ID_PATH = /^engine\/spec\/[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*\.json$/
 if (existsSync(engineSpec)) {
-  for (const name of readdirSync(engineSpec).filter((n) => n.endsWith('.json')).sort()) {
-    const bytes = readFileSync(resolve(engineSpec, name))
-    place(bytes, resolve(engineDest, 'spec', name))
+  // Regular files only: a symbolic link is not followed onto the site.
+  const files = readdirSync(engineSpec, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => entry.name)
+    .sort()
+  const bytesOf = new Map(files.map((name) => [name, readFileSync(resolve(engineSpec, name))]))
+  const served = new Set(files.map((name) => `engine/spec/${name}`))
+  for (const name of files) place(bytesOf.get(name), resolve(engineDest, 'spec', name))
+  for (const name of files) {
     let id
     try {
-      id = JSON.parse(bytes.toString('utf8')).$id
+      id = JSON.parse(bytesOf.get(name).toString('utf8')).$id
     } catch {
       console.warn(`[sync-assets] docs/engine/spec/${name} is not JSON; served under its own name only`)
       continue
     }
     if (typeof id !== 'string' || !id.startsWith(`${SITE}engine/spec/`)) continue
-    // An $id that climbs out of /flux/engine/spec/ is not served at all.
-    const dest = resolve(publicDir, id.slice(SITE.length))
-    if (!dest.startsWith(resolve(engineDest, 'spec') + sep)) {
-      console.warn(`[sync-assets] docs/engine/spec/${name}: $id ${id} leaves /flux/engine/spec/; not served there`)
+    const rel = id.slice(SITE.length)
+    const dest = resolve(publicDir, rel)
+    if (!SPEC_ID_PATH.test(rel) || !dest.startsWith(resolve(engineDest, 'spec') + sep)) {
+      console.warn(`[sync-assets] docs/engine/spec/${name}: $id ${id} is not a plain path under /flux/engine/spec/; not served there`)
       continue
     }
-    place(bytes, dest)
+    if (served.has(rel)) {
+      console.warn(`[sync-assets] docs/engine/spec/${name}: $id ${id} is served by another file already; not served there`)
+      continue
+    }
+    served.add(rel)
+    place(bytesOf.get(name), dest)
     console.log(`[sync-assets] docs/engine/spec/${name} -> ${id}`)
   }
 }
