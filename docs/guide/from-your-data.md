@@ -18,8 +18,8 @@ never a record.
 
 ::: warning What works today
 - `fluid profile` (step 3) is on forge-cli's `main` branch, not in a release
-  yet. Every other step works with the released packages: flux-sim-engine reads
-  a profile from 0.6.0.
+  yet. Every other step runs on the released packages, given the profile step 3
+  writes: flux-sim-engine reads a profile from 0.6.0.
 - The engine cannot yet pass a run checked against a profile that
   `fluid profile` wrote, so `ship` withholds it. Step 6 says why, and shows how
   to ship today with a slice of your records instead.
@@ -31,11 +31,12 @@ never a record.
 |---|---|---|---|
 | `flux-spec` | 0.5.2 | validating the bundle (the engine installs it) | released |
 | `flux-sim-engine` | 0.6.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; 0.6.0 is the first release that reads a profile |
-| `data-product-forge` | 0.30.1 | `fluid init --discover` and `fluid profile` | `--discover` released; `fluid profile` on forge-cli `main` only, until a release pins flux-stats 0.6.0 |
+| `data-product-forge` | 0.30.1 | `fluid init --discover` and `fluid profile` | `--discover` released; `fluid profile` on forge-cli `main`, not in a release yet, and it needs flux-stats from git |
 | `flux-stats` | 0.6.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; forge-cli `main` installs a commit of its own from git |
 
 The engine needs Python 3.11 or newer. The released packages cover every step
-but step 3:
+but step 3, which writes the profile steps 5 and 6 read. Without it, go from
+step 4 straight to the slice at the end of step 6.
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
@@ -132,7 +133,7 @@ lists every source `--discover` reads.
 
 ## 3. Profile the data where it lives
 
-*Needs forge-cli from `main` until a release pins flux-stats 0.6.0: run it from `.venv-forge`.*
+*Needs forge-cli from `main`, not in a release yet: run it from `.venv-forge`.*
 
 Run the profiler inside the environment that holds the data. It reads every
 record once and writes only aggregates that passed its output checks:
