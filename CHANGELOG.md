@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 - 2026-11-17
 
 Specification 0.5.2, additive
 ([schema-diffs/diff-0.5.1-to-0.5.2.md](schema-diffs/diff-0.5.1-to-0.5.2.md)):
@@ -15,7 +15,7 @@ Specification 0.5.2, additive
 - **schema**: `schema/flux-schema-0.5.2.json`, with the `fluxVersion` window
   `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2"]`;
   `flux-schema-latest.json` aliases it and `flux_spec.SCHEMA_VERSION` is
-  `0.5.2`. The package version is set when the release is cut.
+  `0.5.2`. The package version is `0.5.2`.
 - **tooling**: `scripts/sync-fluid-preview.py` re-creates every preview from
   its pin and checks the sha256 (`--repin VERSION COMMIT` moves a pin), and a
   CI job fails when the committed copy differs from what the pin names. The
