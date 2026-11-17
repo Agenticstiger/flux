@@ -631,6 +631,8 @@ def _check_bad_pins(sync_tool, good: dict) -> list[str]:
         "a short commit": {"commit": good.get("commit", "")[:12]},
         "a path that climbs out of the repository": {"path": "fluid_build/../../etc/fluid-schema-0.7.7.json"},
         "a repository that is not on GitHub": {"repository": "https://example.com/forge-cli"},
+        "an owner that is only dots": {"repository": "https://github.com/../forge-cli"},
+        "a commit with a trailing newline": {"commit": good.get("commit", "") + "\n"},
         "a file that does not hold its version": {"fluidVersion": "0.7.8"},
     }.items():
         try:
@@ -1066,7 +1068,7 @@ def main() -> int:
         len(CASES_PASS) + len(CASES_REJECT) + 1
         + len(VALIDATOR_REJECTS) + len(VALIDATOR_ROBUSTNESS) + 6
         + 3   # 0.5.1: towers bundle green, broken 0.7.6 contract caught, 0.7.6 refused by 0.5.0
-        + 14  # 0.5.2: pins, seam window, 5 bad pins, 0.7.7 green, moved key, broken relationship,
+        + 16  # 0.5.2: pins, seam window, 7 bad pins, 0.7.7 green, moved key, broken relationship,
               # range refused, 0.7.6 relationships refused, 0.7.7 refused by 0.5.1
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid

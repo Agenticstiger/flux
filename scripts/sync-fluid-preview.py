@@ -50,11 +50,11 @@ PINS_PATH = PREVIEW_DIR / "pins.json"
 #: The keys of one pin, in the order pins.json writes them.
 PIN_FIELDS = ("file", "fluidVersion", "repository", "path", "commit", "sha256")
 
-_FILE = re.compile(r"^fluid-schema-(\d+\.\d+\.\d+)\.json$")
-_REPOSITORY = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$")
-_PATH = re.compile(r"^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$")
-_COMMIT = re.compile(r"^[0-9a-f]{40}$")
-_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_FILE = re.compile(r"fluid-schema-(\d+\.\d+\.\d+)\.json")
+_REPOSITORY = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)")
+_PATH = re.compile(r"[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*")
+_COMMIT = re.compile(r"[0-9a-f]{40}")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 #: A FLUID schema is a few hundred kilobytes; anything far larger is not one.
 MAX_BYTES = 16 * 1024 * 1024
@@ -81,24 +81,25 @@ def check_pin(pin: object) -> dict:
         if not isinstance(pin[key], str):
             raise PinError(f"pin {key!r} must be a string")
     name = pin["file"]
-    match = _FILE.match(name)
+    match = _FILE.fullmatch(name)
     if not match:
         raise PinError(f"pin file {name!r} is not named fluid-schema-X.Y.Z.json")
     if match.group(1) != pin["fluidVersion"]:
         raise PinError(f"pin file {name!r} does not hold FLUID {pin['fluidVersion']}")
-    if not _REPOSITORY.match(pin["repository"]):
+    repository = _REPOSITORY.fullmatch(pin["repository"])
+    if not repository or any(set(part) == {"."} for part in repository.groups()):
         raise PinError(f"pin repository {pin['repository']!r} is not https://github.com/OWNER/REPO")
     path = pin["path"]
-    if not _PATH.match(path) or any(part in (".", "..") for part in path.split("/")):
+    if not _PATH.fullmatch(path) or any(part in (".", "..") for part in path.split("/")):
         raise PinError(f"pin path {path!r} is not a plain relative path inside the repository")
     if path.rsplit("/", 1)[-1] != name:
         raise PinError(f"pin path {path!r} does not end in the vendored file name {name!r}")
-    if not _COMMIT.match(pin["commit"]):
+    if not _COMMIT.fullmatch(pin["commit"]):
         raise PinError(
             f"pin commit {pin['commit']!r} is not a full 40-character commit: "
             "a branch, a tag or a short commit can move, and a moving pin is no pin"
         )
-    if not _SHA256.match(pin["sha256"]):
+    if not _SHA256.fullmatch(pin["sha256"]):
         raise PinError(f"pin sha256 {pin['sha256']!r} is not 64 lowercase hex digits")
     return pin
 
@@ -134,7 +135,7 @@ def fetch(pin: dict) -> bytes:
             message = result.stderr.decode("utf-8", "replace").strip()
             raise FetchError(f"{source} cannot show {pin['commit']}:{pin['path']}: {message}")
         return result.stdout
-    owner, name = _REPOSITORY.match(pin["repository"]).groups()
+    owner, name = _REPOSITORY.fullmatch(pin["repository"]).groups()
     url = f"https://raw.githubusercontent.com/{owner}/{name}/{pin['commit']}/{pin['path']}"
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 (https only)

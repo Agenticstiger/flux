@@ -57,7 +57,7 @@ FLUX_SCHEMA_PATH = schema_dir() / "flux-schema-latest.json"
 FLUID_VENDOR_DIR = vendor_fluid_dir()
 FLUID_PREVIEW_DIR = vendor_fluid_preview_dir()
 
-_FLUID_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+_FLUID_VERSION = re.compile(r"\d+\.\d+\.\d+")
 
 
 def fluid_schema_file(version: str) -> Path | None:
@@ -66,7 +66,7 @@ def fluid_schema_file(version: str) -> Path | None:
     Releases live in vendor/fluid/, verbatim from FLUID; previews in
     vendor/fluid-preview/, each pinned to a commit and a sha256 (pins.json).
     """
-    if not isinstance(version, str) or not _FLUID_VERSION.match(version):
+    if not isinstance(version, str) or not _FLUID_VERSION.fullmatch(version):
         return None
     for directory in (FLUID_VENDOR_DIR, FLUID_PREVIEW_DIR):
         candidate = directory / f"fluid-schema-{version}.json"
