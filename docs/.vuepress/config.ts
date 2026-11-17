@@ -243,7 +243,7 @@ export default defineUserConfig({
       '/releases/': [
         {
           text: "What's New",
-          children: ['/releases/README.md', '/releases/0.5.0.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
+          children: ['/releases/README.md', '/releases/0.5.2.md', '/releases/0.5.1.md', '/releases/0.5.0.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
         },
       ],
       '/contributing/': [

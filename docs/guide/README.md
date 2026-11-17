@@ -47,6 +47,7 @@ envelope. See [The Six Families](/flux/concepts/families) and the
 
 ## Status
 
-FLUX is a **v0.5.0 working draft** under Apache 2.0. Pre-1.0, minor versions
-may break; every release ships a schema diff and a regression suite. Start
-with the [Quickstart](/flux/guide/quickstart).
+FLUX is a **pre-1.0 working draft** under Apache 2.0. The
+[Versions](/flux/schema/versions) page names the current release and every
+earlier one. Pre-1.0, minor versions may break; every release ships a schema
+diff and a regression suite. Start with the [Quickstart](/flux/guide/quickstart).
