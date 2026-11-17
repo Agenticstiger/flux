@@ -42,6 +42,11 @@ signature over them. A `schemaId` outside the window, from before a breaking
 reset or from a newer release, is refused with the versions the toolchain
 accepts. Verify that pack with a flux-spec release whose window includes it.
 
+This leans on the rule above: a release that tightens a constraint is breaking
+and resets the window. So no schema inside the window accepts a document that
+the current schema refuses for the same `fluxVersion`, and a pack that names
+an older schema in the window gains nothing a current pack would be refused.
+
 ## Pre-1.0 vs post-1.0
 
 - **Pre-1.0 (now):** minor versions MAY break. Every release — breaking or not
