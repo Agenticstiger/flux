@@ -12,11 +12,12 @@
 # or a bare commit is refused there. To take newer pages, change the pin to the
 # new release tag, run this script, and commit docs/engine/ with it.
 #
-# Copied: every Markdown page, and the JSON files directly in spec/ (the engine's
+# Copied: every Markdown page, the architecture decision records in adr/ included
+# (the spec pages cite them), and the JSON files directly in spec/ (the engine's
 # schemas and their examples). scripts/sync-public-assets.mjs serves those JSON files on
 # the site, and each schema also at the address its $id names.
-# Left out on purpose, because it is not user documentation: adr/, RELEASING.md,
-# and accuracy/latest.json (the report's data).
+# Left out on purpose, because it is not user documentation: RELEASING.md and
+# accuracy/latest.json (the report's data).
 #
 # Usage:  scripts/sync-engine-docs.sh [REF]
 #         scripts/sync-engine-docs.sh --check-pin
@@ -123,34 +124,35 @@ while IFS= read -r -d '' file; do
     *) files=$((files + 1)) ;;
   esac
 done < <(cd "$src" && find . -type f \( -name '*.md' -o \( -path './spec/*.json' ! -path './spec/*/*' \) \) \
-  ! -path './adr/*' ! -path './RELEASING.md' -print0 | LC_ALL=C sort -z)
+  ! -path './RELEASING.md' -print0 | LC_ALL=C sort -z)
 
 # Anything else the engine keeps under docs/ is not copied. Say so, so a new kind
 # of file (an image, say) is noticed instead of silently missing from the site.
 others="$(cd "$src" && find . -type f ! -name '*.md' \( ! -path './spec/*.json' -o -path './spec/*/*' \) \
-  ! -path './accuracy/latest.json' ! -path './adr/*' | LC_ALL=C sort)"
+  ! -path './accuracy/latest.json' | LC_ALL=C sort)"
 if [ -n "$others" ]; then
   echo "[sync-engine-docs] not copied, not Markdown:" >&2
   echo "$others" | sed 's/^/  /' >&2
 fi
 
-# A copied page that links into a part left out (adr/, RELEASING.md) would carry a
-# dead link onto the site. Say so, so the pin change decides what to do about it.
-dead="$(cd docs/engine && grep -r -n -o -E '\]\((\.{1,2}/)*(adr/|RELEASING\.md)[^)]*\)' \
+# A copied page that links to RELEASING.md, which is left out, would carry a dead
+# link onto the site. Say so, so the pin change decides what to do about it.
+dead="$(cd docs/engine && grep -r -n -o -E '\]\((\.{1,2}/)*RELEASING\.md[^)]*\)' \
   --include='*.md' . || true)"
 if [ -n "$dead" ]; then
-  echo "[sync-engine-docs] WARNING: links into adr/ or RELEASING.md, which are not copied:" >&2
+  echo "[sync-engine-docs] WARNING: links to RELEASING.md, which is not copied:" >&2
   echo "$dead" | sed 's/^/  /' >&2
 fi
 
 # The sidebar for /engine/ is a list in docs/.vuepress/config.ts. A page the engine
 # added is on the site but not in the sidebar until someone lists it. The error code
-# pages are reached from their index on purpose, so they are not expected there.
+# pages are reached from their index, and the decision records from the pages that
+# cite them, on purpose, so neither is expected there.
 unlisted=""
 while IFS= read -r -d '' file; do
   file="${file#./}"
   case "$file" in
-    reference/errors/FLX-*.md) continue ;;
+    reference/errors/FLX-*.md | adr/*.md) continue ;;
     */README.md) wanted="/engine/${file%README.md}" ;;
     *) wanted="/engine/$file" ;;
   esac

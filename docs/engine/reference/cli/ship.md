@@ -8,7 +8,7 @@ editLink: false
 
 # `fluxsim ship`
 
-Run the fidelity gate over every emit that declares a fidelity block, and only if none is withheld, pack the bundle and the run into one evidence archive with its in-toto statements.
+Run the fidelity gate over every emit that declares a fidelity block, and only if none is withheld, pack the bundle and the run into one evidence archive with its in-toto statements. A run whose plan pins a profile needs it with --profile: it is gated and scored against it, and its scorecard travels in the archive.
 
 ## Synopsis
 
@@ -40,6 +40,7 @@ fluxsim ship ./bundle --run-id de72fa4b22711c52 -o ./out \
 | `--run-id` | `RUN_ID` | the run id to act on (as reported by `fluxsim plan`/`fluxsim run`) **(required)** |
 | `-o, --out-dir` | `OUT_DIR` | directory the evidence archive and its statements are written to **(required)** |
 | `--committed-slice` | `EXPOSE_ID=file://PATH` | the committed real-data slice one expose's fidelity check is measured against, as EXPOSE_ID=file://PATH; repeatable, once per expose; the file holds one JSON object per line, keyed by the expose's contract column names (e.g. {"subscriber_id": "s-1", "amount": "12.50"}) |
+| `--profile` | `PATH` | the profile document this run's plan pins (docs/spec/PROFILE-SPEC.md): every declared fidelity property with no --committed-slice is checked against it, and the run is scored per property, table, dimension and overall (docs/spec/SCORECARD-SPEC.md); refused when its digest is not the pinned one, and when the run pins none |
 | `--signing-key` | `SIGNING_KEY` | file holding a 32-byte ed25519 seed (raw or hex) to sign fidelity records with; without it the record is signed by a per-invocation key and says so |
 | `--trust-key` | `PATH` | file holding the 32-byte raw ed25519 PUBLIC key (raw or hex -- the `publicKey` a fidelity record prints) the gate checks the record's signature against; without it the record is checked against the public half of the key that signed it and says it is self-attested |
 | `--state-dir` | `STATE_DIR` | run-state directory (default: ./.flux) |

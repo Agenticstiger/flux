@@ -15,10 +15,10 @@ created demo with a small FLUX bundle and its FLUID contract (10 files):
 ...
 $ cd demo
 $ fluxsim run .
-plan written to .flux/runs/8dec55892096169f/plan.json (runId=8dec55892096169f, planDigest=sha256:8dec55892096169f5b6a9281a379f5dc9c085418ad2d22d52543a34835c26bb3)
-applied to .flux/runs/8dec55892096169f (runDigest=sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f)
+plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
+applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
 emitted payment_recovery_moment: 154 rows (scenario)
-run 8dec55892096169f complete
+run 8835218acf7b4f8e complete
 ```
 
 ## 2. Change the population

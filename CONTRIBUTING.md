@@ -44,9 +44,10 @@ set its tag (`vX.Y.Z`) in `scripts/engine-docs.ref`, run
 release tag only: CI refuses a commit or a branch, because the site documents an
 engine people can install. A page the engine adds also needs an entry in the
 `/engine/` sidebar of `docs/.vuepress/config.ts`; the script warns when one is
-missing, and when a copied page links into `adr/` or `RELEASING.md`, which are
-not copied. The engine's `spec/` pages come with their JSON schemas, and the site
-serves each schema at the address its `$id` names. CI re-creates the copy from
+missing, and when a copied page links to `RELEASING.md`, which is not copied.
+The engine's `spec/` pages come with their JSON schemas, and the site serves
+each schema at the address its `$id` names. The decision records in `adr/` are
+copied too, because the spec pages cite them. CI re-creates the copy from
 the pin and fails if it differs.
 
 ## Licensing

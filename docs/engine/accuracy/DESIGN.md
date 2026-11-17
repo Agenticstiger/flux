@@ -119,9 +119,13 @@ The fidelity check compares a synthetic dataset with a committed state through
 the derived statistic S. S holds bucket counts on the declared edges, the
 moment sums (`Sx`, `Sy`, `Sxy`, `Sxx`, `Syy`), the sorted support, the
 quantile witness, `n` and `k`
-(`flux_engine/concordance/boundary/statistic.py`). Family 1 scores the same
-comparison with the metrics a synthetic-data practitioner already reads, and
-computes them from S alone. It never reads a record.
+(`packages/flux-stats/src/flux_stats/reading.py` reads the records,
+`flux_engine/concordance/boundary/statistic.py` picks the columns each
+property reads, and `packages/flux-stats/src/flux_stats/definitions.py` holds
+one definition per statistic).
+Family 1 scores the same comparison with the metrics a synthetic-data
+practitioner already reads, and computes them from S alone. It never reads a
+record.
 
 The definitions are borrowed from SDMetrics 0.33.0 (MIT): KSComplement,
 TVComplement, CorrelationSimilarity and ContingencySimilarity. SDMetrics
@@ -296,7 +300,7 @@ property of `n` and `τ`, not of the gate.
 
 - **Schema-driven properties.** hypothesis-jsonschema 0.23.2 (MPL-2.0,
   test-only, never vendored) generates documents that validate against the
-  vendored FLUX 0.5.0 and FLUID 0.7.5 schemas. Each one is spliced into a
+  FLUX 0.5.0 and FLUID 0.7.5 schemas flux-spec ships. Each one is spliced into a
   known-good bundle and run. The engine must either refuse with a typed
   `FLX-` error or produce output that conforms to its contract. It must
   never crash.
@@ -332,9 +336,10 @@ property of `n` and `τ`, not of the gate.
   Each one is then committed under `tests/accuracy/properties/regressions/`,
   where a replay test runs it on every pull request.
 - **Mutation testing** runs weekly with mutmut 3.8.1 over the kernel's numeric
-  core: `core/lrm.py`, `core/rng.py`, `core/seedtree.py`,
-  `core/fixedpoint.py` and the S statistic. The target and its justification
-  are in the [mutation section](#mutation-testing-target).
+  core: `core/lrm.py`, `core/rng.py`, `core/seedtree.py`, the S statistic,
+  and flux-stats's fixed-point grid, statistic registry and record reader
+  (`flux_stats/fixedpoint.py`, `definitions.py`, `registry.py`, `reading.py`). The target
+  and its justification are in the [mutation section](#mutation-testing-target).
 
 ### 5. Seed-tree stream quality
 
@@ -470,21 +475,87 @@ The baseline was measured with mutmut 3.8.1 and `mutate_only_covered_lines`,
 on a development machine. The weekly job's own first run replaces it in the
 report.
 
-Two of the floors sit below the 75% that is a common expectation for core
+On 2026-11-16 the arithmetic of S moved out of `statistic.py` into the
+statistic registry (`flux_engine/stats`), whose two modules joined the run.
+`statistic.py` kept the code that reads records, whose survivors were nearly
+all diagnostics, and it scored 90.6% (377 of 416). Pinning those diagnostics
+(`tests/concordance/test_statistic_diagnostics.py`) killed all but the
+equivalent ones, so its floor went up. Measured the same way that day:
+
+| Module | Baseline (2026-11-16) | Floor |
+|---|---|---|
+| `flux_engine/concordance/boundary/statistic.py` | 97.8% (407 of 416) | 95% |
+| `flux_engine/stats/definitions.py` | 96.6% (285 of 295) | 95% |
+| `flux_engine/stats/registry.py` | 100% (57 of 57) | 95% |
+
+The registry's floor sits one step below its baseline: with 57 mutants, one
+new survivor costs it almost two points, and the five-point drop rule still
+holds it to the published score.
+
+Later the same day the fixed-point grid and the registry moved into flux-stats,
+a distribution of their own (ADR 0009). mutmut 3.8.1 names a mutant by its
+path and strips only a `src/` prefix, so the weekly job runs it twice: from the
+repository root for the engine's modules, as before, and from
+`packages/flux-stats` for `flux_stats.fixedpoint`, `flux_stats.definitions` and
+`flux_stats.registry`, against flux-stats's own tests. Those tests run without
+the engine, so the suite that ships with flux-stats now holds the floors alone.
+The tests that moved with the modules fell short of them, because part of what
+killed these mutants was the engine's suite. New tests in
+`packages/flux-stats/tests` (`test_definitions.py`, `test_fixedpoint_edges.py`)
+pin the refusals by code and subject, the boundaries and the exact bounds.
+Measured the day of the move:
+
+| Module | The tests that moved | With the added tests | Floor |
+|---|---|---|---|
+| `flux_stats/definitions.py` | 93.7% (268 of 286) | 98.3% (281 of 286) | 95% |
+| `flux_stats/registry.py` | 86.9% (152 of 175) | 96.5% (191 of 198) | 95% |
+| `flux_stats/fixedpoint.py` | 63.2% (497 of 787) | 98.3% (774 of 787) | 95% |
+
+The registry has more mutants than its first baseline's 57 because the profile
+document added its column metrics and its readers to it, and more again with
+the added tests, because `mutate_only_covered_lines` mutates only the lines a
+test reaches. Of the 25 survivors left in the three modules (5, 7 and 13), 15
+are equivalent (for example the `strict` flag of a `zip` over two sequences of
+one length) and 10 change only the prose of a refusal. The fixed-point grid's floor went up from
+65% to 95% with them, the ratchet rule below.
+
+On 2026-11-17 the reading of a record followed (ADR 0009, amended):
+`flux_stats.reading` joined the flux-stats run at the reader's floor, and
+`statistic.py` kept the code that picks the columns a property reads and the
+definition that measures them. Measured the same way that day:
+
+| Module | Baseline (2026-11-17) | Floor |
+|---|---|---|
+| `packages/flux-stats/src/flux_stats/reading.py` | 98.3% (354 of 360) | 95% |
+| `flux_engine/concordance/boundary/statistic.py` | 97.3% (252 of 259) | 95% |
+
+Every survivor is equivalent. In the reader: an offset slice whose end runs
+past the six characters it reads, a microsecond count scaled by 1001 that the
+floor to milliseconds removes, two spellings of the subject of a quantise
+that cannot refuse an exact rational, and two spellings of `exponent >= 0` in
+the digit count, which agree because an exponent of zero counts
+`max(digits, 0)`, the same number. In `statistic.py`: three `Parameters()`
+that the definitions they reach do not read, and four spellings of the
+"bin edge" subject, for the same reason.
+
+Two of the floors sat below the 75% that is a common expectation for core
 logic, for reasons that were measured, not assumed. In a sample of 40
 survivors per module, 17 in `fixedpoint.py` and 18 in `seedtree.py` changed
 nothing but a string literal. These modules spell out their refusals in long
 diagnostic messages, and the suite checks the error code rather than its
-prose, by design. With those mutants set aside, both modules come to about
-80%. The floors work as a ratchet rather than a target: a week whose score
+prose, by design. With those mutants set aside, both modules came to about
+80%. `seedtree.py` still sits there; the fixed-point grid's floor rose when
+flux-stats's tests killed its survivors (above). The floors work as a ratchet rather than a target: a week whose score
 drops fails, and a floor goes up when the survivors behind it are killed.
 Equivalent mutants account for the rest of the gap. For example, a mutated
 rounding mode on a value that is already on the grid changes nothing that
 can be observed.
 
-The tests mutmut runs are the kernel's own unit tests (`tests/core`,
-`tests/concordance`), plus the two fast, deterministic accuracy modules
-(`gof/test_kernel_numerics.py` and `fidelity/test_s_metric_definitions.py`).
+The tests mutmut runs from the root are the kernel's own unit tests
+(`tests/core`, `tests/concordance`, `tests/stats`), plus the two fast,
+deterministic accuracy modules (`gof/test_kernel_numerics.py` and
+`fidelity/test_s_metric_definitions.py`). From `packages/flux-stats` it runs
+that package's own tests.
 The statistical batteries are left out. Each one recomputes tens of
 thousands of draws in a module-scoped fixture, so running them for every
 mutant would cost hours a week, on mutants the unit tests already settle.

@@ -204,7 +204,12 @@ export default defineUserConfig({
               children: [
                 '/engine/spec/KERNEL-SPEC.md',
                 '/engine/spec/SEAM-FIDELITY-SPEC.md',
+                '/engine/spec/PROFILE-SPEC.md',
+                '/engine/spec/SCORECARD-SPEC.md',
+                '/engine/spec/SAMPLE-SPEC.md',
+                '/engine/spec/PARAMETER-REGISTER-SPEC.md',
                 '/engine/spec/EXPR-SPEC.md',
+                '/engine/spec/EXPR-SPEC-2.md',
               ],
             },
           ],

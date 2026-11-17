@@ -102,7 +102,7 @@ Types come from a small closed set. `float` and `double` columns are refused by 
 ```console
 $ fluxsim run .
 ...
-$ head -n 2 .flux/runs/8dec55892096169f/emits/payment_recovery_moment.ndjson
+$ head -n 2 .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson
 ["sub-e19b5b0ae87789b0","2026-07-01T20:46:18.581Z","40.5500","mkt-b"]
 ["sub-e19b5b0ae87789b0","2026-07-01T20:55:26.840Z","30.5500","mkt-b"]
 ```
@@ -112,7 +112,7 @@ $ head -n 2 .flux/runs/8dec55892096169f/emits/payment_recovery_moment.ndjson
 For every emit, `apply` writes `seam-attestation-<exposeId>.json` into the run directory. It records which bytes met which bytes. It holds digests and declarations, no verdict.
 
 ```console
-$ head -n 17 .flux/runs/8dec55892096169f/seam-attestation-payment_recovery_moment.json
+$ head -n 17 .flux/runs/8835218acf7b4f8e/seam-attestation-payment_recovery_moment.json
 {
   "G": "sha256:e0f6c367377aec038ad465b67546e958eafe70d921637f684434725ec3180881",
   "H": "sha256:e0f6c367377aec038ad465b67546e958eafe70d921637f684434725ec3180881",
@@ -152,7 +152,7 @@ After `apply`, `verify` checks conformance again from the files on disk. Every s
 
 ## Who owns the schema
 
-The engine does not own the FLUID schema or the FLUX schema. It depends on the published FLUX specification package for validation, and that package carries the FLUID schemas a contract may target: 0.7.3 to 0.7.5 in flux-spec 0.5.0, and 0.7.3 to 0.7.6 from FLUX 0.5.1 on. The engine's vendored fallback already carries FLUX 0.5.1. A contract cannot silently target a version the toolchain has not seen. If a range matches none of them, validation fails. When FLUID moves, the schemas move with the package, not with this engine.
+The engine does not own the FLUID schema or the FLUX schema. It depends on the published FLUX specification package for validation, and that package carries the FLUID schemas a contract may target: 0.7.3 to 0.7.5 in flux-spec 0.5.0, and 0.7.3 to 0.7.6 from FLUX 0.5.1 on. A contract cannot silently target a version the toolchain has not seen. If a range matches none of them, validation fails. When FLUID moves, the schemas move with the package, not with this engine.
 
 ## What the seam does not do
 

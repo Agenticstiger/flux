@@ -13,7 +13,7 @@ the type default:
 | DECIMAL(p,s) | bounded-normal | bounded-normal, rate, uniform/empirical, categorical |
 | BOOL | categorical (Bernoulli) | categorical |
 | DATE / TIMESTAMP | uniform within `timeBounds` or rate (inter-arrival) | uniform/empirical, rate |
-| identifier (STRING/uuid with `unique`) | derived deterministically from `(H, ordinal)` — never random | — |
+| identifier (STRING/uuid with `unique`, or a one-column STRING key the contract declares: KERNEL-SPEC section 8.1) | derived deterministically from `(H, ordinal)`, never random | none |
 
 Every draw uses the §4 kernel samplers on the path `("sim", sim_id, "gen", exposeId, "row", rowIndex, column)`.
 A column declared `given` another (§2) keeps that path: what it reads from the other column is the level that
@@ -47,6 +47,30 @@ The scenario path (`seam/mapping.py`, `stages/pipeline.py`):
   written through the same `EmitWriter`; `outputDigest` is unchanged (§8 of KERNEL-SPEC, computed above the sink).
 * a declared `rows` **caps** a scenario-driven stream; a run with fewer moments emits what it has and never pads.
 
+**Coverage.** Whichever way an emit's rows are produced, every column has one producer, and the plan says which:
+`declared` (its entry under `fidelity.columns` decides the draw), `copied` (a runtime attribute, by one of the
+three steps above), `derived` (an identifier, from `(H, ordinal)`), `profile` (reserved; nothing produces it yet)
+or `default`. A column no declaration reaches takes its type's default and is a `default`: an optional column the
+mapping resolves to nothing (`null`), or a DATE or TIMESTAMP column that declares no draw of its own (§1's table:
+uniform within `timeBounds`). A `default` is named by `plan`, recorded by `apply` in `column-provenance.json` and
+listed under "What Was Not Proven" in `EVIDENCE.md`. Under `--strict-coverage` it is `FLX-3304`, naming every such
+column of every emit, before any row exists. `plan.json` records the digest of the record as
+`columnProvenanceDigest` (the `raw-bytes` digest of the file, as `seedTreeDigest` is of `seed-paths.ndjson`), so
+`planDigest`, the run id and the run digest cover it. `apply` refuses to write a record the plan does not name, and
+`ship` and `verify` read the record only through that digest and refuse a missing or moved one with `FLX-2115`; a plan
+without the key binds no record, and the report says so. The
+setting changes whether a run is accepted and never what an accepted run produces: the same bundle and seed give the
+same `plan.json`, `runDigest` and rows with `--strict-coverage` on or off, at any `--jobs`.
+
+**Strict coverage in the bundle.** A Simulation can ask for the same refusal itself: `strictCoverage: true` at the top
+level of the namespace (§2). The run is strict when the flag or the declaration asks, and the flag cannot turn a
+declaration off, because the declaration is part of the bundle the run's `inputDigest` covers and a run that could
+switch it off would not be the run the bundle declares. The refusal names which one asked, so the way out is plain:
+drop the flag, remove the key, or both. The value is a boolean and nothing else (`FLX-3105`); `false` and a null declare
+nothing. The declaration is a bundle edit, so it moves `inputDigest` and with it the run id, but `plan.json` has the
+same keys with it as without (the record's `columnProvenanceDigest` included), and a run it accepts makes the rows and
+every component digest it makes without it.
+
 ## 2. The fidelity block (lives in `Simulation.extensions["com.agentics.flux/1"].emits[<exposeId>].fidelity`)
 
 `fidelity` is the block's **only** spelling in a document. The
@@ -60,6 +84,13 @@ put a reserved word into a file an author writes.
 validator and by the packer — the bundle cannot ship. RFC-02's document-level `extensions` map is the one
 sanctioned extension point (`propertyNames` = `reverse-dns/major`, contents owned by the namespace), so this
 engine's declarations live there and every bundle stays valid against the **unmodified** 0.5.0 schema.
+
+The namespace carries five keys and no others: `emits`, keyed by `exposeId` as below; `profile`, which pins a
+profile document by its digest (PROFILE-SPEC.md §6); `scorecard`, which declares thresholds on the scores that
+profile gives the run (SCORECARD-SPEC.md §4); `parameters`, the parameter register, which says what each number the
+run reads rests on (PARAMETER-REGISTER-SPEC.md); and `strictCoverage`, a boolean (§1). Any other key is refused
+(`FLX-3105`). A new block starts at
+the top level of the namespace when what it declares belongs to the Simulation rather than to one expose.
 
 ```yaml
 extensions:
@@ -181,7 +212,13 @@ Inputs: the contract set (recomputes `H`, `G`), `S`, `C1`, `C2`, and D′ (recom
 - correlation: `L·R ≤ A ≤ U·R` split by signs, with `Qx ≥ k²·v`, `Qy ≥ k²·v`;
 - quantile: order-statistic rule on both sides;
 - support: count of non-members ≤ `max`.
-Fail-closed conditions: `k = 0`, count outside `records`, group below `records.min`, a value outside its range or its declared support, a column absent, `ε ≥ τ`. **No proof is generated in v0.1**; the `ProofSystem` port has one implementation, `none`, and the record says so.
+Fail-closed conditions: `k = 0`, count outside `records`, group below `records.min`, a value outside its range or its declared support, a value that needs more than 1000 digits written out (counted as §2 counts a declared number, and refused before it is formed), a column absent, `ε ≥ τ`. **No proof is generated in v0.1**; the `ProofSystem` port has one implementation, `none`, and the record says so.
+
+Each comparison above is one registered statistic definition (`flux_stats`), so a property's reference can
+also come from a profile (PROFILE-SPEC.md §7) and be compared in the same integer form. There a group or a cell the
+profile suppressed is censored, never scored as zero, and a profile that holds no statistic of the property's shape
+is refused (`FLX-5037`). The record of §6 is written for a committed state only. `verify` and `ship` score the
+profile path's outcomes in a scorecard per property, table, dimension and overall (SCORECARD-SPEC.md).
 
 ## 6. The fidelity record (`concordance/record.py`) — one per verified emit, in the evidence pack
 
@@ -213,6 +250,12 @@ statistics from the rows actually placed in the pack; re-evaluate every property
 `budget.maxStateAge`. On any failure: write no bundle, exit 1 with `FLX-8001`, emit a CloudEvent
 `com.agentics.flux.ship.withheld` to the configured sink (stdout NDJSON by default). On success: pack (staged copy;
 the `.fluid.yml` copied byte-for-byte) and print the public re-verification commands.
+
+When the run's plan pins a profile, `ship` takes it with `--profile` and compares every emit's properties with it as
+well (PROFILE-SPEC.md §7). An evaluation that is not within withholds the emit, and so does a missed scorecard
+threshold or a measured score below the emit's `minCredibility` (SCORECARD-SPEC.md §5). With a committed slice too,
+the emit ships only when both references find it within. The comparison with a profile writes no record; the
+scorecard it feeds travels in the pack as `run/scorecard.json`.
 
 ## 8. What a change does
 

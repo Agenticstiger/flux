@@ -68,31 +68,31 @@ created demo with a small FLUX bundle and its FLUID contract (10 files):
 ...
 $ cd demo
 $ fluxsim run .
-plan written to .flux/runs/8dec55892096169f/plan.json (runId=8dec55892096169f, planDigest=sha256:8dec55892096169f5b6a9281a379f5dc9c085418ad2d22d52543a34835c26bb3)
-applied to .flux/runs/8dec55892096169f (runDigest=sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f)
+plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
+applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
 emitted payment_recovery_moment: 154 rows (scenario)
-run 8dec55892096169f complete
-$ head -2 .flux/runs/8dec55892096169f/seed-paths.ndjson
+run 8835218acf7b4f8e complete
+$ head -2 .flux/runs/8835218acf7b4f8e/seed-paths.ndjson
 ["sim","sim-payment-recovery","signal","sig-payment-aborted","subject",0,0]
 ["sim","sim-payment-recovery","signal","sig-payment-aborted","subject",0,1]
-$ grep -c . .flux/runs/8dec55892096169f/seed-paths.ndjson
+$ grep -c . .flux/runs/8835218acf7b4f8e/seed-paths.ndjson
 2795
-$ grep -o '"seedTreeDigest": "[^"]*"' .flux/runs/8dec55892096169f/plan.json
+$ grep -o '"seedTreeDigest": "[^"]*"' .flux/runs/8835218acf7b4f8e/plan.json
 "seedTreeDigest": "sha256:92c35178b00fd7c4f034b1546dcbad41a1f238c6b64251e63ae5fc1c2741291b"
 ```
 
 The direct check is `fluxsim replay`. It re-executes the recorded plan and refuses unless the run digest it produces is the one you assert.
 
 ```console
-$ fluxsim replay . --run-id 8dec55892096169f --assert-digest sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f
-replay of 8dec55892096169f matches asserted digest sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f
+$ fluxsim replay . --run-id 8835218acf7b4f8e --assert-digest sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
+replay of 8835218acf7b4f8e matches asserted digest sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
 ```
 
 A wrong digest is refused with `FLX-2106`, and the message shows both digests.
 
 ```console
-$ fluxsim replay . --run-id 8dec55892096169f --assert-digest sha256:0000000000000000000000000000000000000000000000000000000000000000   # exit 1
-FLX-2106: a replay produced a different run digest than the one asserted -- asserted sha256:0000000000000000000000000000000000000000000000000000000000000000, replay produced sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f
+$ fluxsim replay . --run-id 8835218acf7b4f8e --assert-digest sha256:0000000000000000000000000000000000000000000000000000000000000000   # exit 1
+FLX-2106: a replay produced a different run digest than the one asserted -- asserted sha256:0000000000000000000000000000000000000000000000000000000000000000, replay produced sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
 more: fluxsim explain FLX-2106  https://agenticstiger.github.io/flux/engine/reference/errors/FLX-2106.html
 ```
 
@@ -100,11 +100,11 @@ Run the same bundle into a second, separate state directory. The run id, the run
 
 ```console
 $ fluxsim run . --state-dir ../other-state
-plan written to ../other-state/runs/8dec55892096169f/plan.json (runId=8dec55892096169f, planDigest=sha256:8dec55892096169f5b6a9281a379f5dc9c085418ad2d22d52543a34835c26bb3)
-applied to ../other-state/runs/8dec55892096169f (runDigest=sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f)
+plan written to ../other-state/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
+applied to ../other-state/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
 emitted payment_recovery_moment: 154 rows (scenario)
-run 8dec55892096169f complete
-$ cmp .flux/runs/8dec55892096169f/emits/payment_recovery_moment.ndjson ../other-state/runs/8dec55892096169f/emits/payment_recovery_moment.ndjson
+run 8835218acf7b4f8e complete
+$ cmp .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson ../other-state/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson
 ```
 
 ## What legitimately differs between runs
@@ -112,9 +112,9 @@ $ cmp .flux/runs/8dec55892096169f/emits/payment_recovery_moment.ndjson ../other-
 Two runs of one bundle are not byte-identical in every file. The digests cover the behaviour, and the files below carry the clock or a key.
 
 ```console
-$ diff -rq .flux/runs/8dec55892096169f ../other-state/runs/8dec55892096169f   # exit 1
-Files .flux/runs/8dec55892096169f/lineage.ndjson and ../other-state/runs/8dec55892096169f/lineage.ndjson differ
-Files .flux/runs/8dec55892096169f/plan.json and ../other-state/runs/8dec55892096169f/plan.json differ
+$ diff -rq .flux/runs/8835218acf7b4f8e ../other-state/runs/8835218acf7b4f8e   # exit 1
+Files .flux/runs/8835218acf7b4f8e/lineage.ndjson and ../other-state/runs/8835218acf7b4f8e/lineage.ndjson differ
+Files .flux/runs/8835218acf7b4f8e/plan.json and ../other-state/runs/8835218acf7b4f8e/plan.json differ
 ```
 
 - The `generated_at` field in `plan.json`. The plan digest masks it.

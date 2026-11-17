@@ -201,6 +201,14 @@ that starts a Python script of its own as a child process passes that
 script the directories it imports from: its own directory is not on its
 path either.
 
+**Strict coverage.** `plan`, `apply` and `run` take `strict_coverage`
+(default `False`). A column that falls back to a type default is named by the
+plan either way; with `strict_coverage=True` it is refused instead, with
+`FLX-3304` and a table of every such column, before any row is drawn. The
+setting changes whether a run is accepted and never what an accepted run
+produces. A Simulation that declares `strictCoverage: true` in its extensions
+asks for the same refusal, and `strict_coverage=False` does not turn that off.
+
 Stability here is governed by the frozen-kwarg promise in that module's
 own docstring, not by `__api_version__`: `__api_version__` covers the
 names exported from `flux_engine.api`, and the facade exports none of

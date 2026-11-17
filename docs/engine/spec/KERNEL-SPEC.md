@@ -143,6 +143,41 @@ from the in-bundle `.fluid.yml` (`jcs-document`) and compared with the declared 
 (`FLX-3101` on mismatch). The seam digest `H` used in §3 is the `jcs-document` digest of
 `{"contract": <parsed .fluid.yml>, "emit": <the emits[] entry with concordance block if present>, "columns": [...]}`.
 
+### 8.1 Keys from the contract (`seam/keys.py`)
+
+Primary and foreign keys come from the FLUID contract, and FLUX does not restate them. They are read from a
+contract that declares `fluidVersion: "0.7.7"`, the first FLUID version with relationships (flux-spec 0.5.2
+vendors it as a preview, which only an exact pin selects). A contract on an earlier version is read exactly as
+before, entities and all.
+
+- A relationship (`exposes[].semantics.relationships[]`) is one foreign key: the `fromColumns` of the declaring
+  expose equal the `toColumns` of the expose `to` names, paired by position, so a composite key is one
+  relationship. It reaches at most one target row, so its `toColumns` are a key of the target. A `one_to_one`
+  relationship makes its `fromColumns` a key of the declaring expose too. On a target with a validity window
+  (a dimension carrying `typeParams.validityParams`) the key holds at each point in time, not across versions.
+- A `primary` or `unique` entity is a one-column key of its expose, and its `expr` (the entity's name when
+  absent) names the column. A `natural` entity names the key a validity window versions. A `foreign` entity is
+  a join name and keys nothing.
+- A key that does not resolve is refused where the contract declares it (`FLX-3005`): `to` names no expose of
+  the contract, the two column lists differ in length or name a column twice, a column is not one its expose
+  declares, or a key entity's `expr` names no column.
+- An emit of a contract that declares keys pins the contract digest in `provenance.contractDigest`
+  (`FLX-3112`; the message carries the digest of the contract in the bundle). A moved key then stops the seam:
+  the reference validator reports the stale pin (`FLX-3105`), and the engine's own check is `FLX-3101`. The
+  reference validator and section 2 canonicalise a YAML float, and text not in Unicode NFC, differently, so a
+  contract that declares keys cannot carry either until the two agree; the `FLX-3112` message says so when it
+  does.
+- The Simulation does not restate a key (`FLX-3111`), whatever FLUID version its contracts declare. Its
+  extensions namespace and an emit's block carry no `keys`, `primaryKey`, `primaryKeys`, `foreignKey`,
+  `foreignKeys`, `uniqueKeys`, `relationships` or `entities` (refused as `FLX-3105` before keys came from the contract). A fidelity `unique: false` on a column the contract makes a key is refused, and so is
+  `unique: true` on a key the contract's validity window repeats across versions. `unique: true` on a
+  one-column key agrees with the contract and passes.
+- In a generator-driven emit (one with a fidelity block, SEAM-FIDELITY-SPEC section 1), a one-column STRING
+  key is generated as an identifier, derived from `(H, ordinal)`, without a fidelity `unique` or an
+  `identifier` tag. A scenario-driven emit fills the column from its mapping, as before. A key of another type,
+  composite keys and foreign-key values are read here but not yet generated together: each column still draws
+  on its own path, as its type does, until related tables are generated.
+
 ## 9. Value rendering (`seam/conform.py`)
 
 Closed `LogicalType` set: `STRING, INT, DECIMAL(p,s), BOOL, DATE, TIMESTAMP, JSON, BYTES`. FLUID types are
@@ -234,7 +269,7 @@ those files again.
 
 `planDigest` = digest of `plan.json` with its own `planDigest` and `generated_at` masked (forge-cli `plan_digest` rule). `apply`/`run` refuse to proceed if `inputDigest` or `planDigest` moved (`FLX-2101`, `FLX-2102`).
 
-## 12. Fixed-point statistics (`core/fixedpoint.py`)
+## 12. Fixed-point statistics (`flux_stats.fixedpoint`)
 
 All statistics over emitted columns and over aggregate inputs are computed on a declared grid: `fractionalBits`
 (default 16), quantiser rounds toward −∞, values are `int` on the grid; means and correlations are compared in

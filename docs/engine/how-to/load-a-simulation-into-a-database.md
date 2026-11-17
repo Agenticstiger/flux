@@ -50,11 +50,11 @@ created demo with a small FLUX bundle and its FLUID contract (10 files):
 ...
 $ cd demo
 $ fluxsim run . --sink parquet:../parquet
-plan written to .flux/runs/8dec55892096169f/plan.json (runId=8dec55892096169f, planDigest=sha256:8dec55892096169f5b6a9281a379f5dc9c085418ad2d22d52543a34835c26bb3)
-applied to .flux/runs/8dec55892096169f (runDigest=sha256:c4bb981d99467e59f8a89c546d59a35fb35f973c3abe77d70b2af1174604915f)
+plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
+applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
 emitted payment_recovery_moment: 154 rows (scenario)
 delivered payment_recovery_moment: 154 rows in 1 parquet file under ../parquet/payment_recovery_moment/
-run 8dec55892096169f complete
+run 8835218acf7b4f8e complete
 $ ls ../parquet/payment_recovery_moment
 _manifest-d9e491cf29bf8c57-parquet.json
 d9e491cf29bf8c57-00000.parquet
@@ -88,7 +88,7 @@ from flux_engine.sinks.arrow import output_digest_of
 from flux_engine.sinks.parquet import read_stream
 
 work = Path(workdir)
-receipt = json.loads((work / "demo/.flux/runs/8dec55892096169f/receipt.json").read_text())
+receipt = json.loads((work / "demo/.flux/runs/8835218acf7b4f8e/receipt.json").read_text())
 expected = receipt["emits"]["payment_recovery_moment"]["outputDigest"]
 
 table = read_stream(work / "parquet/payment_recovery_moment/_manifest-d9e491cf29bf8c57-parquet.json")
@@ -120,7 +120,7 @@ For the database sink the target is the driver, and the connection is a sink opt
 $ fluxsim run . --sink adbc:duckdb --sink-opt uri=../sim.duckdb
 ...
 delivered payment_recovery_moment: 154 rows into sim_payment_recovery_moment at duckdb:../sim.duckdb
-run 8dec55892096169f complete
+run 8835218acf7b4f8e complete
 ```
 
 The table is named after the expose with the prefix `sim_`, a namespace of its own so a simulated table cannot be mistaken for a real one. Change the prefix with `--sink-opt prefix=...`, or put the tables in a schema of their own with `--sink-opt schema=sim`, which is created when missing.
@@ -131,7 +131,7 @@ Run it again and the table still holds 154 rows. Each load first deletes the row
 $ fluxsim run . --sink adbc:duckdb --sink-opt uri=../sim.duckdb --sink-opt verify=true
 ...
 delivered payment_recovery_moment: 154 rows into sim_payment_recovery_moment at duckdb:../sim.duckdb
-run 8dec55892096169f complete
+run 8835218acf7b4f8e complete
 ```
 
 With `verify=true` the sink reads its rows back inside the transaction and commits only when they digest to the stream's `outputDigest`.
@@ -163,7 +163,7 @@ SQLite has no exact decimal type, and its driver would write a timestamp without
 $ fluxsim run . --sink adbc:sqlite --sink-opt uri=../sim.sqlite --sink-opt prefix=twin_
 ...
 delivered payment_recovery_moment: 154 rows into twin_payment_recovery_moment at sqlite:../sim.sqlite
-run 8dec55892096169f complete
+run 8835218acf7b4f8e complete
 ```
 
 ### Modes
@@ -232,7 +232,7 @@ Pass each setting as `--sink-opt KEY=VALUE`, as many times as you need. An unkno
 Each sink returns a receipt: the rows, and either the files with their SHA-256 or the table. `fluxsim run` records each one in `sink-receipts.json` in the run directory as soon as its stream is published, so a delivery that fails on a later stream still leaves the earlier ones on record. A receipt is kept per sink, target, table and expose: delivering the run to another place adds one, and delivering it to the same place again replaces that one.
 
 ```console
-$ grep -E '"(sink|table|target)"' .flux/runs/8dec55892096169f/sink-receipts.json
+$ grep -E '"(sink|table|target)"' .flux/runs/8835218acf7b4f8e/sink-receipts.json
       "sink": "adbc",
       "table": "sim_payment_recovery_moment",
       "target": "duckdb:../sim.duckdb",

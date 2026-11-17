@@ -20,7 +20,7 @@ Seal a prediction before its horizon, score it against an observed readout after
 
 ## `fluxsim accuracy register`
 
-Seal a PredictionRecord so it cannot be edited after the outcome is known.
+Seal a PredictionRecord so it cannot be edited after the outcome is known. A prediction id is registered once: the same claim again writes nothing, and a different claim under that id is refused (FLX-7007).
 
 ### Synopsis
 
@@ -45,7 +45,7 @@ fluxsim accuracy register --file prediction.json
 
 ## `fluxsim accuracy score`
 
-Bind an ObservedReadout to a sealed prediction and record the verdict.
+Bind an ObservedReadout to a sealed prediction and record the verdict. A prediction whose record no longer matches its seal is refused (FLX-7008).
 
 ### Synopsis
 
