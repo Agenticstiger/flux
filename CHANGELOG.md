@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`verify` reports deep nesting and a NUL byte in a path, instead of raising
+  them.** json and PyYAML read a nested array or mapping by recursion, so a
+  pack's manifest, or a bundle document, nested past the interpreter's
+  recursion limit raised `RecursionError` out of `verify`. A PAX path record
+  holding a NUL byte raised `ValueError` from the filesystem as the member was
+  extracted. Now `verify` reports `flux-manifest.json is nested too deeply to
+  read`, the validator reports such a document as `unreadable YAML: nested too
+  deeply to read` (in `scripts/validate.py` too), and a NUL byte in a member's
+  path is refused as an unsafe archive path before anything is extracted.
 - **`verify` reports a broken gzip stream, and stops reading headers at its
   caps.** An archive whose gzip stream was cut short raised gzip's `EOFError`
   out of `verify`, and one whose stream was corrupt raised `zlib.error`,
