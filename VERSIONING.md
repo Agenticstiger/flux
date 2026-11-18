@@ -56,7 +56,8 @@ an older schema in the window gains nothing a current pack would be refused.
   behavior.
 - **Post-1.0:** SemVer. Patch = editorial/constraint-relaxing fixes; minor =
   additive only (every valid document stays valid, window widens); major =
-  breaking, with a migration section in the diff.
+  breaking, with a migration section in the diff. A FLUID preview's pin move
+  is outside these rules (FLUID previews, below).
 
 ## What counts as breaking
 

@@ -848,7 +848,9 @@ def check_pack_from_looser_preview(flux_validator) -> list[str]:
         if rc != 0:
             return ["[bundle] could not pack enum('a' 'b') under a looser 0.7.7 preview, so its refusal is untested"]
         rc, said = _verify_output(archive, flux_validator)
-        if rc == 0 or "bundle no longer validates against flux-schema-0.5.2.json" not in said or "fails FLUID 0.7.7 (preview)" not in said:
+        expected = ("bundle no longer validates against flux-schema-0.5.2.json",
+                    "fails FLUID 0.7.7 (preview): $.exposes[0].contract.schema[4].type")
+        if rc == 0 or not all(fragment in said for fragment in expected):
             return [f"[bundle] a pack made under a looser 0.7.7 preview was not refused for its enum: {said.strip()}"]
     return []
 

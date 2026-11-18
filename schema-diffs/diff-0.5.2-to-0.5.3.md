@@ -78,6 +78,6 @@ files are vendored unchanged.
   from such a contract no longer verifies under 0.5.3: it reports
   `bundle no longer validates against flux-schema-0.5.2.json` and names the
   type (regression-asserted). Verify that pack with flux-spec 0.5.2, which
-  carries the old pin. For a pack that 0.5.3 verifies, fix the contract and
+  carries the old pin. To get a pack that 0.5.3 verifies, fix the contract and
   make a new pack, whose manifest needs a new signature. A pack whose
   contracts use none of the refused forms verifies as before.
