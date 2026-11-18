@@ -19,10 +19,14 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import tracemalloc
 from pathlib import Path
 
 import yaml
@@ -1273,88 +1277,6 @@ def check_verify_reports_a_pax_header_tarfile_cannot_parse(flux_validator) -> li
     return failures
 
 
-def check_the_validator_bounds_what_a_document_writes_out(flux_validator) -> list[str]:
-    """PyYAML builds an alias as a shared reference, so a document of a kilobyte
-    stood for billions of values: the schema check walked every one, and its
-    error message spelled them out, ten times longer for each level of ten
-    aliases. A document is now refused before it is built when it writes out
-    more than MAX_WRITTEN_OUT values or holds itself, and no message is longer
-    than MAX_MESSAGE characters."""
-    import time
-    import validate as validate_tool
-
-    # The message, its "... (N characters in all)" and its file; 1,000 before
-    # the cap was named, so the check fails rather than crashes on older code.
-    cap = getattr(validate_tool, "MAX_MESSAGE", 1_000) + 64
-
-    def fan_out(levels: int) -> str:
-        lines = ["  a0: &a0 [lol]"]
-        lines += [f"  a{i}: &a{i} [" + ", ".join([f"*a{i - 1}"] * 10) + "]" for i in range(1, levels)]
-        return "x-anchors:\n" + "\n".join(lines) + "\n"
-
-    def merging(levels: int) -> str:
-        lines = ["  m0: &m0 {k: v}"]
-        lines += [f"  m{i}: &m{i} {{<<: [" + ", ".join([f"*m{i - 1}"] * 10) + f"], k{i}: v}}" for i in range(1, levels)]
-        return "x-merges:\n" + "\n".join(lines) + "\n"
-
-    failures = []
-    with tempfile.TemporaryDirectory() as tmp:
-        cases = {
-            "ten levels of ten aliases": (fan_out(10), "writes out more than 1000000 values"),
-            "ten levels of ten merge keys": (merging(10), "writes out more than 1000000 values"),
-            "a document that holds itself": ("x-self: &s [*s]\n", "holds itself through an alias"),
-        }
-        for i, (label, (prefix, expected)) in enumerate(cases.items()):
-            work = Path(tmp) / f"b{i}"
-            shutil.copytree(EXAMPLES, work)
-            world = work / "world.flux.yml"
-            world.write_text(prefix + world.read_text(encoding="utf-8"), encoding="utf-8")
-            started = time.monotonic()
-            try:
-                errors = Bundle(work, flux_validator).run()
-            except Exception as exc:  # noqa: BLE001 (a traceback is the failure)
-                failures.append(f"[validate] CRASHED ({type(exc).__name__}) on {label}")
-                continue
-            took = time.monotonic() - started
-            if not any(expected in error for error in errors) or took > 10:
-                failures.append(f"[validate] {label} was not refused at the read ({took:.1f}s): {errors[:2]}")
-
-        # Within the bound, aliases still read as the values they stand for.
-        reused = Path(tmp) / "reused.flux.yml"
-        reused.write_text("kind: World\nd: &d {a: 1, b: [x, y]}\ne: *d\nf: {<<: *d, c: 2}\n", encoding="utf-8")
-        docs, error = validate_tool.load_yaml_docs(reused)
-        if error or docs != [{"kind": "World", "d": {"a": 1, "b": ["x", "y"]}, "e": {"a": 1, "b": ["x", "y"]},
-                               "f": {"a": 1, "b": ["x", "y"], "c": 2}}]:
-            failures.append(f"[validate] aliases within the bound did not read as before: {error} {docs}")
-
-        # A schema error spells out the value it refuses: five levels of ten
-        # stay within the bound but spelled out a 92 KB message.
-        work = Path(tmp) / "long"
-        shutil.copytree(EXAMPLES, work)
-        world = work / "world.flux.yml"
-        text = world.read_text(encoding="utf-8")
-        world.write_text(fan_out(5) + text.replace("kind: World", "kind: World\nlabels: *a4", 1), encoding="utf-8")
-        errors = Bundle(work, flux_validator).run()
-        longest = max((len(error) for error in errors), default=0)
-        if not errors or longest > cap:
-            failures.append(f"[validate] the longest error message holds {longest} characters, above {cap}")
-
-        # verify meets the same document inside an archive and reports it, bounded.
-        work, out = Path(tmp) / "packed" / "bundle", Path(tmp) / "packed-dist"
-        shutil.copytree(EXAMPLES, work)
-        bomb = fan_out(10).encode("utf-8")
-        attacked = _repack(work, out, lambda entries: [(n, bomb + d if n.endswith("/world.flux.yml") else d)
-                                                      for n, d in entries], flux_validator)
-        try:
-            rc, said = _verify_output(attacked, flux_validator)
-        except Exception as exc:  # noqa: BLE001
-            failures.append(f"[bundle] CRASHED ({type(exc).__name__}) on an archive holding ten levels of aliases")
-        else:
-            if rc == 0 or "writes out more than 1000000 values" not in said or max(map(len, said.splitlines())) > 2 * cap:
-                failures.append(f"[bundle] verify did not report the aliases briefly: {said[:300]}")
-    return failures
-
-
 def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
     """A bundle's files are read as UTF-8 on every host, and a file that is not UTF-8 is refused.
 
@@ -1469,6 +1391,546 @@ def check_supply_chain_digests_each_target_once(flux_validator) -> list[str]:
         mismatches = [error for error in errors if "content digest mismatch" in error]
         if len(mismatches) != len(ranges):
             failures.append(f"[supply-chain] {len(mismatches)} digest mismatches for {len(ranges)} refs")
+    return failures
+
+
+# --- the YAML read is bounded ----------------------------------------------------
+#
+# PyYAML builds an alias as a shared reference, so a document of a kilobyte can stand for
+# billions of values: the schema check walked every one, and the message it raised spelled
+# them out. A document that stands for more than 1,000,000 values, or nests deeper than 64
+# levels, once its aliases and merge keys are written out, is refused before it is built.
+# Those are the bounds the FLUX engine's read holds a document to. Two more bound what the
+# engine's does not: the mappings merge keys name, and the characters a document writes out,
+# since a string is one value however long it is.
+
+#: One read, run in a child process and reported as JSON. A read that stands for billions of
+#: values must fail a check, not exhaust the host that runs it, so each runs where it can be stopped.
+_CHILD = r'''
+import contextlib, io, json, sys, time, tracemalloc
+from pathlib import Path
+
+repo, mode, target = sys.argv[1], sys.argv[2], Path(sys.argv[3])
+sys.path.insert(0, repo)
+from jsonschema import Draft202012Validator, FormatChecker
+from flux_spec import bundle, validate
+
+schema = json.loads((Path(repo) / "schema" / "flux-schema-latest.json").read_text(encoding="utf-8"))
+validator = Draft202012Validator(schema, format_checker=FormatChecker())
+tracemalloc.start()
+started = time.monotonic()
+if mode == "read":
+    docs, error = validate.load_yaml_docs(target)
+    report = {"documents": len(docs), "error": error}
+elif mode == "validate":
+    errors = validate.Bundle(target, validator).run()
+    report = {"errors": [e[:300] for e in errors[:40]], "longest": max(map(len, errors), default=0)}
+else:
+    said = io.StringIO()
+    with contextlib.redirect_stdout(said):
+        code = bundle.verify(target, validator)
+    lines = said.getvalue().splitlines()
+    report = {"code": code, "lines": [line[:300] for line in lines[:12]], "longest": max(map(len, lines), default=0)}
+report["seconds"] = round(time.monotonic() - started, 2)
+report["peak_mb"] = round(tracemalloc.get_traced_memory()[1] / 1e6, 1)
+print(json.dumps(report))
+'''
+
+
+def _megabytes_held(pid: int) -> float:
+    """The resident memory of process *pid*, or 0 where `ps` cannot say."""
+    try:
+        said = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+        return int(said) / 1024 if said else 0.0
+    except (OSError, ValueError):
+        return 0.0
+
+
+def _in_a_child(mode: str, target: Path, seconds: float = 30.0, megabytes: float = 512.0) -> dict:
+    """Run `_CHILD` on *target* and return its report, or say why it was stopped.
+
+    The child is stopped past *seconds*, or past *megabytes* of memory where `ps` reports it, so
+    code that does not refuse the document fails a check where it would otherwise hang or take the
+    host's memory."""
+    child = subprocess.Popen([sys.executable, "-c", _CHILD, str(REPO), mode, str(target)],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    started = time.monotonic()
+    while True:
+        try:
+            out, err = child.communicate(timeout=0.1)
+            break
+        except subprocess.TimeoutExpired:
+            held, took = _megabytes_held(child.pid), time.monotonic() - started
+            if held > megabytes or took > seconds:
+                child.kill()
+                child.communicate()
+                return {"killed": f"after {took:.0f}s holding {held:.0f} MB"}
+    if child.returncode != 0:
+        return {"crashed": (err.strip().splitlines() or [f"exit {child.returncode}"])[-1]}
+    return json.loads(out.strip().splitlines()[-1])
+
+
+def _aliases(levels: int, fan: int = 10) -> str:
+    """Anchors a0, a1, ...: each a list of *fan* aliases of the one before it, the first of *fan* scalars.
+
+    Level n writes out (10**(n + 2) - 1) / 9 values: ten levels, about a kilobyte, write out eleven billion."""
+    lines = ["a0: &a0 [" + ", ".join(["x"] * fan) + "]"]
+    lines += [f"a{i}: &a{i} [" + ", ".join([f"*a{i - 1}"] * fan) + "]" for i in range(1, levels)]
+    return "\n".join(lines) + "\n"
+
+
+def _merges(levels: int, fan: int = 10) -> str:
+    """Anchors m0, m1, ...: each a mapping that merges *fan* copies of the one before it, so it copies
+    *fan* times as many pairs. Ten levels of ten copy a billion pairs."""
+    lines = ["m0: &m0 {k0: x}"]
+    lines += [f"m{i}: &m{i} {{<<: [" + ", ".join([f"*m{i - 1}"] * fan) + f"], k{i}: x}}" for i in range(1, levels)]
+    return "\n".join(lines) + "\n"
+
+
+def _empty_merges(hosts: int, parts: int) -> str:
+    """*hosts* mappings that each merge one list of *parts* empty mappings. They write out about *hosts* plus
+    *parts* values, and PyYAML visits *hosts* times *parts* mappings to build them."""
+    return "e: &e {}\ns: &s [" + ", ".join(["*e"] * parts) + "]\nm: [" + ", ".join(["{<<: *s}"] * hosts) + "]\n"
+
+
+def _written_out(n: int) -> str:
+    """A document, in a few hundred bytes, that writes out exactly *n* values (at least 123,456):
+    a list that defines five anchored blocks of 11, 111, ... 111,111 values, then enough aliases and
+    scalars to make up *n*."""
+    assert n >= 123_456
+    sizes = (("a5", 111_111), ("a4", 11_111), ("a3", 1_111), ("a2", 111), ("a1", 11))
+    lines = ["- &a1 [" + ", ".join(["x"] * 10) + "]"]
+    lines += [f"- &a{i} [" + ", ".join([f"*a{i - 1}"] * 10) + "]" for i in range(2, 6)]
+    rest = n - 123_456
+    for name, size in sizes:
+        count, rest = divmod(rest, size)
+        lines += [f"- *{name}"] * count
+    return "\n".join(lines + ["- x"] * rest) + "\n"
+
+
+def _flow_levels(levels: int) -> str:
+    """A document that nests *levels* levels in flow sequences, the scalar at the bottom included."""
+    return "[" * (levels - 1) + "x" + "]" * (levels - 1) + "\n"
+
+
+def _block_levels(levels: int) -> str:
+    """A document that nests *levels* levels in block mappings, the scalar at the bottom included."""
+    depth = levels - 1
+    return "\n".join(" " * i + ("a: x" if i == depth - 1 else "a:") for i in range(depth)) + "\n"
+
+
+def _alias_chain(links: int) -> str:
+    """Anchors a0 ... a<links>, each a list of the one before it: nesting that is written only in aliases."""
+    lines = ["a0: &a0 [x]"] + [f"a{i}: &a{i} [*a{i - 1}]" for i in range(1, links + 1)]
+    return "\n".join(lines) + "\n"
+
+
+def _merged_from_level_three(height: int) -> str:
+    """A mapping of *height* levels at level 2, and a mapping at level 3 that merges it: a merge key
+    writes the mapping's pairs out at the level of the mapping that holds the key."""
+    inner = "[" * (height - 2) + "x" + "]" * (height - 2)
+    return f"m: &m {{k: {inner}}}\no: {{h: {{<<: *m}}}}\n"
+
+
+def _built_size(document) -> tuple[int, int, int]:
+    """How many values a built document writes out, a shared object counting each time it is held, how
+    many levels it nests, the scalar at the bottom included, and how many characters its strings hold.
+    Counted on the built objects, so it does not share a line with the read it checks."""
+    memo: dict[int, tuple[int, int, int]] = {}
+
+    def size(item):
+        if not isinstance(item, (list, dict)):
+            return 1, 1, len(item) if isinstance(item, str) else 0
+        if id(item) not in memo:
+            parts = item if isinstance(item, list) else [part for pair in item.items() for part in pair]
+            sizes = [size(part) for part in parts]
+            memo[id(item)] = (1 + sum(v for v, _, _ in sizes), 1 + max((l for _, l, _ in sizes), default=0),
+                              sum(c for _, _, c in sizes))
+        return memo[id(item)]
+
+    return size(document)
+
+
+@contextlib.contextmanager
+def _patched(module, **constants):
+    """Set module-level constants for a block, then put them back as they were, or remove one the module
+    did not have: the old code has none of the new bounds, and a check of one must fail there, not crash."""
+    missing = object()
+    saved = {name: getattr(module, name, missing) for name in constants}
+    for name, value in constants.items():
+        setattr(module, name, value)
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is missing:
+                delattr(module, name)
+            else:
+                setattr(module, name, value)
+
+
+def _long_string(length: int, holders: int) -> str:
+    """One string of *length* characters, held by *holders* aliases: a few dozen KB of text that writes out
+    *length* times *holders* characters, and the value count sees *holders* plus a few values."""
+    return f's: &s "{"x" * length}"\nl: [' + ", ".join(["*s"] * holders) + "]\n"
+
+
+def _with_the_long_string(text: str, length: int = 50_000, holders: int = 2_000) -> str:
+    """*text*, a World document, with a string of *length* characters defined before it and `labels`, a field
+    of strings, holding it *holders* times: the schema refuses it and the unbounded read spelled out all of it."""
+    return (f's: &s "{"x" * length}"\n'
+            + text.replace("kind: World", "kind: World\nlabels: [" + ", ".join(["*s"] * holders) + "]", 1))
+
+
+def _with_the_bomb(levels: int, text: str) -> str:
+    """*text* with *levels* levels of aliases defined before it. A World document also holds the last of
+    them in `labels`, a field of strings, which the schema refuses and the unbounded read spelled out."""
+    return _aliases(levels) + text.replace("kind: World", f"kind: World\nlabels: *a{levels - 1}", 1)
+
+
+def _unfinished(report: dict) -> str:
+    """Why a child's report is no report (it was stopped, or it crashed), or ''."""
+    if "killed" in report:
+        return f"it was stopped {report['killed']}"
+    if "crashed" in report:
+        return f"it crashed: {report['crashed']}"
+    return ""
+
+
+def _read_here(path: Path) -> dict:
+    """What `_CHILD` reports for a read, made in this process: for a document whose read is cheap
+    whatever the code, since PyYAML builds an alias as a shared reference."""
+    import validate as validate_tool
+
+    tracemalloc.start()
+    try:
+        started = time.monotonic()
+        docs, error = validate_tool.load_yaml_docs(path)
+        return {"documents": len(docs), "error": error, "seconds": round(time.monotonic() - started, 2),
+                "peak_mb": round(tracemalloc.get_traced_memory()[1] / 1e6, 1)}
+    finally:
+        tracemalloc.stop()
+
+
+def check_a_document_that_stands_for_too_much_is_refused_at_the_read(flux_validator) -> list[str]:
+    """load_yaml_docs refuses, as an ordinary error and with none of the file's documents, a document
+    that writes out more than 1,000,000 values, nests deeper than 64 levels, or holds itself through an
+    alias: quickly, and before anything is built from it.
+
+    Ten levels of ten aliases, a kilobyte, stood for eleven billion values, and ten levels of ten merge
+    keys copied a billion pairs as the mapping was built. The read, not the message printed later, is
+    where they are refused. A merge key of empty mappings writes out nothing and still costs PyYAML a
+    visit to each, once for every mapping that holds it: the product is bounded too, and the measure
+    that bounds it does not pay that product itself."""
+    writes_out = "writes out more than 1000000 values once its aliases and merge keys are written out"
+    cases = {
+        "ten levels of ten aliases": (_aliases(10), f"{writes_out} (line 6, column 5)"),
+        "a list that holds itself": ("x: &s [*s]\n", "holds itself through an alias (line 1, column 4)"),
+        "a mapping that merges itself": ("m: &m {<<: *m}\n", "holds itself through an alias (line 1, column 4)"),
+        "65 levels of flow sequences": (_flow_levels(65), "nests deeper than 64 levels (line 1, column 65)"),
+        "65 levels of block mappings": (_block_levels(65), "nests deeper than 64 levels (line 64, column 64)"),
+        "100 levels of flow sequences": (_flow_levels(100), "nests deeper than 64 levels"),
+        "65 levels written only in aliases": (_alias_chain(62), "nests deeper than 64 levels"),
+        "a merge key that reaches the 65th level": (_merged_from_level_three(63), "nests deeper than 64 levels"),
+        "a 50,000 character string held by 2,000 aliases":
+            (_long_string(50_000, 2_000), "writes out more than 67108864 characters once its aliases and merge keys are written out (line 2,"),
+        "1,001 mappings that each merge a list of 1,000 empty ones":
+            (_empty_merges(1001, 1000), "names more than 1000000 mappings in its merge keys (line 3, column"),
+        "one file, a small document then a bomb": ("a: 1\n---\n" + _aliases(10), f"{writes_out} (line 8, column 5)"),
+    }
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        # The merge bomb is the one read that is not cheap whatever the code: PyYAML copies the pairs of
+        # every merged mapping as it builds one, so it runs where it can be stopped.
+        merges = {"ten levels of ten merge keys": (_merges(10), f"{writes_out} (line 7, column 5)")}
+        for i, (label, (text, expected)) in enumerate({**cases, **merges}.items()):
+            path = Path(tmp) / f"case{i}.flux.yml"
+            path.write_text(text, encoding="utf-8")
+            report = _in_a_child("read", path) if label in merges else _read_here(path)
+            if _unfinished(report):
+                failures.append(f"[yaml-bounds] the read of {label} did not finish: {_unfinished(report)}")
+            elif report["documents"] != 0 or not report["error"] or expected not in report["error"] \
+                    or not report["error"].startswith("unreadable YAML: "):
+                failures.append(f"[yaml-bounds] {label} was not refused with '{expected}': {report}")
+            elif report["seconds"] > 20 or report["peak_mb"] > 64:
+                failures.append(f"[yaml-bounds] {label} was refused in {report['seconds']}s and {report['peak_mb']} MB")
+
+        # The mappings a merge key names are worked out once, however many mappings hold the key: the
+        # measure costs what the text does, not what PyYAML's visits do. Counted as the digest check counts.
+        import validate as validate_tool
+
+        real, calls = getattr(validate_tool, "_merged_parts", None), []
+        if real is not None:
+            validate_tool._merged_parts = lambda value_node: (calls.append(1), real(value_node))[1]
+        try:
+            path = Path(tmp) / "shared.flux.yml"
+            path.write_text(_empty_merges(1200, 1000), encoding="utf-8")
+            _read_here(path)
+        finally:
+            if real is not None:
+                validate_tool._merged_parts = real
+        if real is not None and len(calls) > 2:
+            failures.append(f"[yaml-bounds] the list that 1,200 mappings merge was worked out {len(calls)} times")
+    return failures
+
+
+def _read_text(text: str, directory: Path):
+    """load_yaml_docs on *text*, written to a file in *directory*: its documents and its error."""
+    import validate as validate_tool
+
+    path = directory / "doc.flux.yml"
+    path.write_text(text, encoding="utf-8")
+    return validate_tool.load_yaml_docs(path)
+
+
+def check_a_document_at_the_bounds_reads_and_one_past_them_is_refused(flux_validator) -> list[str]:
+    """999,999 and 1,000,000 values read, 1,000,001 do not; 64 levels read, 65 do not; and what reads is
+    what PyYAML builds, as it was, with every example.
+
+    The bounds are counted on what a document writes out, not on its text, so each document here is a
+    few hundred bytes. Each is also counted on the objects PyYAML builds from it, which is the count the
+    bound is about. They are held per document: a file may hold many."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for n, reads in ((999_999, True), (1_000_000, True), (1_000_001, False)):
+            text = _written_out(n)
+            counted = _built_size(yaml.safe_load(text))[0]
+            docs, error = _read_text(text, Path(tmp))
+            if counted != n:
+                failures.append(f"[yaml-bounds] the document made for {n} values writes out {counted}")
+            elif reads and (error or len(docs) != 1):
+                failures.append(f"[yaml-bounds] a document of {n} values did not read: {error}")
+            elif not reads and (docs or "writes out more than 1000000 values" not in (error or "")):
+                failures.append(f"[yaml-bounds] a document of {n} values was not refused: {docs!r:.80} {error}")
+
+        for label, build, at, past in (("flow sequences", _flow_levels, 64, 65), ("block mappings", _block_levels, 64, 65),
+                                       ("aliases", _alias_chain, 61, 62), ("a merge key", _merged_from_level_three, 62, 63)):
+            docs, error = _read_text(build(at), Path(tmp))
+            built = _built_size(yaml.safe_load(build(at)))[1]
+            if error or len(docs) != 1 or built != 64:
+                failures.append(f"[yaml-bounds] the document at the bound of {label} did not read ({built} levels built): {error}")
+            docs, error = _read_text(build(past), Path(tmp))
+            if docs or "nests deeper than 64 levels" not in (error or ""):
+                failures.append(f"[yaml-bounds] one level past the bound of {label} was not refused: {docs!r:.80} {error}")
+
+        docs, error = _read_text(_written_out(600_000) + "---\n" + _written_out(600_000), Path(tmp))
+        if error or [_built_size(d)[0] for d in docs] != [600_000, 600_000]:
+            failures.append(f"[yaml-bounds] two documents of 600,000 values each did not both read: {error}")
+    return failures + _failures_reading_as_before()
+
+
+def check_merge_keys_are_counted_for_each_mapping_that_holds_one(flux_validator) -> list[str]:
+    """The mappings a document's merge keys name are counted once for each mapping that holds a key, and a
+    mapping written many times through an alias is one mapping. Counted here at 100 instead of 1,000,000."""
+    import validate as validate_tool
+
+    aliased = "e: &e {}\ns: &s [" + ", ".join(["*e"] * 10) + "]\nm: [&h {<<: *s}, " + ", ".join(["*h"] * 50) + "]\n"
+    cases = (("10 mappings that each merge 10 empty ones", _empty_merges(10, 10), True),
+             ("11 mappings that each merge 10 empty ones", _empty_merges(11, 10), False),
+             ("one such mapping, written 51 times through an alias", aliased, True))
+    failures = []
+    with _patched(validate_tool, MAX_YAML_MERGED=100), tempfile.TemporaryDirectory() as tmp:
+        for label, text, reads in cases:
+            docs, error = _read_text(text, Path(tmp))
+            if reads and (error or len(docs) != 1):
+                failures.append(f"[yaml-bounds] {label} did not read at a bound of 100: {error}")
+            elif not reads and (docs or "names more than 100 mappings in its merge keys" not in (error or "")):
+                failures.append(f"[yaml-bounds] {label} was not refused at a bound of 100: {error}")
+    return failures
+
+
+def check_characters_are_counted_each_time_they_are_written_out(flux_validator) -> list[str]:
+    """A string is one value however long it is, so its characters are counted as well, each time an alias
+    writes it out, and in a key as in a value, and through a merge key. Counted on the built objects too."""
+    import validate as validate_tool
+
+    long_string = _long_string(100, 3)
+    merged = 's: &s {k: "' + "y" * 50 + '"}\nm: {<<: [*s, *s], z: "' + "z" * 20 + '"}\n'
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for label, text, shared in (("a string held by 3 aliases", long_string, True), ("a mapping merged twice", merged, False)):
+            if shared:
+                expected = _built_size(yaml.safe_load(text))[2]
+            else:
+                # PyYAML builds what a merge key copies once, so count by hand what the merge keys write out:
+                # key s and its pair (1 + 50), key m, the pair of s twice (2 * (1 + 50)), and m's own pair (1 + 20).
+                expected = 1 + (1 + 50) + 1 + 2 * (1 + 50) + (1 + 20)
+            for limit, reads in ((expected, True), (expected - 1, False)):
+                with _patched(validate_tool, MAX_YAML_CHARS=limit):
+                    docs, error = _read_text(text, Path(tmp))
+                if reads and (error or len(docs) != 1):
+                    failures.append(f"[yaml-bounds] {label} ({expected} characters) did not read at a bound of {limit}: {error}")
+                elif not reads and (docs or f"writes out more than {limit} characters" not in (error or "")):
+                    failures.append(f"[yaml-bounds] {label} ({expected} characters) was not refused at a bound of {limit}: {error}")
+    return failures
+
+
+def _failures_reading_as_before() -> list[str]:
+    """Aliases and merge keys inside the bounds build what PyYAML builds, and every example reads as it did."""
+    import validate as validate_tool
+
+    class Before(yaml.SafeLoader):
+        """The loader load_yaml_docs used before its read was bounded."""
+
+    Before.add_constructor("tag:yaml.org,2002:timestamp", lambda loader, node: loader.construct_scalar(node))
+
+    failures = []
+    text = "d: &d {a: 1, b: [x, y]}\ne: *d\nf: {<<: *d, c: 2}\ng: [*d, *d]\nh: {<<: [*d, {z: 1}], a: 9}\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        docs, error = _read_text(text, Path(tmp))
+    if error or docs != list(yaml.safe_load_all(text)):
+        failures.append(f"[yaml-bounds] aliases and merge keys inside the bounds did not read as PyYAML builds them: {docs} {error}")
+    # Merge keys written inside merge keys add no level, so the bound on levels does not limit them; the
+    # measure must not be what limits them either, as a stack that grows with the nesting would.
+    deep = "{<<: " * 400 + "{k: 1}" + "}" * 400 + "\n"
+    try:
+        built = yaml.safe_load(deep)
+    except RecursionError:
+        built = None            # this interpreter cannot build it either: nothing to compare with
+    if built is not None:
+        with tempfile.TemporaryDirectory() as tmp:
+            docs, error = _read_text(deep, Path(tmp))
+        if error or docs != [built]:
+            failures.append(f"[yaml-bounds] 400 merge keys inside merge keys, which PyYAML builds, did not read: {error}")
+    for root in (EXAMPLES, TOWERS_EXAMPLE):
+        for path in sorted(root.iterdir()):
+            if path.suffix not in (".yml", ".yaml") and path.name != "flux.lock":
+                continue
+            docs, error = validate_tool.load_yaml_docs(path)
+            before = [d for d in yaml.load_all(path.read_text(encoding="utf-8"), Loader=Before) if d is not None]
+            if error or json.dumps(docs, sort_keys=True) != json.dumps(before, sort_keys=True):
+                failures.append(f"[yaml-bounds] {path.relative_to(REPO)} no longer reads as it did: {error}")
+    return failures
+
+
+def check_the_bounds_hold_through_validate_and_verify(flux_validator) -> list[str]:
+    """A bundle holding such a document is reported by the validator, for every kind of file it reads,
+    and by verify when the document is in an archive, in short lines and in bounded time and memory."""
+    import validate as validate_tool
+
+    max_line = getattr(validate_tool, "MAX_LINE", 2_000)
+    expected = "unreadable YAML: a document writes out more than 1000000 values"
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for label, filename, bomb, expected_here in (
+                ("ten levels of aliases in a FLUX document", "world.flux.yml", lambda t: _with_the_bomb(10, t), expected),
+                ("ten levels of aliases in a FLUID document", "payment-recovery.fluid.yml", lambda t: _with_the_bomb(10, t), expected),
+                ("ten levels of aliases in the lockfile", "flux.lock", lambda t: _with_the_bomb(10, t), expected),
+                ("a 50,000 character string held 2,000 times in a FLUX document", "world.flux.yml", _with_the_long_string,
+                 "unreadable YAML: a document writes out more than 67108864 characters")):
+            work = Path(tmp) / label / "bundle"
+            shutil.copytree(EXAMPLES, work)
+            (work / filename).write_text(bomb((work / filename).read_text(encoding="utf-8")), encoding="utf-8")
+            report = _in_a_child("validate", work, seconds=40)
+            if _unfinished(report):
+                failures.append(f"[validate] the validator did not finish on {label}: {_unfinished(report)}")
+            elif not any(e.startswith(f"{filename}: {expected_here}") for e in report["errors"]):
+                failures.append(f"[validate] {label} was not reported: {report['errors'][:2]}")
+            elif report["longest"] > max_line or report["seconds"] > 30 or report["peak_mb"] > 128:
+                failures.append(f"[validate] {label}: longest message {report['longest']}, "
+                                f"{report['seconds']}s, {report['peak_mb']} MB")
+
+        work, out = Path(tmp) / "packed" / "bundle", Path(tmp) / "packed-dist"
+        shutil.copytree(EXAMPLES, work)
+        attacked = _repack(work, out, lambda entries: [(n, _with_the_bomb(10, d.decode()).encode() if n.endswith("/world.flux.yml") else d)
+                                                       for n, d in entries], flux_validator)
+        report = _in_a_child("verify", attacked, seconds=40)
+        if _unfinished(report):
+            failures.append(f"[bundle] verify did not finish on an archive holding ten levels of aliases: {_unfinished(report)}")
+        elif report["code"] != 1 or not any(expected in line for line in report["lines"]):
+            failures.append(f"[bundle] verify did not report ten levels of aliases: {report['lines'][:3]}")
+        elif report["longest"] > len("       ") + max_line or report["seconds"] > 30 or report["peak_mb"] > 128:
+            failures.append(f"[bundle] verify on ten levels of aliases: longest line {report['longest']}, "
+                            f"{report['seconds']}s, {report['peak_mb']} MB")
+    return failures
+
+
+def check_bounded_keeps_both_ends_of_a_long_message(flux_validator) -> list[str]:
+    """bounded() keeps a message that fits, and cuts one that does not in the middle, counting what it left out.
+
+    jsonschema writes the value it refuses first and its verdict last, so the start of a long message says
+    where and the end says what is wrong. The result is never longer than its limit."""
+    import validate as validate_tool
+
+    bounded = getattr(validate_tool, "bounded", None)
+    if bounded is None:
+        return ["[messages] flux_spec.validate has no bounded()"]
+    failures = []
+    text = "start " + "".join(f"{i % 10}" for i in range(9_000)) + " end"
+    cut = bounded(text, 100)
+    note = re.search(r" \[\.\.\. (\d+) characters not shown \.\.\.\] ", cut)
+    if not (note and len(cut) <= 100 and cut.startswith("start ") and cut.endswith(" end")
+            and text.startswith(cut[:note.start()]) and text.endswith(cut[note.end():])
+            and int(note.group(1)) == len(text) - (len(cut) - len(note.group(0))) and len(cut) > 90):
+        failures.append(f"[messages] bounded() did not keep both ends of a long message, counted: {cut!r}")
+    if bounded("m" * 100, 100) != "m" * 100 or bounded("m" * 101, 100) == "m" * 101 or bounded("short") != "short":
+        failures.append("[messages] bounded() changed a message that fits, or kept one that does not")
+    if any(len(bounded("m" * 500, limit)) > limit for limit in (0, 1, 3, 8, 40, 60)):
+        failures.append("[messages] bounded() overran a small limit")
+    if len(bounded("m" * 100_000)) > getattr(validate_tool, "MAX_MESSAGE", 1_000):
+        failures.append("[messages] bounded() does not default to MAX_MESSAGE")
+    return failures
+
+
+def check_validator_messages_are_capped(flux_validator) -> list[str]:
+    """No validator message, and no line verify prints, is longer than a few thousand characters.
+
+    Five levels of ten aliases are inside the bounds and spelled out a 92 KB schema message; a document
+    id, a manifest value and an archive path can each be any length."""
+    import validate as validate_tool
+
+    max_message, max_name = getattr(validate_tool, "MAX_MESSAGE", 1_000), getattr(validate_tool, "MAX_NAME", 200)
+    max_line = getattr(validate_tool, "MAX_LINE", 2_000)
+    ceiling = max_name + len(": ") + max_message     # a name, a colon and a message
+    indent = len("       ")                           # what verify and the validator put before each line
+    failures = []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "spelled-out" / "bundle"
+        shutil.copytree(EXAMPLES, work)
+        world = work / "world.flux.yml"
+        world.write_text(_aliases(5) + world.read_text(encoding="utf-8").replace("kind: World", "kind: World\nlabels: *a4", 1),
+                         encoding="utf-8")
+        errors = Bundle(work, flux_validator).run()
+        labelled = [e for e in errors if "$.labels" in e]
+        if max(map(len, errors), default=0) > ceiling:
+            failures.append(f"[messages] a schema message of {max(map(len, errors)):,} characters, above {ceiling}")
+        elif not (labelled and labelled[0].startswith("world.flux.yml: schema: $.labels: ") and "characters not shown" in labelled[0]
+                  and labelled[0].endswith("is not of type 'object'")):
+            failures.append(f"[messages] a long schema message lost its start or its verdict: {[e[:60] for e in labelled]}")
+
+        work = Path(tmp) / "long-id" / "bundle"
+        shutil.copytree(EXAMPLES, work)
+        mutate_yaml(work, "campaign.flux.yml", lambda d: (d.__setitem__("id", "c" * 300_000), _dangling_ref(d)))
+        errors = Bundle(work, flux_validator).run()
+        if not errors or max(map(len, errors)) > ceiling:
+            failures.append(f"[messages] a document id of 300,000 characters made a message of {max(map(len, errors), default=0):,}")
+
+        for label, mutate, expected in (
+            ("a manifest value millions of characters long",
+             lambda entries: _edit_manifest(entries, lambda m: m.__setitem__("fluxVersions", ["9" * 3_000_000])),
+             "violates the manifest schema"),
+            ("an archive path thousands of characters long",
+             lambda entries: entries + [("bundle/" + "a" * 6_000 + "\x00b.flux.yml", b"kind: World\n")],
+             "holds a NUL byte"),
+        ):
+            work, out = Path(tmp) / label / "bundle", Path(tmp) / f"{label}-dist"
+            shutil.copytree(EXAMPLES, work)
+            rc, said = _verify_output(_repack(work, out, mutate, flux_validator), flux_validator)
+            longest = max(map(len, said.splitlines()), default=0)
+            if rc == 0 or expected not in said or longest > indent + max_line:
+                failures.append(f"[messages] verify printed a line of {longest:,} characters for {label}: {said.strip()[:120]}")
+
+        # pack prints what it refuses about a linked file the way it prints a validator message
+        work = Path(tmp) / "linked" / "bundle"
+        shutil.copytree(EXAMPLES, work)
+        said = io.StringIO()
+        with _patched(bundle_tool, _symlink_entries=lambda directory: ["unsupported bundle entry (symlink): " + "d/" * 3_000 + "x"]), \
+                contextlib.redirect_stdout(said):
+            rc = bundle_tool.pack(work, Path(tmp) / "linked-dist", flux_validator)
+        longest = max(map(len, said.getvalue().splitlines()), default=0)
+        if rc == 0 or "unsupported bundle entry (symlink)" not in said.getvalue() or longest > indent + max_line:
+            failures.append(f"[messages] pack printed a line of {longest:,} characters for a linked file with a long path")
     return failures
 
 
@@ -1795,9 +2257,15 @@ def main() -> int:
     failures += check_verify_stops_at_its_caps_and_reports_a_broken_stream(flux_validator)
     failures += check_verify_never_raises_on_deep_nesting_or_a_nul_path(flux_validator)
     failures += check_verify_reports_a_pax_header_tarfile_cannot_parse(flux_validator)
-    failures += check_the_validator_bounds_what_a_document_writes_out(flux_validator)
     failures += check_supply_chain_digests_each_target_once(flux_validator)
     failures += check_reads_bundles_as_utf8(flux_validator)
+    failures += check_a_document_that_stands_for_too_much_is_refused_at_the_read(flux_validator)
+    failures += check_a_document_at_the_bounds_reads_and_one_past_them_is_refused(flux_validator)
+    failures += check_merge_keys_are_counted_for_each_mapping_that_holds_one(flux_validator)
+    failures += check_characters_are_counted_each_time_they_are_written_out(flux_validator)
+    failures += check_the_bounds_hold_through_validate_and_verify(flux_validator)
+    failures += check_bounded_keeps_both_ends_of_a_long_message(flux_validator)
+    failures += check_validator_messages_are_capped(flux_validator)
 
     # a bundle that does not validate must never be packed
     with tempfile.TemporaryDirectory() as tmp:

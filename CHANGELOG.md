@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- **The validator bounds what a YAML document writes out and how deep it
+  nests, and caps the messages it prints.** PyYAML builds an alias as a shared
+  reference, so a document of a kilobyte could stand for billions of values:
+  ten levels of ten aliases write out eleven billion. The schema check walked
+  every one of them and the error it raised spelled the value out, so one
+  message could run to gigabytes, and `verify` printed it whole. A merge key
+  copies the pairs of the mappings it merges as the mapping is built, so ten
+  levels of ten merge keys took minutes and gigabytes.
+  - `load_yaml_docs` now measures each document once it is composed, before
+    anything is built from it. A document that writes out more than 1,000,000
+    values once its aliases and merge keys are written out, that nests deeper
+    than 64 levels (the document itself being level 1), or that holds itself
+    through an alias, is reported as `unreadable YAML`, with its line and
+    column. As for a file that is not UTF-8, none of that file's documents is
+    returned. These are the bounds the FLUX engine's read holds a document to,
+    each counted per document. They apply to every YAML file the validator
+    reads: FLUX and FLUID documents and `flux.lock`. A document inside the
+    bounds reads as before: every example validates and packs to the same
+    bytes.
+  - Two more bounds cover what the engine's read does not count. A merge key
+    that names empty mappings writes out nothing, yet PyYAML visits each of
+    them for every mapping that holds the key: a thousand mappings that each
+    merge a list of a thousand empty ones cost a million visits. The merge
+    keys of one document may name at most 1,000,000 mappings in all, counted
+    once for each mapping that holds the key. And a string is one value
+    however long it is, so a document of 58 KB that held 2,000 aliases of one
+    50,000 character string made a schema message of 100 MB. A document may
+    write out at most 64 MiB of characters, aliases and merge keys written
+    out. A document that uses no alias writes out no more than its text
+    holds, so only one of that size is refused. A document inside the bound
+    on values reaches the bound on merge keys only by naming empty mappings.
+  - A validator message keeps at most 1,000 characters, and the name of the
+    document it is about 200. A longer one keeps its start and its end around a
+    count of what is left out, because jsonschema writes the value it refuses
+    first and its verdict last. `scripts/validate.py` and `pack` print no
+    message line past 2,000 characters, and neither does `verify`, whatever an
+    archive holds: a manifest value, a member path.
 - **`verify` reports deep nesting, a NUL byte in a path and a malformed PAX
   header, instead of raising them.**
   - json and PyYAML read a nested array or mapping by recursion. So a pack's
