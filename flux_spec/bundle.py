@@ -380,6 +380,10 @@ def _extract_safely(tar: tarfile.TarFile, root: Path, problems: list[str]) -> Pa
 
     tops = set()
     for m in members:
+        if "\x00" in m.name:
+            # A PAX path record can hold one; the filesystem refuses it with ValueError.
+            problems.append(f"unsafe archive path: {m.name!r} holds a NUL byte")
+            return None
         name = Path(m.name)
         if name.is_absolute() or ".." in name.parts or not name.parts:
             problems.append(f"unsafe archive path: {m.name}")
@@ -424,8 +428,15 @@ def verify(archive: Path, validator=None) -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with tarfile.open(archive, "r:gz") as tar:
-                directory = _extract_safely(tar, root, problems)
+            try:
+                with tarfile.open(archive, "r:gz") as tar:
+                    directory = _extract_safely(tar, root, problems)
+            except ValueError as exc:
+                # tarfile raises it, not a ReadError, for some PAX records it
+                # cannot parse, such as a malformed GNU sparse map. A member
+                # path the filesystem would refuse is refused before this.
+                problems.append(f"not a readable gzip archive: {exc}")
+                raise _Rejected() from None
             if directory is None:
                 raise _Rejected()
 
@@ -433,8 +444,13 @@ def verify(archive: Path, validator=None) -> int:
             if not manifest_path.exists():
                 problems.append(f"no {MANIFEST_NAME}")
                 raise _Rejected()
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))).validate(manifest)
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))).validate(manifest)
+            except RecursionError:
+                # json decodes a nested array or object by recursion.
+                problems.append(f"{MANIFEST_NAME} is nested too deeply to read")
+                raise _Rejected() from None
 
             actual = bundle_files(directory, skip_signatures=False)
             for rel, digest in manifest["files"].items():

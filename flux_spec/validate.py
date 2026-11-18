@@ -174,6 +174,10 @@ def load_yaml_docs(path: Path):
             docs = list(yaml.load_all(fh, Loader=_StringTimestampLoader))
     except UnicodeDecodeError:
         return [], "unreadable YAML: not UTF-8 text"
+    except RecursionError:
+        # PyYAML composes a nested collection by recursion, so text nested
+        # deeper than the interpreter's recursion limit raises this.
+        return [], "unreadable YAML: nested too deeply to read"
     except (yaml.YAMLError, OSError) as exc:
         return [], f"unreadable YAML: {str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__}"
     return [d for d in docs if d is not None], None
