@@ -164,6 +164,7 @@ export default defineUserConfig({
             '/engine/how-to/calibrate-from-aggregates.md',
             '/engine/how-to/draw-a-column-given-another.md',
             '/engine/how-to/ship-with-evidence.md',
+            '/engine/how-to/write-a-bundle-from-a-profile.md',
             '/engine/how-to/score-a-run-against-a-profile.md',
             '/engine/how-to/seal-and-score-a-prediction.md',
             '/engine/how-to/load-a-simulation-into-a-database.md',

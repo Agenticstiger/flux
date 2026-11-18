@@ -8,7 +8,7 @@ editLink: false
 
 # `fluxsim init`
 
-Write a small FLUX bundle and its FLUID contract into a directory, so a first run needs nothing else checked out. The directory must not exist yet, or must be empty: nothing is ever overwritten.
+Write a small FLUX bundle and its FLUID contract into a directory, so a first run needs nothing else checked out. With --contract and --profile, write a bundle for your own data instead: the contract, and a Simulation declared from the profile's published aggregates, with every number labelled in its parameter register (from the profile, from the contract, or assumed, with the reason). The directory must not exist yet, or must be empty: nothing is ever overwritten.
 
 ## Synopsis
 
@@ -24,6 +24,10 @@ fluxsim init demo
 
 # or into the current directory, if it is empty
 fluxsim init .
+
+# write a bundle for your own data, from its contract and its profile
+fluxsim init bundle --contract contract.orders.fluid.yaml \
+    --profile orders.profile.json
 ```
 
 ## Arguments
@@ -36,6 +40,8 @@ fluxsim init .
 
 | Option | Value | Description |
 |---|---|---|
+| `--contract` | `FILE` | a FLUID contract: the bundle generates rows for each of its exposes the profile describes; copied into the bundle unchanged (needs --profile) |
+| `--profile` | `FILE` | a profile document of that data (docs/spec/PROFILE-SPEC.md), such as `fluid profile` writes: the Simulation pins its digest and is declared from its published aggregates; it stays outside the bundle (needs --contract) |
 | `-j, --json` |  | emit machine-readable JSON |
 
 [All commands](./README.md)

@@ -30,9 +30,9 @@ Step 6 shows how to check those against a slice of your records instead.
 | Package | Latest on PyPI | Used here for | Status |
 |---|---|---|---|
 | `flux-spec` | 0.5.3 | validating the bundle (the engine installs it) | released |
-| `flux-sim-engine` | 0.6.1 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
+| `flux-sim-engine` | 0.6.2 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
 | `data-product-forge` | 0.31.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
-| `flux-stats` | 0.6.1 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
+| `flux-stats` | 0.6.2 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
 
 The engine needs Python 3.11 or newer. One environment holds both tools:
 

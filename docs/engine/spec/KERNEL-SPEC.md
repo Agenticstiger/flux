@@ -101,6 +101,31 @@ a new path, changes no existing stream.
 
 Never: `random`, `numpy.random.Generator.<distribution>`, `math.exp/log/erf` on a digest path, rejection loops.
 
+### 4.1 Random-access permutation (`core/permute.py`)
+
+`permute(key, domain, index)` is a bijection of `[0, domain)` for every 32-byte `key`, read at one index without
+building the rest, so the value a key takes at row `i` is computed in whichever process holds row `i` (§8.2):
+
+```
+b = bit_length(domain - 1); u = b // 2; v = b - u        # left part u bits, right part v bits (FF1's split)
+x = index
+repeat:                                                   # cycle walking (Black and Rogaway, 2002)
+    L, R = x >> v, x mod 2**v
+    for i in 0, 1, 2, 3:
+        even i: L = (L + F(i, R)) mod 2**u
+        odd i:  R = (R + F(i, L)) mod 2**v
+    x = L * 2**v + R
+until x < domain
+F(i, y) = int(sha256(b"flux-permute/1" + b"\x00" + key + b"\x00" + domain.to_bytes(33, "big") + bytes([i]) + y.to_bytes(32, "big")))
+```
+
+A Feistel network is invertible whatever its round function, so the four rounds permute `[0, 2**b)`, and the walk
+stays on the cycle of `index`, which holds `index`, so it ends; `2**b < 2 * domain`, so it takes fewer than two
+passes on average. Four rounds is Luby and Rackoff's count for a strong pseudorandom permutation from a pseudorandom
+round function. No stream is read, so the number of passes moves no stream position. `domain = 1` gives `0`; a key
+of another length, a domain outside `[1, 2**256]` or an index outside `[0, domain)` is `FLX-5021`.
+`tests/vectors/permute-vectors.json` pins images for several domains.
+
 ## 5. Largest Remainder Method (`core/lrm.py`)
 
 Inputs: `n: int ≥ 1`, `weights: Mapping[str, Decimal]` summing to 1 within 1e-9 (validator already checks).
@@ -172,11 +197,73 @@ before, entities and all.
   `foreignKeys`, `uniqueKeys`, `relationships` or `entities` (refused as `FLX-3105` before keys came from the contract). A fidelity `unique: false` on a column the contract makes a key is refused, and so is
   `unique: true` on a key the contract's validity window repeats across versions. `unique: true` on a
   one-column key agrees with the contract and passes.
-- In a generator-driven emit (one with a fidelity block, SEAM-FIDELITY-SPEC section 1), a one-column STRING
-  key is generated as an identifier, derived from `(H, ordinal)`, without a fidelity `unique` or an
-  `identifier` tag. A scenario-driven emit fills the column from its mapping, as before. A key of another type,
-  composite keys and foreign-key values are read here but not yet generated together: each column still draws
-  on its own path, as its type does, until related tables are generated.
+- In a generator-driven emit (one with a fidelity block, SEAM-FIDELITY-SPEC section 1), the keys and foreign
+  keys are generated together (§8.2): every key is unique and every foreign key value is a key its parent's
+  rows hold. A scenario-driven emit fills its columns from its mapping, as before.
+
+### 8.2 Related tables (`generator/relations.py`)
+
+The generator-driven emits of one contract are related after every emit is planned and before any row is drawn.
+Nothing is materialised: a value is still a function of the run, the expose, the row index and the column, so a
+slice of rows is the same in any process, and `--jobs` gives the bytes one job gives.
+
+**Keys are derived, never drawn, and none reads the seed.**
+
+- A one-column INT, DECIMAL, DATE or TIMESTAMP key is laid out in ascending order over the grid points of its
+  declared range, or of its declared bins, each bin taking the rows §5 allots it by `binWeights`: row
+  `start_j + k` of bin `j` takes grid point `first_j + floor(k * width_j / count_j)`, and `count_j <= width_j`,
+  so no two rows meet. An INT key that declares nothing counts `1..rows`; a DATE or TIMESTAMP key that declares
+  nothing is laid out over the Simulation's `timeBounds`, the range such a column takes by default
+  (SEAM-FIDELITY-SPEC section 1); any other key needs a declared range.
+- A one-column STRING key is `permute(k, 16**L, rowIndex)` (§4.1) written as `L` lowercase hex digits, `L` its
+  `identifierLength` (default 32). A `uuid` key permutes over `2**122` and is written as an RFC 9562 version 8
+  UUID, every permuted bit kept.
+- A key of several columns takes the point `permute(k, size, rowIndex)` of the product of its parts, decoded in
+  mixed radix, parts in key-column order. A relationship whose columns lie inside the key is one part: its domain
+  is the parent's rows, and its columns take the parent's key at the decoded row. Any other column is a part over
+  its declared levels or the grid points of its declared range. A key that a smaller unique key lies inside (a
+  one-column key, or the columns of a distinct relationship below) needs no layout of its own.
+- `k = sha256(b"flux-key/1" + b"\x00" + H_bytes + b"\x00" + label(("sim", sim_id, "gen", exposeId, "key", column...)))`,
+  from the emit's seam digest `H`, like an identifier.
+- A key on an expose with a validity window is laid out the same way: unique on every row is unique at each
+  point in time, with one version per key.
+
+**A foreign key takes the parent's key at a parent row `p`.** The relationship's `fromColumns` take the values its
+`toColumns` hold at `p`, so a composite foreign key copies one parent row whole.
+
+- `distinct`: a `one_to_one` relationship, or one whose `fromColumns` are a key of the child, references each parent
+  row at most once: `p = permute(k_rel, parentRows, rowIndex)`, `k_rel` as `k` with `("rel", name)` in place of the
+  key columns.
+- `declared`: a one-column relationship whose target key is an ordered layout, when its column declares a draw.
+  The column draws on its own path as any column does, and `p` is the row whose key is nearest the drawn value,
+  the lower key when two are as near; a value outside the parent's keys takes the first or the last. The declared
+  shape of children per parent is kept.
+- `uniform`: any other, `p = bounded_uint(stream, parentRows)` on the stream of the relationship's first
+  `fromColumn`, after that column's null draw.
+- A foreign key's columns are null together, by the first column's declared `nullFraction` on its own path; another
+  column of it declares none. The `nullFraction` is kept when the relationship's `joinType` is `left` (FLUID's
+  default): a null references no row, and a `distinct` relationship's other rows still reach distinct parents.
+  `inner` joins every row, so a `nullFraction` there is refused. Every other column of a key holds a value on every
+  row: only a `distinct` relationship's own columns may be null, and not when they are a `primary` or `unique` entity
+  or a key another relationship targets, whose children would copy the null.
+- When two relationships set one column, the one with more columns sets it. The other is kept when its columns lie
+  inside the first and the first's target declares the same relationship on the paired columns, so copying the
+  parent row keeps both (a return's item inside its sale key, the sale's own item key pointing at the item). An
+  `inner` one is kept only when the target's is `inner` too and the first cannot be null, so the value it copies is
+  never null.
+
+**Refusals** (`FLX-3403`, before any row): a relationship whose target the Simulation does not generate from
+statistics, or that declares no rows; a foreign key whose type differs from its target's (for a DECIMAL, its precision
+or scale); a key whose range, bins, identifier length or parts hold fewer values than its rows, or that declares a
+draw that repeats values (levels, support, a mean, a rate, `given`), or levels that spell one value twice; a column
+of a key that a smaller key keeps unique and that declares no draw of its own; a `one_to_one` child with more rows
+than its parent; a `nullFraction` where the rules above allow none; two relationships that set one column otherwise
+than above; a key that holds part of a relationship; keys that take their values from one another round a cycle; a
+column drawn `given` a column whose value is not drawn.
+
+The document `generatorDigest` covers carries a `relations` entry for each related column, with what it reads of
+its parent (the parent's `H`, rows, column plans and layouts), so a moved parent moves its children's digests. An
+expose with no key and no relationship has no entry, and its digest does not move.
 
 ## 9. Value rendering (`seam/conform.py`)
 
