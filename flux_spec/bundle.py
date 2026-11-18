@@ -428,8 +428,15 @@ def verify(archive: Path, validator=None) -> int:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with tarfile.open(archive, "r:gz") as tar:
-                directory = _extract_safely(tar, root, problems)
+            try:
+                with tarfile.open(archive, "r:gz") as tar:
+                    directory = _extract_safely(tar, root, problems)
+            except ValueError as exc:
+                # tarfile raises it, not a ReadError, for some PAX records it
+                # cannot parse, such as a malformed GNU sparse map. A member
+                # path the filesystem would refuse is refused before this.
+                problems.append(f"not a readable gzip archive: {exc}")
+                raise _Rejected() from None
             if directory is None:
                 raise _Rejected()
 

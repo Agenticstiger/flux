@@ -1232,6 +1232,47 @@ def check_verify_never_raises_on_deep_nesting_or_a_nul_path(flux_validator) -> l
     return failures
 
 
+def _pax_record(key: bytes, value: bytes) -> bytes:
+    """One PAX extended-header record: its own length, then ` key=value` and a newline."""
+    body = b" " + key + b"=" + value + b"\n"
+    length = len(body) + len(str(len(body)))
+    while len(str(length)) + len(body) != length:
+        length = len(str(length)) + len(body)
+    return str(length).encode() + body
+
+
+def check_verify_reports_a_pax_header_tarfile_cannot_parse(flux_validator) -> list[str]:
+    """tarfile raises ValueError, not ReadError, for a GNU sparse map it cannot
+    parse, which verify let out though it says it never raises."""
+    headers = {
+        "a GNU sparse 1.0 header whose map is missing": [
+            (b"GNU.sparse.major", b"1"), (b"GNU.sparse.minor", b"0"),
+            (b"GNU.sparse.realsize", b"abc"), (b"GNU.sparse.name", b"bundle/z.flux.yml")],
+        "a GNU sparse 0.1 map that is not numbers": [
+            (b"GNU.sparse.size", b"10"), (b"GNU.sparse.numblocks", b"1"), (b"GNU.sparse.map", b"x,y")],
+    }
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for i, (label, records) in enumerate(headers.items()):
+            archive = Path(tmp) / f"sparse{i}.flux.tgz"
+            data = b"".join(_pax_record(key, value) for key, value in records)
+            with tarfile.open(archive, "w:gz", format=tarfile.PAX_FORMAT) as tar:
+                header = tarfile.TarInfo("bundle/PaxHeaders/z")
+                header.type, header.size = tarfile.XHDTYPE, len(data)
+                tar.addfile(header, io.BytesIO(data))
+                member = tarfile.TarInfo("bundle/z.flux.yml")
+                member.size = 1
+                tar.addfile(member, io.BytesIO(b"x"))
+            try:
+                rc, said = _verify_output(archive, flux_validator)
+            except Exception as exc:  # noqa: BLE001 (a traceback is the failure)
+                failures.append(f"[bundle] CRASHED ({type(exc).__name__}: {exc}) on {label}")
+                continue
+            if rc == 0 or "not a readable gzip archive" not in said:
+                failures.append(f"[bundle] verify did not report {label}: {said.strip()[:200]}")
+    return failures
+
+
 def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
     """A bundle's files are read as UTF-8 on every host, and a file that is not UTF-8 is refused.
 
@@ -1671,6 +1712,7 @@ def main() -> int:
     failures += check_verify_refuses_unsafe_members(flux_validator)
     failures += check_verify_stops_at_its_caps_and_reports_a_broken_stream(flux_validator)
     failures += check_verify_never_raises_on_deep_nesting_or_a_nul_path(flux_validator)
+    failures += check_verify_reports_a_pax_header_tarfile_cannot_parse(flux_validator)
     failures += check_supply_chain_digests_each_target_once(flux_validator)
     failures += check_reads_bundles_as_utf8(flux_validator)
 
