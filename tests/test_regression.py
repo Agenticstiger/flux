@@ -1150,19 +1150,29 @@ def check_verify_stops_at_its_caps_and_reports_a_broken_stream(flux_validator) -
             failures.append(f"[bundle] verify read {len(headers)} headers past a member cap of 2: {said.strip()}")
 
         data = archive.read_bytes()
-        broken = {"a gzip stream cut in half": data[: len(data) // 2],
-                  "a corrupt gzip stream": _first_flip_raising(data, zlib.error)}
-        for i, (label, blob) in enumerate(broken.items()):
-            if blob is None:
-                failures.append(f"[bundle] no single-byte flip of the example's archive makes {label}")
-                continue
+        broken = {"a gzip stream cut in half": (data[: len(data) // 2], None),
+                  # Raised by the read itself, as tarfile up to Python 3.13 lets it
+                  # out; 3.14's tarfile turns every flip into a ReadError.
+                  "zlib.error from the stream": (data, zlib.error("invalid distance too far back"))}
+        corrupt = _first_flip_raising(data, zlib.error)
+        if corrupt is not None:
+            broken["a corrupt gzip stream"] = (corrupt, None)
+        for i, (label, (blob, raised)) in enumerate(broken.items()):
             target = Path(tmp) / f"broken{i}.flux.tgz"
             target.write_bytes(blob)
+
+            def failing_next(self, raised=raised):
+                raise raised
+
+            if raised is not None:
+                tarfile.TarFile.next = failing_next
             try:
                 rc, said = _verify_output(target, flux_validator)
             except Exception as exc:  # noqa: BLE001 (a traceback is the failure)
                 failures.append(f"[bundle] CRASHED ({type(exc).__name__}: {exc}) on {label}")
                 continue
+            finally:
+                tarfile.TarFile.next = real_next
             if rc == 0 or "not a readable gzip archive" not in said:
                 failures.append(f"[bundle] verify did not report {label}: {said.strip()}")
     return failures
