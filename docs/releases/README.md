@@ -2,7 +2,8 @@
 
 | Version | Date | Highlights |
 |---|---|---|
-| **[0.5.2](/flux/releases/0.5.2)** | 2026-11-17 | The FLUID 0.7.7 preview at the seam, by exact pin, with its keys and validity windows; `verify` accepts packs made by earlier releases |
+| **[0.5.3](/flux/releases/0.5.3)** | 2026-11-18 | The FLUID 0.7.7 preview moves to a newer forge-cli commit: an enum level may be any quoted text, a column may carry its Protobuf field number, a Confluent registry may enforce row checks; enum lists that are not comma-separated levels are refused |
+| [0.5.2](/flux/releases/0.5.2) | 2026-11-17 | The FLUID 0.7.7 preview at the seam, by exact pin, with its keys and validity windows; `verify` accepts packs made by earlier releases |
 | [0.5.1](/flux/releases/0.5.1) | 2026-11-12 | FLUID 0.7.6 at the seam, and a second example: tenant renewal risk at a tower company |
 | [0.5.0](/flux/releases/0.5.0) | 2026-08-20 | All nine RFCs shipped: runtime enforcement contract + reference gate + conformance vectors, deterministic signed evidence bundles |
 | [0.4.1](/flux/releases/0.4.1) | 2026-08-20 | The twin grades itself: credibility scorecard with a seam gate, seam version ranges + provenance digests |

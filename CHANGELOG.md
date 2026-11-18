@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.3 - 2026-11-18
 
-The FLUID 0.7.7 preview is re-pinned from forge-cli commit `32fce8e3` to
-`e88301f7` (`vendor/fluid-preview/pins.json`, sha256 `24c5858a`). The
-specification and the FLUX schema are unchanged. Three forge-cli changes reach
-the vendored schema:
+Specification 0.5.3
+([schema-diffs/diff-0.5.2-to-0.5.3.md](schema-diffs/diff-0.5.2-to-0.5.3.md)).
+The FLUX schema only widens its window. The FLUID 0.7.7 preview is re-pinned
+from forge-cli commit `32fce8e3` to `e88301f7` (`vendor/fluid-preview/pins.json`,
+sha256 `24c5858a`), and three forge-cli changes reach the vendored schema:
 
 - forge-cli #932 (`4fa06519`): a column may carry `protobuf.field`, its field
   number in the `.proto` forge-cli generates when a topic's value is Protobuf,
@@ -14,11 +15,32 @@ the vendored schema:
   set `rules: true`, which registers the expose's error-severity row checks as
   Confluent data-contract rules. A `glue` block is refused one.
 - forge-cli #952 (`e88301f7`): an `enum(...)` level may be a quoted string that
-  holds any character but a control character, a comma, a parenthesis, a dot
-  and `>` among them, with its own quote doubled (`'O''Brien'`), or a word list
+  holds any character but a control character (a comma, a parenthesis, a dot
+  and `>` included), with its own quote doubled (`'O''Brien'`), or a word list
   as before. A list that is not comma-separated levels, such as
-  `enum('a' 'b')` or `enum(a,,b)`, and a quoted level holding a tab validated
-  under the old pin and are refused under the new one.
+  `enum('a' 'b')`, `enum(a,,b)` or `enum(a, b,)`, and a quoted level holding a
+  control character, such as a tab or a newline, validated under the old pin
+  and are refused under the new one.
+- **schema**: `schema/flux-schema-0.5.3.json`, with the `fluxVersion` window
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2", "0.5.3"]`;
+  `flux-schema-latest.json` aliases it, the UI hints regenerate as
+  `flux-ui-hints-0.5.3.json`, and `flux_spec.SCHEMA_VERSION` and the package
+  version are `0.5.3`.
+- **evidence packs**: `verify` checks a pack's 0.7.7 contracts against the
+  preview this release carries, so a pack that 0.5.2 made from a contract with
+  one of the refused enum lists no longer verifies. Verify it with flux-spec
+  0.5.2.
+- **policy**: VERSIONING.md says that a preview's pin move does not reset the
+  window, even when the new pin refuses what the old one accepted, and that a
+  pack it refuses verifies with the release that made it.
+- **tests**: the regression suite checks that a 0.7.7 contract, in a bundle
+  that pins `fluxVersion: "0.5.2"`, may carry quoted enum levels with
+  punctuation, `protobuf.field` and `rules` on a Confluent registry; that enum
+  lists which are not comma-separated levels, quoted levels holding a control
+  character, a reserved or zero field number and `rules` on a Glue registry
+  are refused; that a pack made while the preview admitted `enum('a' 'b')` no
+  longer verifies; that a 0.5.2 pack of the example verifies; and that the
+  immutable 0.5.2 file refuses `fluxVersion: "0.5.3"`.
 
 ## 0.5.2 - 2026-11-17
 
