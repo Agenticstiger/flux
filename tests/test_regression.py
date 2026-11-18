@@ -160,6 +160,16 @@ sim_exact_077 = envelope_052(
     "Simulation", worldRef="w",
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
 )
+
+
+envelope_053 = functools.partial(envelope, flux_version="0.5.3")
+
+
+# 0.5.3: the window widens, and the FLUID 0.7.7 preview moves to a newer pin
+sim_exact_077_053 = envelope_053(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
+)
 sim_garbage_range = envelope_041(
     "Simulation", worldRef="w",
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "banana"}],
@@ -171,6 +181,7 @@ sim_bad_digest = envelope_041(
 )
 
 CASES_PASS = {
+    "0.5.3: a 0.5.3 document pins the FLUID 0.7.7 preview exactly": sim_exact_077_053,
     "0.5.2: exact FLUID 0.7.7 (preview) pin at the seam": sim_exact_077,
     "0.5.1: exact FLUID 0.7.6 pin at the seam": sim_exact_076,
     "RFC-05: playback scorecard": pb_scorecard,
@@ -558,13 +569,17 @@ def _with_relationship(contract: dict, fluid_version: str, relationship: dict) -
     risk["semantics"] = {"relationships": [relationship]}
 
 
-def _towers_on(bundle: Path, fluid_version: str, emit_pin: str, relationship: dict = COMPOSITE_KEY) -> None:
+def _towers_on(bundle: Path, fluid_version: str, emit_pin: str, relationship: dict = COMPOSITE_KEY,
+               change=None) -> None:
     """The towers bundle with its contract on *fluid_version*, carrying a
-    relationship, and its emit pinned to *emit_pin* with a re-pinned digest."""
+    relationship and any *change*, and its emit pinned to *emit_pin* with a
+    re-pinned digest."""
     shutil.copytree(TOWERS_EXAMPLE, bundle)
     contract_path = bundle / TOWERS_CONTRACT
     contract = yaml.safe_load(contract_path.read_text())
     _with_relationship(contract, fluid_version, copy.deepcopy(relationship))
+    if change is not None:
+        change(contract)
     contract_path.write_text(yaml.safe_dump(contract, sort_keys=False))
 
     def pin(sim):
@@ -726,6 +741,83 @@ def check_preview_bundles(flux_validator) -> list[str]:
     return failures
 
 
+# --- 0.5.3: the FLUID 0.7.7 preview re-pinned to forge-cli e88301f7 ----------
+
+def _column(field: str, value, column: int = 4):
+    """Set *field* on one column of the towers contract (4 is country, 0 is tenant_id)."""
+    def change(contract):
+        contract["exposes"][0]["contract"]["schema"][column][field] = value
+    return change
+
+
+def _registry(kind: str, **extra):
+    """Give the towers expose a schema registry of *kind*: Confluent is
+    addressed by a url, Glue by a registry name."""
+    def change(contract):
+        registry = {"kind": kind, "subject": "tenant_renewal_risk", **extra}
+        if kind == "confluent":
+            registry["url"] = "https://registry.example.com"
+        else:
+            registry["registryName"] = "towers"
+        contract["exposes"][0]["binding"].setdefault("properties", {})["registry"] = registry
+    return change
+
+
+#: What the e88301f7 pin accepts in a 0.7.7 contract. The 32fce8e3 pin that
+#: flux-spec 0.5.2 carried refused the punctuation in the first two levels,
+#: protobuf on a column and rules on a registry (schema-diffs/diff-0.5.2-to-0.5.3.md).
+REPIN_ACCEPTS = {
+    "quoted enum levels holding punctuation and a doubled quote": _column("type", "enum('Dr.', '>10000', 'O''Brien', 'a, b')"),
+    "a quoted enum level holding parentheses and a slash": _column("type", "enum('(none)', 'a/b')"),
+    "double-quoted enum levels": _column("type", 'enum("x", "say ""hi""")'),
+    "an enum of word lists, as before": _column("type", "enum(IE, United Kingdom)"),
+    "protobuf.field 1": _column("protobuf", {"field": 1}, column=0),
+    "protobuf.field 536870911, the largest": _column("protobuf", {"field": 536870911}, column=0),
+    "rules on a Confluent registry": _registry("confluent", rules=True),
+    "a Glue registry without rules": _registry("glue"),
+}
+
+#: What it refuses, and where the preview says so. The first four validated
+#: under the 32fce8e3 pin.
+REPIN_REFUSES = {
+    "enum levels without commas": (_column("type", "enum('a' 'b')"), "$.exposes[0].contract.schema[4].type"),
+    "an empty enum level": (_column("type", "enum(a,,b)"), "$.exposes[0].contract.schema[4].type"),
+    "a tab inside a quoted enum level": (_column("type", "enum('a\tb')"), "$.exposes[0].contract.schema[4].type"),
+    "a newline inside a quoted enum level": (_column("type", "enum('a\nb')"), "$.exposes[0].contract.schema[4].type"),
+    "protobuf.field 19000, which Protobuf reserves": (_column("protobuf", {"field": 19000}, column=0),
+                                                      "$.exposes[0].contract.schema[0].protobuf.field"),
+    "protobuf.field 0": (_column("protobuf", {"field": 0}, column=0), "$.exposes[0].contract.schema[0].protobuf.field"),
+    "rules on a Glue registry": (_registry("glue", rules=True), "$.exposes[0].binding.properties.registry"),
+}
+
+
+def check_preview_repin(flux_validator) -> list[str]:
+    """0.5.3 re-pins the 0.7.7 preview: a 0.7.7 contract in a bundle that pins
+    fluxVersion 0.5.2 is checked against the new pin, which accepts and refuses
+    what REPIN_ACCEPTS and REPIN_REFUSES list; and the immutable 0.5.2 schema
+    refuses a 0.5.3 document."""
+    failures = []
+    for label, change in REPIN_ACCEPTS.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            _towers_on(bundle, "0.7.7", "0.7.7", change=change)
+            errors = Bundle(bundle, flux_validator).run()
+            if errors:
+                failures.append(f"[preview] the 0.7.7 preview refused {label}: {errors[:3]}")
+    for label, (change, where) in REPIN_REFUSES.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            _towers_on(bundle, "0.7.7", "0.7.7", change=change)
+            errors = Bundle(bundle, flux_validator).run()
+            if not any(f"fails FLUID 0.7.7 (preview): {where}" in e for e in errors):
+                failures.append(f"[preview] the 0.7.7 preview did not refuse {label} at {where}: {errors[:3]}")
+    # released schema files are immutable: 0.5.2 refuses a 0.5.3 document
+    schema_052 = Draft202012Validator(json.loads((REPO / "schema" / "flux-schema-0.5.2.json").read_text()))
+    if not list(schema_052.iter_errors(sim_exact_077_053)):
+        failures.append("[schema] a 0.5.3 document should fail the immutable 0.5.2 schema (fluxVersion window)")
+    return failures
+
+
 def _repack(work: Path, out: Path, mutate, flux_validator):
     """Rebuild a packed archive, applying `mutate(members) -> members`."""
     bundle_tool.pack(work, out, flux_validator)
@@ -795,7 +887,7 @@ def check_packs_across_releases(flux_validator) -> list[str]:
         failures.append(f"[bundle] the window {WINDOW} does not resolve to one shipped schema per version: {sorted(accepted)}")
 
     # the releases that shipped the bundler before this one: their packs are in the wild
-    for version in ("0.5.0", "0.5.1"):
+    for version in ("0.5.0", "0.5.1", "0.5.2"):
         with tempfile.TemporaryDirectory() as tmp:
             work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
             rc, archive = _pack_as(version, EXAMPLES, work, out)
@@ -1029,6 +1121,9 @@ def main() -> int:
     # 0.5.2: the FLUID 0.7.7 preview, its pins and the seam's opt-in rule
     failures += check_fluid_previews()
     failures += check_preview_bundles(flux_validator)
+
+    # 0.5.3: the FLUID 0.7.7 preview re-pinned to forge-cli e88301f7
+    failures += check_preview_repin(flux_validator)
 
     # ref-like keys inside free-form payloads must not be flagged
     with tempfile.TemporaryDirectory() as tmp:
@@ -1325,12 +1420,13 @@ def main() -> int:
         + 3   # 0.5.1: towers bundle green, broken 0.7.6 contract caught, 0.7.6 refused by 0.5.0
         + 20  # 0.5.2: pins, seam window, 7 bad pins, 4 sync refusals, 0.7.7 green, moved key, broken relationship,
               # range refused, 0.7.6 relationships refused, 0.7.7 refused by 0.5.1
+        + 16  # 0.5.3: 8 forms the re-pinned 0.7.7 preview accepts, 7 it refuses, 0.5.3 refused by 0.5.2
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
         + 9   # RFC-09 negative fixtures: 6 archive attacks + 2 malformed inputs + size cap
-        + 7   # RFC-09 across releases: window resolves, 0.5.0 and 0.5.1 packs verify, named schema
-              # applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
+        + 8   # RFC-09 across releases: window resolves, 0.5.0, 0.5.1 and 0.5.2 packs verify, named
+              # schema applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
         + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link
         + 1   # RFC-09 the manifest write never follows a link that appears after that refusal
         + 7   # RFC-09 verify refuses .., absolute, symlink, hard link, FIFO, beside-the-directory
