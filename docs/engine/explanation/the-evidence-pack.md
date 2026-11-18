@@ -57,8 +57,8 @@ computed: the scores the gate decided on, and beside them the shape flags, which
 
 A run whose Simulation declares a parameter register also carries
 `run/parameter-register.json`: every number the run reads, each with what it rests on, a
-statistic of the pinned profile, an assumption and its reason, or a default
-([PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md)). The plan holds its digest,
+statistic of the pinned profile, a place in the contract, an assumption and its reason, or
+a default ([PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md)). The plan holds its digest,
 `parameterRegisterDigest`, so `ship` and `verify` read it the way they read the column record
 below, and the report states the shares under "What Was Not Proven".
 
@@ -137,7 +137,9 @@ how it was produced and from what. A column is one of five things:
   timestamp column that declares no draw of its own it is uniform within the simulation's
   time bounds.
 - `profile`: reserved for a column generated from a statistic profile. Nothing produces
-  it yet.
+  it yet. A bundle that `fluxsim init --profile` wrote declares its columns from the
+  profile, so they read `declared`, and its parameter register says which numbers rest on
+  the profile.
 
 ```console
 $ sed -n '/^## Column Provenance/,/^## What Was Not Proven/p' .flux/runs/8835218acf7b4f8e/EVIDENCE.md

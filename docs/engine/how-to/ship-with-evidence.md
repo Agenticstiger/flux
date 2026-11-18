@@ -297,7 +297,7 @@ A shipped pack carries the scores as `run/scorecard.json`, and `EVIDENCE.md` sum
 
 ## Say where each number comes from
 
-A Simulation can declare what each number its run reads rests on: a statistic of the profile it pins, an assumption with its reason, or a default ([PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md)). Each entry names a document by its id and the numbers in it by a JSON Pointer; a pointer to a mapping names every number under it, and a number no entry names is a default.
+A Simulation can declare what each number its run reads rests on: a statistic of the profile it pins, a place in the FLUID contract it emits from, an assumption with its reason, or a default ([PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md)). Each entry names a document by its id and the numbers in it by a JSON Pointer; a pointer to a mapping names every number under it, and a number no entry names is a default.
 
 ```yaml
 extensions:

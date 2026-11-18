@@ -81,6 +81,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-3304](./FLX-3304.md) | a column fell back to a type default and coverage is strict |
 | [FLX-3401](./FLX-3401.md) | no distribution family is available for this column |
 | [FLX-3402](./FLX-3402.md) | declared statistics do not parameterise the chosen family |
+| [FLX-3403](./FLX-3403.md) | the related tables cannot be generated as declared |
 | [FLX-3501](./FLX-3501.md) | a sink needs an optional extra that is not installed |
 | [FLX-3502](./FLX-3502.md) | a value has no exact representation in the sink's format |
 | [FLX-3503](./FLX-3503.md) | the data read back is not the stream it is read as |
@@ -119,6 +120,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-5020](./FLX-5020.md) | declared weights do not sum to 1 |
 | [FLX-5021](./FLX-5021.md) | draw parameter outside its declared domain |
 | [FLX-5022](./FLX-5022.md) | virtual clock or scheduler input outside its declared domain |
+| [FLX-5023](./FLX-5023.md) | the Simulation declares no time window |
 | [FLX-5030](./FLX-5030.md) | the fidelity block is malformed |
 | [FLX-5031](./FLX-5031.md) | a column named by the fidelity block is not a member of the expose |
 | [FLX-5032](./FLX-5032.md) | histogram bins do not partition the declared range |
@@ -129,6 +131,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-5037](./FLX-5037.md) | the profile does not answer a declared property |
 | [FLX-5040](./FLX-5040.md) | population declaration cannot be materialised |
 | [FLX-5041](./FLX-5041.md) | value is outside the domain the kernel can hash |
+| [FLX-5042](./FLX-5042.md) | the World names no vertical this engine ships |
 
 ## 6000: expression language
 

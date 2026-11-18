@@ -30,9 +30,9 @@ Step 6 shows how to check those against a slice of your records instead.
 | Package | Latest on PyPI | Used here for | Status |
 |---|---|---|---|
 | `flux-spec` | 0.5.3 | validating the bundle (the engine installs it) | released |
-| `flux-sim-engine` | 0.6.1 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
+| `flux-sim-engine` | 0.6.2 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
 | `data-product-forge` | 0.31.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
-| `flux-stats` | 0.6.1 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
+| `flux-stats` | 0.6.2 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
 
 The engine needs Python 3.11 or newer. One environment holds both tools:
 
@@ -176,10 +176,13 @@ tells them apart.
 
 ## 4. Write the Simulation from the profile's numbers
 
-The engine checks a run against a profile, but it does not generate rows from
-one yet. You write the declarations, by hand or with a small script: each
-published number becomes a declaration, and where the profile withheld a
-number, you choose one and say so.
+The engine checks a run against a profile, and from 0.6.2 it can also write
+the declarations from one: `fluxsim init` with `--contract` and `--profile`
+writes a bundle whose numbers are each labelled by what they rest on, as
+[Write a bundle from a profile](../engine/how-to/write-a-bundle-from-a-profile.md)
+shows. Here you write them by hand, or with a small script, to see where each
+one comes from: each published number becomes a declaration, and where the
+profile withheld a number, you choose one and say so.
 
 | From the profile | Into the Simulation |
 |---|---|

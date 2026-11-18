@@ -46,6 +46,8 @@ The kernel's tests include six deliberately broken kernels that must fail the pr
 
 `--jobs N`, or the `FLUX_JOBS` environment variable, lets several processes generate the rows of an emit that declares statistics. `--jobs auto` uses one per CPU the process may run on; in a container with a CPU quota, give the number instead. Each cell's stream is addressed by its row and its column, never by the order the generator reaches it, so a slice of rows is the same rows in whichever process it is made. Each worker generates, renders and frames a slice. The run joins the framed lines in row order, and those lines are what the output digest covers. The rows, the digests and every file the run writes are therefore the ones one job gives; only the time it takes changes, and the run summary, which says how many processes made an emit when there was more than one. A small emit stays in one process, because starting a worker costs about as much as generating a few thousand rows, and a run never uses more than one worker per CPU.
 
+Related tables keep this. A key is laid out from the row index, and a foreign key reads its parent's key at a parent row by that row's address, the way any cell is read, so no process holds a parent table and a slice of a child table is the same in any process. Keys are derived from the seam digest, not the seed, like identifiers: a sweep that changes the seed moves the draws, including which parent a foreign key picks, but not the keys themselves ([KERNEL-SPEC.md](../spec/KERNEL-SPEC.md) §8.2).
+
 ## What the input digest covers
 
 The input digest is the digest of the files that went in. ADR 0006 settles which files those are. A bundle directory holds inputs and products and nothing else.

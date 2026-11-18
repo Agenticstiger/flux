@@ -1,18 +1,22 @@
-# Parameter register: normative specification (format 1-0-0)
+# Parameter register: normative specification (format 1-1-0)
 
 A parameter register says what each number a run reads rests on. A number
 comes from a statistic of the profile the Simulation pins (PROFILE-SPEC.md),
-from an assumption the author states with its reason, or it is a default. A
-Simulation declares its register in the engine's extension namespace,
-`apply` writes the record of it as `run/parameter-register.json`, and `plan`,
-`verify` and `ship` report the shares.
+from a place in the FLUID contract the run emits from, from an assumption the
+author states with its reason, or it is a default. A Simulation declares its
+register in the engine's extension namespace, `apply` writes the record of it
+as `run/parameter-register.json`, and `plan`, `verify` and `ship` report the
+shares. Format 1-1-0 adds the contract source to format 1-0-0 (section 7).
 
 Normative files beside this page:
 
+- [`parameter-register-1-1.schema.json`](parameter-register-1-1.schema.json):
+  the JSON Schema of a format 1-1-0 record, whose `$id` is
+  `https://agenticstiger.github.io/flux/engine/spec/parameter-register/1-1-0/FluxParameterRegister.json`.
 - [`parameter-register-1.schema.json`](parameter-register-1.schema.json): the
-  JSON Schema of the record, whose `$id` is
+  JSON Schema of a format 1-0-0 record, whose `$id` is
   `https://agenticstiger.github.io/flux/engine/spec/parameter-register/1-0-0/FluxParameterRegister.json`.
-  The schema checks the shape. This page states the rules it cannot express.
+  The schemas check the shape. This page states the rules they cannot express.
 - [`parameter-register-example.json`](parameter-register-example.json): the
   record of a run of the small telco test bundle, with numbers from its
   pinned profile, two assumptions and the defaults. The tests validate it
@@ -58,9 +62,10 @@ extensions:
 |---|---|
 | `document` | The id of a document the run reads (section 2). |
 | `pointer` | An RFC 6901 JSON Pointer into that document. It names one number, or every number under a mapping or a list. |
-| `source` | `profile`, `assumption` or `default`. |
+| `source` | `profile`, `contract`, `assumption` or `default`. |
 | `statistic` | For `profile` only, and required there: the citation (section 3). |
-| `reason` | Required for `assumption`, optional for `default`, refused for `profile`: one line of text, at most 1000 characters. |
+| `contract` | For `contract` only, and required there: the citation (section 3). |
+| `reason` | Required for `assumption`, optional for `default`, refused for `profile` and `contract`: one line of text, at most 1000 characters. |
 
 A pointer is read as RFC 6901 reads it: tokens after each `/`, with `~1`
 standing for `/` and `~0` for `~`. The engine's own namespace key contains a
@@ -85,14 +90,18 @@ anything is written:
 
 - a block that is not a list, an entry that is not a mapping, a key an entry
   does not carry, and a missing `document`, `pointer` or `source`;
-- a pointer that is not RFC 6901, and a `source` outside the three;
+- a pointer that is not RFC 6901, and a `source` outside the four;
 - a `profile` entry without `statistic` or with `reason`, a `profile` entry in
   a Simulation that pins no profile, and a citation that is not a mapping of
   `pointer` and `definition`, whose pointer is empty, or whose `definition` is
   not a registered statistic or metric;
+- a `contract` entry without `contract` or with `reason`, and a citation that
+  is not a mapping of `productRef` and `pointer`, whose `productRef` is not a
+  contract the run's emits name, or whose pointer is empty or reaches nothing
+  in that contract;
 - an `assumption` without `reason`, a `statistic` on any source but
-  `profile`, and a reason that is empty, longer than 1000 characters or holds
-  a control character;
+  `profile`, a `contract` on any source but `contract`, and a reason that is
+  empty, longer than 1000 characters or holds a control character;
 - two entries with the same document and pointer;
 - an entry whose document the run does not read, whose pointer reaches
   nothing in it, or whose pointer reaches no number the register counts (a
@@ -153,7 +162,7 @@ The record lists the numbers by document, documents in NFC order of their ids,
 and within a document in key order (Unicode code points, mapping by mapping;
 lists by index), `spec` first and then the namespace.
 
-## 3. Citing a profile statistic
+## 3. Citing a profile statistic or the contract
 
 A `profile` entry's `statistic` names where in the pinned profile its numbers
 come from:
@@ -182,6 +191,22 @@ what is wrong, and never quotes a value. Because a profile records what a
 disclosure rule withheld, a number cannot claim a statistic the profile itself
 says it does not publish.
 
+A `contract` entry's `contract` names where in a FLUID contract its numbers
+come from, such as the levels an `enum(...)` type spells out:
+
+| Key | Holds |
+|---|---|
+| `productRef` | The contract's `id`, as an emit of the Simulation names it. |
+| `pointer` | An RFC 6901 JSON Pointer into that contract. |
+
+The contract is a document of the bundle, so the citation is read wherever the
+register is: `validate` and every other command refuse, with `FLX-3105`, a
+`productRef` that no emit of the run names and a pointer that reaches nothing
+in that contract, before anything is written. As with a profile citation, no
+number is compared with the value the pointer reaches. The contract is one of
+the bundle's files, so the run's `inputDigest` covers the place a citation
+names.
+
 The plan reads where a citation points. It compares no number with the value
 there, and no value of the profile is written into the plan, the record, the
 reports or the pack. The profile stays outside the run directory, as it does
@@ -198,12 +223,12 @@ handed the profile, write the same bytes.
 | Key | Holds |
 |---|---|
 | `_producer` | A URI naming the tool that wrote the record. |
-| `_schemaURL` | The schema's `$id`. The format version is part of it. |
+| `_schemaURL` | The schema's `$id`. The format version is part of it: format 1-1-0 when an entry names the contract, and format 1-0-0 otherwise, so a register with no contract entry is recorded as it was before. |
 | `simulationId` | The Simulation. |
 | `profile` | `{"digest": ...}`, the pinned profile's digest, or `null`. |
 | `declared` | How many numbers the register counts. |
-| `counts` | `profile`, `assumption` and `default`: how many numbers rest on each. They add up to `declared`. |
-| `entries` | The entries as declared, each with its `index` in the list, its `document`, `pointer` and `source`, and its `statistic` or `reason`. |
+| `counts` | `profile`, `assumption` and `default`, and `contract` in format 1-1-0: how many numbers rest on each. They add up to `declared`. |
+| `entries` | The entries as declared, each with its `index` in the list, its `document`, `pointer` and `source`, and its `statistic`, `contract` or `reason`. |
 | `parameters` | Every counted number: `document`, `kind`, `pointer`, `value` (the number as declared, in the canonical decimal spelling of KERNEL-SPEC section 2.1: no exponent, the declared scale kept, so `1e4` is `10000` and `.50` is `0.50`), `source` and `entry`, the index of the entry that decided it, or `null` for a default no entry names. |
 
 A profile statistic is cited by a pointer and a definition, beside the pinned
@@ -239,13 +264,19 @@ the run as `column-provenance.json` is by `columnProvenanceDigest`.
 parameters: 35 declared -- 3 from the pinned profile, 2 assumed, 30 default
 ```
 
+A register with a contract entry gives the contract's share after the
+profile's: `parameters: 35 declared -- 3 from the pinned profile, 1 from the
+contract, 2 assumed, 29 default`.
+
 Their `--json` envelopes carry the same numbers: `parameter_register` in
 `plan`'s artifacts and `parameterRegister` in `verify`'s and `ship`'s, each
-`{"declared": n, "counts": {...}}`. `validate` reports the counts under each
-Simulation as `parameters`.
+`{"declared": n, "counts": {...}}`, the counts naming the sources of the
+register's format. `validate` reports the counts under each Simulation as
+`parameters`.
 
-`EVIDENCE.md`'s "What Was Not Proven" section gains one paragraph: the shares,
-each a count and a percentage, how many defaults an entry states and how many
+`EVIDENCE.md`'s "What Was Not Proven" section gains one paragraph: the shares
+(the contract's among them when the register has a contract entry), each a
+count and a percentage, how many defaults an entry states and how many
 no entry names, and what the register does not show. A percentage is exact when
 it is whole, and otherwise rounded to one decimal place, half to even; a share
 that rounds to 0 or to 100 is written "below 0.1 %" or "above 99.9 %", so a
@@ -261,10 +292,16 @@ no number the register counts`.
 ## 7. Compatibility and later additions
 
 The format grows by minor versions, which only add: an optional key, a value a
-list may hold, a source. A source added later, such as a fitted-parameters
-document (fitting), is a new value of `source` with its own citation key, named
-in a new minor version's schema URL, so a reader that predates it refuses the
-record rather than reads it as something else. Moving the block from the
+list may hold, a source. A source is a new value of `source` with its own
+citation key, named in a new minor version's schema URL, so a reader that
+predates it refuses the record rather than reads it as something else.
+
+- **Format 1-1-0** adds `contract`, cited by `contract` (section 3). A record
+  names 1-1-0 only when an entry names the contract, so every register that
+  names none keeps its 1-0-0 record, bytes and digest. A reader of 1-1-0 reads
+  1-0-0 records too.
+- A source added later, such as a fitted-parameters document (fitting), follows
+  the same rule. Moving the block from the
 extension namespace into the FLUX specification is a change of where it is
 declared, not of what it means.
 

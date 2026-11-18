@@ -15,19 +15,26 @@ lives, with [`fluid profile`](https://github.com/Agenticstiger/forge_docs/blob/m
 from forge-cli's `profile` extra, so only aggregates leave and the engine never reads a
 record of the real data.
 
-**A profile from `fluid profile` cannot be scored yet.** Today it holds the row count and
-the column metrics only, with no statistics. The fidelity check and the scorecard compare
-the statistics that the bundle's declared properties read, such as a mean, so against such
-a profile every property is refused: `verify --profile` fails the check with
+**What a profile from `fluid profile` can score.** The fidelity check and the scorecard
+compare the statistics that the bundle's declared properties read. From data-product-forge
+0.31.0, `fluid profile` writes one: an ungrouped `mean/1` for each number column, unless
+the output checks withhold it. A `mean` property over such a column is scored when the
+fidelity block's `encoding.fractionalBits` equals the profile's (16, unless
+`fluid profile --fractional-bits` set another), and `ship --profile` packs a run that
+passes. A property that reads another statistic, such as a support or a mean over a date
+column, is refused: `verify --profile` fails the check with
 [FLX-5037](../reference/errors/FLX-5037.md), and `ship --profile` withholds the emit with
-[FLX-8001](../reference/errors/FLX-8001.md). That holds until the profiler writes
-statistics. The example on this page writes its profile by hand, with one statistic, to
-show the check.
+[FLX-8001](../reference/errors/FLX-8001.md). A mean that the output checks withheld is
+censored: it is left out of the score, and when every declared property is censored,
+nothing is scored and `ship --profile` withholds the emit too. The example on this page
+writes its profile by hand, with one `mean/1` of the kind `fluid profile` writes, to show
+the check.
 
-The engine scores a run against a profile. It does not generate rows from one yet: the
-numbers that shape the rows, such as a column's range, are the Simulation's own, written
-from the profile by hand or by a script. The profile is what the run is then checked
-against.
+The engine scores a run against a profile. It does not draw rows from one: the numbers
+that shape the rows, such as a column's range, are the Simulation's own. `fluxsim init
+--contract --profile` writes them from a profile ([Write a bundle from a
+profile](./write-a-bundle-from-a-profile.md)), and this page writes them by hand. The
+profile is what the run is then checked against.
 
 ## 1. Start a project
 

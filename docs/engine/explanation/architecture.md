@@ -24,7 +24,7 @@ This page draws the engine one level at a time. It starts with the engine in its
 
 ## What FLUX is, and what it is not
 
-FLUX turns a declared scenario into synthetic tables that follow a FLUID contract. You write a bundle, point it at a contract, and the engine writes the rows, with an evidence pack that says what was checked and what was not. The same bundle and seed give the same rows and digests on every system the project's CI checks; [a few files](./determinism-and-the-seed-tree.md#what-legitimately-differs-between-runs) record the time and differ. The rows come from numbers the bundle declares. The engine can score a run against a profile, but it does not generate rows from one, and nothing is fitted to real records, so the rows carry only the relations someone declared. FLUX gives no privacy guarantee, and claims nothing about privacy, fairness or anything trained on its rows. Related tables are not yet generated together. Keys and foreign keys are read from FLUID 0.7.7 contracts (section 8.1 of [the kernel specification](../spec/KERNEL-SPEC.md)), but a foreign key's values are still drawn on their own, not from the rows of the table they point to.
+FLUX turns a declared scenario into synthetic tables that follow a FLUID contract. You write a bundle, point it at a contract, and the engine writes the rows, with an evidence pack that says what was checked and what was not. The same bundle and seed give the same rows and digests on every system the project's CI checks; [a few files](./determinism-and-the-seed-tree.md#what-legitimately-differs-between-runs) record the time and differ. The rows come from numbers the bundle declares. `fluxsim init --profile` writes those numbers from a profile's published aggregates, and the engine can score a run against a profile, but the engine draws rows only from the declared numbers and fits nothing to real records, so the rows carry only the relations someone declared. FLUX gives no privacy guarantee, and claims nothing about privacy, fairness or anything trained on its rows. The tables a Simulation generates from statistics for one FLUID 0.7.7 contract are generated together: keys come from the contract and never repeat, and every foreign key names a row its parent holds (section 8.2 of [the kernel specification](../spec/KERNEL-SPEC.md)). A child row's other columns are drawn on their own, so they do not follow from the parent row it names.
 
 ## What a run can generate
 
@@ -34,7 +34,7 @@ A run makes more than one flat table:
 - **Columns drawn from declared statistics.** Strings, integers, decimals, booleans, dates and timestamps come from four families of distribution: categorical, bounded normal, rate, and uniform or histogram. A column can be [drawn given a categorical one](../how-to/draw-a-column-given-another.md), so the link between the two survives.
 - **A world that moves through time.** A population of personas with traits sends signals, detectors and journeys move customers between states, campaigns reach them and experiments assign variants. Those events become the rows of a scenario emit.
 - **Nested values.** A column the contract types as `struct`, `array`, `map` or `json` is accepted, and a value that fills it in a scenario emit is written as canonical JSON. The statistics generator does not draw nested values: in an emit it generates, such a column is refused (`FLX-3401`).
-- **Keys from the contract.** A one-column text key is generated as an identifier. Composite keys and foreign-key values are not yet generated together.
+- **Related tables.** The keys a FLUID 0.7.7 contract declares are laid out from the row index, so none repeats, composite keys included. A foreign key takes its parent's key at a parent row: the one nearest the value its own declaration draws, a uniform pick, or, for one to one, a permutation that reaches each parent once. Nothing is held in memory, so `--jobs` gives the same bytes.
 
 ## The big picture
 
@@ -46,7 +46,7 @@ flowchart TB
   end
   contract["FLUID contract"]
   profile["Profile"]
-  bundle["FLUX bundle<br/>written from the profile<br/>by hand or a script"]
+  bundle["FLUX bundle<br/>written from the profile<br/>by fluxsim init"]
   subgraph engine ["Where FLUX runs"]
     fluxsim["fluxsim"]
     tables[("Synthetic tables")]
@@ -61,11 +61,11 @@ flowchart TB
   fluxsim --> pack --> consumers
 ```
 
-*Records stay where they live. Rows come from the contract and the bundle, and the profile only scores the run. Today `fluid profile` writes column metrics and a row count but no statistics, while the scorecard needs the statistics the bundle's checks declare, so until the profiler writes them such a run is refused (`FLX-5037`).*
+*Records stay where they live. Rows come from the contract and the bundle, and the profile only scores the run. `fluid profile` writes column metrics, a row count and, where its output checks allow, an ungrouped mean of each number column. A check on such a mean is scored; a check that reads any other statistic is refused (`FLX-5037`).*
 
 The data owner keeps the records. `fluid profile`, a command in the `profile` extra of [forge-cli](https://github.com/Agenticstiger/forge-cli), reads one table of a contract where its records live and writes a profile. Before a number leaves, it applies disclosure rules whose defaults come from ACRO, an open-source tool that helps people check statistical outputs before release: a count under 10 is withheld, and counts are rounded to a multiple of 5. These are output-checking conventions, not a privacy guarantee ([ADR 0003](../adr/0003-sdv-bsl-and-aggregate-only-rule.md)).
 
-Three documents cross over: the contract, the profile and the bundle. The engine does not generate rows from a profile. Today the data owner, or a script, writes the Simulation's numbers from the profile's statistics. The engine draws the rows from those numbers and the contract, and uses the profile only to check and score the run. A Simulation that uses a profile pins it by its digest, and it can pin the contract the same way (it must, when the contract declares keys). `fluxsim` refuses a pinned document that has changed. Out come the synthetic tables, which consumers query as they would the real ones, and an evidence pack that anyone can check offline.
+Three documents cross over: the contract, the profile and the bundle. The engine does not draw rows from a profile. `fluxsim init --contract --profile` writes the Simulation's numbers from the profile's published aggregates, and its parameter register says what each number rests on: the profile, the contract, or an assumption with its reason. The numbers can also be written by hand. The engine draws the rows from those numbers and the contract, and uses the profile only to check and score the run. A Simulation that uses a profile pins it by its digest, and it can pin the contract the same way (it must, when the contract declares keys). `fluxsim` refuses a pinned document that has changed. Out come the synthetic tables, which consumers query as they would the real ones, and an evidence pack that anyone can check offline.
 
 One path does not keep to this yet. A *fidelity check* compares statistics of the rows with the same statistics of real data, and a failing check stops the rows from shipping. It usually reads those statistics from a profile, but `--committed-slice`, on `run`, `verify` and `ship`, hands it a file of real records instead, and the engine reads that file. ADR 0003 names this as the one exception to its rule, and the reading is to move into the profiler.
 
@@ -81,7 +81,7 @@ C4 calls a separately installed piece a *container*. FLUX has five.
 | `fluid profile`, in forge-cli | Reading records where they live, the disclosure rules, and writing the profile. | The data owner, next to the data. |
 | Sinks | Where the rows land besides the run's own NDJSON files (one JSON value per line): Parquet or Arrow IPC files (the `arrow` extra), a database through ADBC, Arrow Database Connectivity (the `adbc` extra), or a plug-in. | Whoever generates, by choosing an extra or a plug-in. |
 
-flux-stats is on PyPI from 0.6.0, released with the engine at the same version. `fluid profile` is on forge-cli's main branch, and today writes column metrics and a row count but no statistics.
+flux-stats is on PyPI from 0.6.0, released with the engine at the same version. `fluid profile` is in data-product-forge, forge-cli's package on PyPI, from 0.31.0, and its `profile` extra installs flux-stats from PyPI. It writes column metrics, a row count and an ungrouped `mean/1` for each number column, unless the output checks withhold it.
 
 ```mermaid
 flowchart LR
@@ -168,7 +168,7 @@ A module could dodge an import rule by importing a function instead of its modul
 
 ```mermaid
 flowchart TB
-  author["Write the Simulation from the profile,<br/>by hand or by a script"]
+  author["Write the Simulation from the profile:<br/>fluxsim init --profile"]
   validate["validate"]
   plan["plan"]
   apply["apply"]
@@ -186,7 +186,7 @@ flowchart TB
 
 *A labelled arrow names the digests the next step checks before it does anything.*
 
-A run starts from a bundle. When its numbers come from real data, the data owner runs `fluid profile` (forge-cli's `profile` extra) where the data lives; it writes the profile and prints its digest. The Simulation's numbers are then written from that profile, by hand or by a script, and the Simulation pins the digest. `plan` needs the pinned profile handed to it with `--profile`, `ship` needs it too, and `verify` needs it for the scorecard; a profile and a pin that do not pair are refused (`FLX-3109`). Today `fluid profile` writes column metrics and a row count but no statistics, while every check the Simulation declares, and so its scorecard, reads statistics from the profile. Until the profiler writes them, `verify --profile` refuses such a check (`FLX-5037`) and `ship --profile` withholds the run (`FLX-8001`). A bundle can also declare its numbers with no profile at all, as the starter project that `fluxsim init` writes does.
+A run starts from a bundle. When its numbers come from real data, the data owner runs `fluid profile` (forge-cli's `profile` extra) where the data lives; it writes the profile and prints its digest. `fluxsim init --contract --profile` then writes a bundle whose numbers come from that profile, and whose Simulation pins its digest ([Write a bundle from a profile](../how-to/write-a-bundle-from-a-profile.md)); the numbers can also be written by hand. `plan` needs the pinned profile handed to it with `--profile`, `ship` needs it too, and `verify` needs it for the scorecard; a profile and a pin that do not pair are refused (`FLX-3109`). Every check the Simulation declares, and so its scorecard, reads statistics from the profile, and `fluid profile` writes one kind: an ungrouped `mean/1` for each number column, unless the output checks withhold it. A `mean` check over such a column is scored, and a run that passes ships. `verify --profile` refuses a check that reads another statistic, such as a support or a mean over a date column (`FLX-5037`), and `ship --profile` then withholds the run (`FLX-8001`). A mean the profile withheld is censored and left out of the score; when every declared check is censored, nothing is scored and `ship --profile` withholds the run as well. A bundle can also declare its numbers with no profile at all, as the starter project that `fluxsim init` writes does.
 
 `fluxsim run` is `plan` then `apply`, followed by the steps you ask for (`--verify`, `--sink`, `--ship`) in this order. Delivery to a sink is not a command of its own: it is what `run --sink` does after `verify` and before `ship`, so a run that failed its checks lands nowhere.
 
@@ -285,7 +285,7 @@ Where a pattern is borrowed, a docstring or a decision record names the source. 
 - **Problem.** If a Simulation restated its contract's columns or keys, the two copies could disagree, and nobody would know which one the rows follow.
 - **Solution.** A Simulation names its contract and never restates it. Columns, types and keys come from the contract. From FLUID 0.7.7 its relationships and entities give the primary and foreign keys, and a Simulation that restates a key is refused (`FLX-3111`). The rules about valid data are to come from the contract too, written in FLUID SQL/1, which `flux-expr/2` implements.
 - **Where.** `flux_engine/seam/resolve.py`, `flux_engine/seam/contract.py`, `flux_engine/seam/keys.py`, `flux_engine/expr2/`.
-- **Trade-off.** FLUX can use only what FLUID can declare. A contract that declares keys cannot yet carry a YAML float or text that is not in NFC, and the keys are read but related tables are not yet generated together.
+- **Trade-off.** FLUX can use only what FLUID can declare. A contract that declares keys cannot yet carry a YAML float or text that is not in NFC. Related tables are generated together only when every table a relationship names is generated from statistics in the same Simulation.
 - **Read more.** [The FLUID seam](./the-seam.md), [ADR 0008](../adr/0008-flux-expr-2-derived-columns-and-rules.md).
 
 ### A separate statistics distribution

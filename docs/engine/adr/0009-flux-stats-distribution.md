@@ -3,7 +3,8 @@
 ## Status
 
 Accepted 2026-11-16. **Amended 2026-11-17:** the record reader's pure half
-moves into flux-stats too, as `flux_stats.reading` (see the amendment below).
+moves into flux-stats too, as `flux_stats.reading`, and the fidelity block's
+grammar follows as `flux_stats.fidelity` (see the amendments below).
 
 ## Context
 
@@ -176,3 +177,53 @@ Consequences of the amendment:
   changes: an offset's minutes are added to its hours, so `+00:60` reads as
   `+01:00` where RFC 3339 caps the minutes at 59. Tightening it is a change of
   behaviour of its own.
+
+## Amendment of 2026-11-17: the fidelity block
+
+The founder decided on 2026-11-17 that the fidelity block's grammar moves too,
+in a pull request of its own after the reader's.
+
+1. **What moves.** `flux_stats.fidelity` holds how a Simulation's fidelity
+   block is read: the expose it is checked against (`ExposeSchema`,
+   `DeclaredExpose`, `expose_from_contract`), the closed sets (`ColumnKind`,
+   `PropertyKind`, `ToleranceKind`, `FailureAction`), the declarations
+   (`Encoding`, `RecordsRange`, `ColumnDeclaration`, `Tolerance`,
+   `PropertyDeclaration`, `Budget`, `FidelityBlock`), the one key set of a
+   column (`COLUMN_KEYS`), `read_support_levels`, `parse_duration_ms`,
+   `require_number_length` and `parse_fidelity_block`. With it go
+   `declared_enum_values`, which reads the levels of an `enum(...)` type and
+   which `support: declared` calls, and the codes the grammar raises, `FLX-3001`,
+   `FLX-5030`, `FLX-5032`, `FLX-5033` and `FLX-5034`, with their titles and
+   explanations unchanged. The module takes `nfc` and `parse_rfc3339_ms` from
+   `flux_stats.reading` and `FluxError` from `flux_stats.errors`, which are the
+   objects the engine already re-exported.
+2. **What stays.** The engine's names for these are imports of the same
+   objects: every name of `flux_engine.concordance.predicate`, the four codes
+   in `flux_engine.concordance.errors`, and `FLX-3001` and
+   `declared_enum_values` in `flux_engine.seam.contract`. No engine module or
+   test changes its imports. Which columns a property reads and which
+   definition measures them stays in the engine (`compute_property_statistic`,
+   which also keeps the `records.min` floors and the property ids).
+3. **The per-group measurement moves with it.** `measure_group` forms one group
+   of one property from the parsed `PropertyDeclaration`, the declared columns
+   and the grid: support with its `maxCardinality` refusal, a level histogram
+   with its refusal of a value outside the support, a correlation from its
+   pairs, and a mean, a histogram on edges put on the grid, or a quantile from
+   the encoded values. It was the boundary's `_group_statistic`, which read
+   nothing of its compiled property but the declaration. The boundary calls it,
+   with the same codes and messages.
+4. **No change of behaviour.** The code is moved, not rewritten, and
+   `fluxsim explain` prints the same text for each code.
+
+Consequences of the amendment:
+
+- A profiler such as forge-cli's `fluid profile --bundle` reads a Simulation's
+  fidelity block with `flux_stats.fidelity` and forms each group of a property
+  with `measure_group`, so it implements no parser and no group reader of its
+  own.
+- The weekly mutation run gains `flux_stats.fidelity`, mutated with
+  flux-stats's own tests. Its floor is the 75% target until a first run
+  records its kill rate, and it rises when that rate is known.
+- `import flux_stats` now loads the module, so every code it registers is in
+  the catalog without the engine; the closure a fresh interpreter loads grows by
+  one module and stays standard library only.

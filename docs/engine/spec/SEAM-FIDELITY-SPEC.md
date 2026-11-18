@@ -18,6 +18,13 @@ the type default:
 Every draw uses the §4 kernel samplers on the path `("sim", sim_id, "gen", exposeId, "row", rowIndex, column)`.
 A column declared `given` another (§2) keeps that path: what it reads from the other column is the level that
 column drew in the same row, which picks the weights it draws with.
+
+**Keys and foreign keys.** The columns a FLUID 0.7.7 contract makes keys or foreign keys are produced as
+KERNEL-SPEC section 8.2 says, so the exposes of one contract are generated together: a key is laid out from the
+row index and never repeats, and a foreign key takes its parent's key at a parent row. A foreign key that declares
+a draw draws on its own path as above and holds the parent's nearest key; one that does not picks its parent on the
+stream of its relationship's first column. Such a column needs no declaration of its own. A one-column key may
+declare only a range, or bins with `binWeights`; a column of a several-column key, a range, bins or levels.
 Rows are produced in `rowIndex` order; the number of rows is declared (`extensions["com.agentics.flux/1"].emits[<exposeId>].rows`,
 §2; default = population size when the emit is scenario-driven).
 
@@ -48,9 +55,10 @@ The scenario path (`seam/mapping.py`, `stages/pipeline.py`):
 * a declared `rows` **caps** a scenario-driven stream; a run with fewer moments emits what it has and never pads.
 
 **Coverage.** Whichever way an emit's rows are produced, every column has one producer, and the plan says which:
-`declared` (its entry under `fidelity.columns` decides the draw), `copied` (a runtime attribute, by one of the
-three steps above), `derived` (an identifier, from `(H, ordinal)`), `profile` (reserved; nothing produces it yet)
-or `default`. A column no declaration reaches takes its type's default and is a `default`: an optional column the
+`declared` (its entry under `fidelity.columns` decides the draw, or, for a foreign key, decides the value it then
+moves to the parent's nearest key), `copied` (a runtime attribute, by one of the three steps above), `derived` (an
+identifier, from `(H, ordinal)`; a key the contract declares, laid out from the row index; a foreign key whose
+parent row its relationship picks), `profile` (reserved; nothing produces it yet) or `default`. A column no declaration reaches takes its type's default and is a `default`: an optional column the
 mapping resolves to nothing (`null`), or a DATE or TIMESTAMP column that declares no draw of its own (§1's table:
 uniform within `timeBounds`). A `default` is named by `plan`, recorded by `apply` in `column-provenance.json` and
 listed under "What Was Not Proven" in `EVIDENCE.md`. Under `--strict-coverage` it is `FLX-3304`, naming every such
