@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **`verify` reports a broken gzip stream, and stops reading headers at its
+  caps.** An archive whose gzip stream was cut short raised gzip's `EOFError`
+  out of `verify`, and one whose stream was corrupt raised `zlib.error`,
+  though `verify` reports every problem and never raises. Both are now
+  reported as `not a readable gzip archive`, as a broken header already was.
+  `verify` also listed every header of an archive before it checked the member
+  cap, so an archive of any number of members was read through in full first.
+  It now counts the member and byte caps as it reads each header, and refuses
+  the archive at the first header past one. The refusal says `at least`: the
+  rest of the archive is not read. An archive within the caps verifies as
+  before.
 - **The supply-chain check digests each locked document once.** It took a
   versioned ref's target's content digest once per ref, so a bundle of many
   short refs to one large document paid for that document's whole size once per

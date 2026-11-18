@@ -52,6 +52,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import zlib
 from pathlib import Path
 
 from .validate import Bundle, load_yaml_docs
@@ -362,16 +363,20 @@ def _extract_safely(tar: tarfile.TarFile, root: Path, problems: list[str]) -> Pa
     can otherwise claim gigabytes), only regular files are extracted, and every
     member must live under one shared top-level directory — a member outside it
     would be extracted but never digested, which is exactly how undeclared
-    content sneaks past a manifest.
+    content sneaks past a manifest. The caps are counted as each header is read,
+    so an archive past one is refused without reading the headers after it.
     """
-    members = tar.getmembers()
-    if len(members) > MAX_MEMBERS:
-        problems.append(f"archive declares {len(members)} members, above the {MAX_MEMBERS} cap")
-        return None
-    declared = sum(m.size for m in members if m.isfile())
-    if declared > MAX_BUNDLE_BYTES:
-        problems.append(f"archive declares {declared} uncompressed bytes, above the {MAX_BUNDLE_BYTES} cap")
-        return None
+    members: list[tarfile.TarInfo] = []
+    declared = 0
+    for m in tar:
+        members.append(m)
+        if len(members) > MAX_MEMBERS:
+            problems.append(f"archive declares at least {len(members)} members, above the {MAX_MEMBERS} cap")
+            return None
+        declared += m.size if m.isfile() else 0
+        if declared > MAX_BUNDLE_BYTES:
+            problems.append(f"archive declares at least {declared} uncompressed bytes, above the {MAX_BUNDLE_BYTES} cap")
+            return None
 
     tops = set()
     for m in members:
@@ -460,6 +465,10 @@ def verify(archive: Path, validator=None) -> int:
     except _Rejected:
         pass
     except tarfile.ReadError as exc:
+        problems.append(f"not a readable gzip archive: {exc}")
+    except (zlib.error, EOFError) as exc:
+        # gzip raises these from a corrupt or cut stream while a member is read,
+        # where tarfile does not turn them into a ReadError.
         problems.append(f"not a readable gzip archive: {exc}")
     except UnicodeDecodeError:
         problems.append(f"{MANIFEST_NAME} is not UTF-8 text")
