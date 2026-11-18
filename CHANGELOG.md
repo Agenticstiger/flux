@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **The validator reads every file as UTF-8, whatever the host's locale.**
+  `flux_spec.validate.load_yaml_docs` opened a bundle's files in the locale's
+  encoding, while the FLUX engine reads them as UTF-8 and takes its digests over
+  that text. On a host whose locale is not UTF-8, the validator could check
+  another document than the one the engine runs: a byte read as part of a value
+  under UTF-8 could end a comment under another encoding. A file that is not
+  UTF-8 is now reported as unreadable YAML, instead of raising
+  `UnicodeDecodeError`. The JSON files `flux_spec` reads (schemas, a pack's
+  manifest, the enforcement vectors) are read as UTF-8 too. On a UTF-8 host,
+  every bundle that validated before validates the same.
+
 ## 0.5.3 - 2026-11-18
 
 Specification 0.5.3

@@ -1101,6 +1101,59 @@ def check_verify_refuses_unsafe_members(flux_validator) -> list[str]:
     return failures
 
 
+def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
+    """A bundle's files are read as UTF-8 on every host, and a file that is not UTF-8 is refused.
+
+    The FLUX engine reads a bundle as UTF-8 and takes its digests over that text,
+    so the validator must check the same text whatever the host's locale.
+    """
+    from validate import load_yaml_docs
+
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        # The read names its encoding, so no locale changes the text it checks.
+        path = Path(tmp) / "world.flux.yml"
+        path.write_text("kind: World\nname: caf\u00e9\n", encoding="utf-8")
+        encodings: list = []
+        original = Path.open
+
+        def recording_open(self, *args, **kwargs):
+            encodings.append(kwargs.get("encoding"))
+            return original(self, *args, **kwargs)
+
+        Path.open = recording_open
+        try:
+            docs, error = load_yaml_docs(path)
+        finally:
+            Path.open = original
+        if encodings != ["utf-8"]:
+            failures.append(f"[utf-8] load_yaml_docs opened a file with encoding {encodings!r}")
+        if error or docs != [{"kind": "World", "name": "caf\u00e9"}]:
+            failures.append(f"[utf-8] a UTF-8 file read back as {docs!r} ({error})")
+
+        # A file that is not UTF-8 is unreadable YAML, not an exception, and none of
+        # its documents is returned, the one before the bad byte included.
+        latin = Path(tmp) / "latin.flux.yml"
+        latin.write_bytes(b"kind: World\n---\nname: caf\xe9\n")
+        try:
+            docs, error = load_yaml_docs(latin)
+        except UnicodeDecodeError as exc:
+            failures.append(f"[utf-8] a file that is not UTF-8 raised {exc!r}")
+        else:
+            if docs or not error or "not UTF-8" not in error:
+                failures.append(f"[utf-8] a file that is not UTF-8 gave {docs!r} and {error!r}")
+
+        # Through the validator: a bundle that holds such a file does not validate.
+        bundle = Path(tmp) / "bundle"
+        shutil.copytree(EXAMPLES, bundle)
+        world = bundle / "world.flux.yml"
+        world.write_bytes(world.read_bytes() + b"\n# caf\xe9\n")
+        errors = Bundle(bundle, flux_validator).run()
+        if not any("not UTF-8" in error for error in errors):
+            failures.append(f"[utf-8] a bundle holding a file that is not UTF-8 passed: {errors[:3]}")
+    return failures
+
+
 def main() -> int:
     failures = []
 
@@ -1421,6 +1474,7 @@ def main() -> int:
     failures += check_pack_refuses_symlinks(flux_validator)
     failures += check_manifest_write_never_follows_a_link(flux_validator)
     failures += check_verify_refuses_unsafe_members(flux_validator)
+    failures += check_reads_bundles_as_utf8(flux_validator)
 
     # a bundle that does not validate must never be packed
     with tempfile.TemporaryDirectory() as tmp:

@@ -257,7 +257,7 @@ def build_manifest(directory: Path, validator) -> tuple[dict, list[str]]:
     if errors:
         return {}, errors
     files = bundle_files(directory)
-    schema_id = json.loads(SCHEMA_PATH.read_text())["$id"]
+    schema_id = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))["$id"]
     manifest = {
         "manifestVersion": 1,
         "generator": GENERATOR,
@@ -308,7 +308,7 @@ def pack(directory: Path, out_dir: Path, validator) -> int:
         for e in errors[:10]:
             print(f"       {e}")
         return 1
-    Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text())).validate(manifest)
+    Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))).validate(manifest)
 
     try:
         _write_manifest(directory / MANIFEST_NAME, manifest)
@@ -428,8 +428,8 @@ def verify(archive: Path, validator=None) -> int:
             if not manifest_path.exists():
                 problems.append(f"no {MANIFEST_NAME}")
                 raise _Rejected()
-            manifest = json.loads(manifest_path.read_text())
-            Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text())).validate(manifest)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))).validate(manifest)
 
             actual = bundle_files(directory, skip_signatures=False)
             for rel, digest in manifest["files"].items():
@@ -490,7 +490,7 @@ def main(argv=None) -> int:
     v.add_argument("archive", type=Path)
     args = ap.parse_args(argv)
 
-    validator = Draft202012Validator(json.loads(SCHEMA_PATH.read_text()), format_checker=FormatChecker())
+    validator = Draft202012Validator(json.loads(SCHEMA_PATH.read_text(encoding="utf-8")), format_checker=FormatChecker())
     if args.cmd == "pack":
         return pack(args.directory, args.out, validator)
     return verify(args.archive, validator)
