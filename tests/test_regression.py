@@ -1273,6 +1273,88 @@ def check_verify_reports_a_pax_header_tarfile_cannot_parse(flux_validator) -> li
     return failures
 
 
+def check_the_validator_bounds_what_a_document_writes_out(flux_validator) -> list[str]:
+    """PyYAML builds an alias as a shared reference, so a document of a kilobyte
+    stood for billions of values: the schema check walked every one, and its
+    error message spelled them out, ten times longer for each level of ten
+    aliases. A document is now refused before it is built when it writes out
+    more than MAX_WRITTEN_OUT values or holds itself, and no message is longer
+    than MAX_MESSAGE characters."""
+    import time
+    import validate as validate_tool
+
+    # The message, its "... (N characters in all)" and its file; 1,000 before
+    # the cap was named, so the check fails rather than crashes on older code.
+    cap = getattr(validate_tool, "MAX_MESSAGE", 1_000) + 64
+
+    def fan_out(levels: int) -> str:
+        lines = ["  a0: &a0 [lol]"]
+        lines += [f"  a{i}: &a{i} [" + ", ".join([f"*a{i - 1}"] * 10) + "]" for i in range(1, levels)]
+        return "x-anchors:\n" + "\n".join(lines) + "\n"
+
+    def merging(levels: int) -> str:
+        lines = ["  m0: &m0 {k: v}"]
+        lines += [f"  m{i}: &m{i} {{<<: [" + ", ".join([f"*m{i - 1}"] * 10) + f"], k{i}: v}}" for i in range(1, levels)]
+        return "x-merges:\n" + "\n".join(lines) + "\n"
+
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        cases = {
+            "ten levels of ten aliases": (fan_out(10), "writes out more than 1000000 values"),
+            "ten levels of ten merge keys": (merging(10), "writes out more than 1000000 values"),
+            "a document that holds itself": ("x-self: &s [*s]\n", "holds itself through an alias"),
+        }
+        for i, (label, (prefix, expected)) in enumerate(cases.items()):
+            work = Path(tmp) / f"b{i}"
+            shutil.copytree(EXAMPLES, work)
+            world = work / "world.flux.yml"
+            world.write_text(prefix + world.read_text(encoding="utf-8"), encoding="utf-8")
+            started = time.monotonic()
+            try:
+                errors = Bundle(work, flux_validator).run()
+            except Exception as exc:  # noqa: BLE001 (a traceback is the failure)
+                failures.append(f"[validate] CRASHED ({type(exc).__name__}) on {label}")
+                continue
+            took = time.monotonic() - started
+            if not any(expected in error for error in errors) or took > 10:
+                failures.append(f"[validate] {label} was not refused at the read ({took:.1f}s): {errors[:2]}")
+
+        # Within the bound, aliases still read as the values they stand for.
+        reused = Path(tmp) / "reused.flux.yml"
+        reused.write_text("kind: World\nd: &d {a: 1, b: [x, y]}\ne: *d\nf: {<<: *d, c: 2}\n", encoding="utf-8")
+        docs, error = validate_tool.load_yaml_docs(reused)
+        if error or docs != [{"kind": "World", "d": {"a": 1, "b": ["x", "y"]}, "e": {"a": 1, "b": ["x", "y"]},
+                               "f": {"a": 1, "b": ["x", "y"], "c": 2}}]:
+            failures.append(f"[validate] aliases within the bound did not read as before: {error} {docs}")
+
+        # A schema error spells out the value it refuses: five levels of ten
+        # stay within the bound but spelled out a 92 KB message.
+        work = Path(tmp) / "long"
+        shutil.copytree(EXAMPLES, work)
+        world = work / "world.flux.yml"
+        text = world.read_text(encoding="utf-8")
+        world.write_text(fan_out(5) + text.replace("kind: World", "kind: World\nlabels: *a4", 1), encoding="utf-8")
+        errors = Bundle(work, flux_validator).run()
+        longest = max((len(error) for error in errors), default=0)
+        if not errors or longest > cap:
+            failures.append(f"[validate] the longest error message holds {longest} characters, above {cap}")
+
+        # verify meets the same document inside an archive and reports it, bounded.
+        work, out = Path(tmp) / "packed" / "bundle", Path(tmp) / "packed-dist"
+        shutil.copytree(EXAMPLES, work)
+        bomb = fan_out(10).encode("utf-8")
+        attacked = _repack(work, out, lambda entries: [(n, bomb + d if n.endswith("/world.flux.yml") else d)
+                                                      for n, d in entries], flux_validator)
+        try:
+            rc, said = _verify_output(attacked, flux_validator)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"[bundle] CRASHED ({type(exc).__name__}) on an archive holding ten levels of aliases")
+        else:
+            if rc == 0 or "writes out more than 1000000 values" not in said or max(map(len, said.splitlines())) > 2 * cap:
+                failures.append(f"[bundle] verify did not report the aliases briefly: {said[:300]}")
+    return failures
+
+
 def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
     """A bundle's files are read as UTF-8 on every host, and a file that is not UTF-8 is refused.
 
@@ -1713,6 +1795,7 @@ def main() -> int:
     failures += check_verify_stops_at_its_caps_and_reports_a_broken_stream(flux_validator)
     failures += check_verify_never_raises_on_deep_nesting_or_a_nul_path(flux_validator)
     failures += check_verify_reports_a_pax_header_tarfile_cannot_parse(flux_validator)
+    failures += check_the_validator_bounds_what_a_document_writes_out(flux_validator)
     failures += check_supply_chain_digests_each_target_once(flux_validator)
     failures += check_reads_bundles_as_utf8(flux_validator)
 

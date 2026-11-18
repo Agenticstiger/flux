@@ -158,6 +158,81 @@ _StringTimestampLoader.add_constructor(
 )
 
 
+#: The most values one document may write out once its aliases and merge keys
+#: are written out. PyYAML builds an alias as a shared reference, so a document
+#: of a kilobyte can stand for billions of values, which the schema check then
+#: walks and an error message then spells out. The FLUX engine's exact read holds
+#: a document to the same bound; the largest example writes out about 1,100.
+#: SnakeYAML caps a document's aliases (50) and go-yaml the share of its work
+#: that aliases make; counting what is written out refuses only what is costly.
+MAX_WRITTEN_OUT = 1_000_000
+
+#: The most characters of one error message: a schema error spells out the
+#: value it refuses, which can be large even within MAX_WRITTEN_OUT.
+MAX_MESSAGE = 1_000
+
+
+class _Unbounded(Exception):
+    """A composed document that may not be constructed, with why."""
+
+
+def _children(node):
+    if isinstance(node, yaml.SequenceNode):
+        return node.value
+    if isinstance(node, yaml.MappingNode):
+        return [part for pair in node.value for part in pair]
+    return []
+
+
+def _refuse_unbounded(root) -> None:
+    """Raise :class:`_Unbounded` for a composed document that writes out too much.
+
+    A scalar writes out one value; a sequence or a mapping one, plus what its
+    items, or its keys and values, write out. An alias stands for all of its
+    node, and a merge key for all of the mappings it merges, so each is counted
+    wherever it is written. Each node is measured once, with an explicit stack,
+    and a document that holds itself through an alias, which writes out without
+    end, is refused too.
+    """
+    sizes: dict[int, int] = {}
+    on_path: set[int] = set()
+    stack = [(root, False)]
+    while stack:
+        node, measured = stack.pop()
+        key = id(node)
+        if measured:
+            on_path.discard(key)
+            size = 1 + sum(sizes[id(child)] for child in _children(node))
+            if size > MAX_WRITTEN_OUT:
+                raise _Unbounded(
+                    f"a document writes out more than {MAX_WRITTEN_OUT} values once its "
+                    "aliases and merge keys are written out")
+            sizes[key] = size
+        elif key in on_path:
+            raise _Unbounded("a document holds itself through an alias")
+        elif key not in sizes:
+            on_path.add(key)
+            stack.append((node, True))
+            stack.extend((child, False) for child in _children(node) if id(child) not in sizes)
+
+
+def _load_bounded(stream) -> list:
+    """Every document of *stream*, each refused before it is constructed if it is unbounded."""
+    loader = _StringTimestampLoader(stream)
+    try:
+        documents = []
+        while loader.check_node():
+            node = loader.get_node()
+            try:
+                _refuse_unbounded(node)
+            except _Unbounded as exc:
+                raise _Unbounded(f"{exc} (line {node.start_mark.line + 1})") from None
+            documents.append(loader.construct_document(node))
+        return documents
+    finally:
+        loader.dispose()
+
+
 def load_yaml_docs(path: Path):
     """Load YAML documents; returns (docs, error_message_or_None).
 
@@ -171,7 +246,9 @@ def load_yaml_docs(path: Path):
     """
     try:
         with path.open(encoding="utf-8") as fh:
-            docs = list(yaml.load_all(fh, Loader=_StringTimestampLoader))
+            docs = _load_bounded(fh)
+    except _Unbounded as exc:
+        return [], f"unreadable YAML: {exc}"
     except UnicodeDecodeError:
         return [], "unreadable YAML: not UTF-8 text"
     except RecursionError:
@@ -211,6 +288,8 @@ class Bundle:
         self._fluid_validators: dict[str, Draft202012Validator | None] = {}
 
     def err(self, source, message):
+        if len(message) > MAX_MESSAGE:
+            message = f"{message[:MAX_MESSAGE]}... ({len(message)} characters in all)"
         self.errors.append(f"{source}: {message}")
 
     # ---- loading ---------------------------------------------------------
