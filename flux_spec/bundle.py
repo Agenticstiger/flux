@@ -461,6 +461,8 @@ def verify(archive: Path, validator=None) -> int:
         pass
     except tarfile.ReadError as exc:
         problems.append(f"not a readable gzip archive: {exc}")
+    except UnicodeDecodeError:
+        problems.append(f"{MANIFEST_NAME} is not UTF-8 text")
     except json.JSONDecodeError as exc:
         problems.append(f"{MANIFEST_NAME} is not valid JSON: {exc}")
     except ValidationError as exc:

@@ -34,7 +34,7 @@ from validate import Bundle, canonical_digest  # noqa: E402
 import enforce  # noqa: E402
 import bundle as bundle_tool  # noqa: E402
 
-SCHEMA = json.loads((REPO / "schema" / "flux-schema-latest.json").read_text())
+SCHEMA = json.loads((REPO / "schema" / "flux-schema-latest.json").read_text(encoding="utf-8"))
 VALIDATOR = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
 WINDOW = SCHEMA["properties"]["fluxVersion"]["enum"]   # the compatibility window (VERSIONING.md)
 SCHEMA_ID_BASE = SCHEMA["$id"].rsplit("/", 1)[0]
@@ -342,9 +342,9 @@ CASES_REJECT = {
 
 def mutate_yaml(bundle: Path, filename: str, fn):
     path = bundle / filename
-    doc = yaml.safe_load(path.read_text())
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     fn(doc)
-    path.write_text(yaml.safe_dump(doc, sort_keys=False))
+    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
 
 
 def _dangling_ref(d):
@@ -469,28 +469,28 @@ def _setup_missing_lock(bundle: Path):
 
 
 def _setup_malformed_yaml(bundle: Path):
-    (bundle / "broken.flux.yml").write_text("kind: [unclosed\n  - {")
+    (bundle / "broken.flux.yml").write_text("kind: [unclosed\n  - {", encoding="utf-8")
 
 
 def _setup_non_mapping_doc(bundle: Path):
-    (bundle / "scalar.flux.yml").write_text("just a string, not a document\n")
+    (bundle / "scalar.flux.yml").write_text("just a string, not a document\n", encoding="utf-8")
 
 
 def _setup_dup_fluid_ids(bundle: Path):
-    src = (bundle / "payment-recovery.fluid.yml").read_text()
-    (bundle / "copy.fluid.yml").write_text(src)
+    src = (bundle / "payment-recovery.fluid.yml").read_text(encoding="utf-8")
+    (bundle / "copy.fluid.yml").write_text(src, encoding="utf-8")
 
 
 def _setup_flux_fluid_collision(bundle: Path):
-    doc = yaml.safe_load((bundle / "payment-recovery.fluid.yml").read_text())
+    doc = yaml.safe_load((bundle / "payment-recovery.fluid.yml").read_text(encoding="utf-8"))
     doc["id"] = "q3-retention-world"  # collides with the World flux doc
-    (bundle / "collide.fluid.yml").write_text(yaml.safe_dump(doc, sort_keys=False))
+    (bundle / "collide.fluid.yml").write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
 
 
 def _setup_orphan_invalid_fluid(bundle: Path):
     (bundle / "orphan.fluid.yml").write_text(
         'fluidVersion: "0.7.5"\nkind: DataProduct\nid: orphan.broken\nname: Orphan\n'
-    )
+    , encoding="utf-8")
 
 
 def _setup_schema_invalid_no_crash(bundle: Path):
@@ -508,7 +508,7 @@ def _setup_schema_invalid_no_crash(bundle: Path):
                 '  emits: [{productRef: telco.gold.payment_recovery_moment, exposeId: payment_recovery_moment, fluidVersion: "0.7.5"}]',
             ]
         )
-    )
+    , encoding="utf-8")
 
 
 VALIDATOR_ROBUSTNESS = {
@@ -576,11 +576,11 @@ def _towers_on(bundle: Path, fluid_version: str, emit_pin: str, relationship: di
     re-pinned digest."""
     shutil.copytree(TOWERS_EXAMPLE, bundle)
     contract_path = bundle / TOWERS_CONTRACT
-    contract = yaml.safe_load(contract_path.read_text())
+    contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
     _with_relationship(contract, fluid_version, copy.deepcopy(relationship))
     if change is not None:
         change(contract)
-    contract_path.write_text(yaml.safe_dump(contract, sort_keys=False))
+    contract_path.write_text(yaml.safe_dump(contract, sort_keys=False), encoding="utf-8")
 
     def pin(sim):
         sim["fluxVersion"] = "0.5.2"
@@ -697,7 +697,7 @@ def check_fluid_previews() -> list[str]:
     failures = _check_preview_pins(pins) + _check_seam_window(pins) + _check_bad_pins(sync_tool, pins[0] if pins else {})
     failures += _check_sync_refusals(sync_tool)
     # released schema files are immutable: 0.5.1 still refuses the 0.7.7 pin
-    schema_051 = Draft202012Validator(json.loads((REPO / "schema" / "flux-schema-0.5.1.json").read_text()))
+    schema_051 = Draft202012Validator(json.loads((REPO / "schema" / "flux-schema-0.5.1.json").read_text(encoding="utf-8")))
     if not list(schema_051.iter_errors({**sim_exact_077, "fluxVersion": "0.5.1"})):
         failures.append("[schema] an exact FLUID 0.7.7 pin should fail the immutable 0.5.1 schema")
     return failures
@@ -816,7 +816,7 @@ def check_preview_repin(flux_validator) -> list[str]:
             if not any(f"fails FLUID 0.7.7 (preview): {where}" in e for e in errors):
                 failures.append(f"[preview] the 0.7.7 preview did not refuse {label} at {where}: {errors[:3]}")
     # released schema files are immutable: 0.5.2 refuses a 0.5.3 document
-    schema_052 = Draft202012Validator(json.loads((REPO / "schema" / "flux-schema-0.5.2.json").read_text()))
+    schema_052 = Draft202012Validator(json.loads((REPO / "schema" / "flux-schema-0.5.2.json").read_text(encoding="utf-8")))
     if not list(schema_052.iter_errors(sim_exact_077_053)):
         failures.append("[schema] a 0.5.3 document should fail the immutable 0.5.2 schema (fluxVersion window)")
     return failures
@@ -832,11 +832,11 @@ def check_pack_from_looser_preview(flux_validator) -> list[str]:
         tmp = Path(tmp)
         # a stand-in for the old pin: this preview with the column type left
         # open, so the pack step accepts enum('a' 'b') as 0.5.2 did
-        looser = json.loads((PREVIEW_DIR / "fluid-schema-0.7.7.json").read_text())
+        looser = json.loads((PREVIEW_DIR / "fluid-schema-0.7.7.json").read_text(encoding="utf-8"))
         looser["$defs"]["column"]["properties"]["type"] = {"type": "string"}
         looser_dir = tmp / "looser-preview"
         looser_dir.mkdir()
-        (looser_dir / "fluid-schema-0.7.7.json").write_text(json.dumps(looser))
+        (looser_dir / "fluid-schema-0.7.7.json").write_text(json.dumps(looser), encoding="utf-8")
         source = tmp / "source"
         _towers_on(source, "0.7.7", "0.7.7", change=_column("type", "enum('a' 'b')"))
         real = validate_impl.FLUID_PREVIEW_DIR
@@ -900,7 +900,7 @@ def _pack_as(version, source, work, out):
     """Pack *source* the way flux-spec *version* did: that release's schema
     validates it and its $id is the schemaId (pack is otherwise unchanged)."""
     schema_path = REPO / "schema" / f"flux-schema-{version}.json"
-    then = Draft202012Validator(json.loads(schema_path.read_text()), format_checker=FormatChecker())
+    then = Draft202012Validator(json.loads(schema_path.read_text(encoding="utf-8")), format_checker=FormatChecker())
     shutil.copytree(source, work)
     current = bundle_tool.SCHEMA_PATH
     bundle_tool.SCHEMA_PATH = schema_path
@@ -928,7 +928,7 @@ def check_packs_across_releases(flux_validator) -> list[str]:
         with tempfile.TemporaryDirectory() as tmp:
             work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
             rc, archive = _pack_as(version, EXAMPLES, work, out)
-            named = json.loads((work / bundle_tool.MANIFEST_NAME).read_text())["schemaId"] if rc == 0 else None
+            named = json.loads((work / bundle_tool.MANIFEST_NAME).read_text(encoding="utf-8"))["schemaId"] if rc == 0 else None
             if named != f"{SCHEMA_ID_BASE}/flux-schema-{version}.json":
                 failures.append(f"[bundle] could not pack the example the way flux-spec {version} did (schemaId {named})")
                 continue
@@ -966,7 +966,7 @@ def check_schema_id_refusals(flux_validator) -> list[str]:
         reset = copy.deepcopy(SCHEMA)
         reset["properties"]["fluxVersion"]["enum"] = [WINDOW[-1]]
         reset_path = Path(tmp) / "flux-schema-latest.json"
-        reset_path.write_text(json.dumps(reset))
+        reset_path.write_text(json.dumps(reset), encoding="utf-8")
         current = bundle_tool.SCHEMA_PATH
         bundle_tool.SCHEMA_PATH = reset_path
         try:
@@ -987,7 +987,7 @@ def check_pack_refuses_symlinks(flux_validator) -> list[str]:
         outside = Path(tmp) / "outside"
         outside.mkdir()
         secret = outside / "secret.txt"
-        secret.write_text("TOP-SECRET\n")
+        secret.write_text("TOP-SECRET\n", encoding="utf-8")
         cases = {
             "a linked file outside the bundle": ("notes.txt", secret),
             "a linked directory": ("more", outside),
@@ -1002,7 +1002,7 @@ def check_pack_refuses_symlinks(flux_validator) -> list[str]:
             with contextlib.redirect_stdout(said):
                 rc = bundle_tool.pack(work, out, flux_validator)
             refused = rc != 0 and f"unsupported bundle entry (symlink): {name}" in said.getvalue()
-            if not refused or out.exists() or secret.read_text() != "TOP-SECRET\n":
+            if not refused or out.exists() or secret.read_text(encoding="utf-8") != "TOP-SECRET\n":
                 failures.append(f"[bundle] pack did not refuse {label} before reading it: {said.getvalue().strip()}")
     return failures
 
@@ -1014,7 +1014,7 @@ def check_manifest_write_never_follows_a_link(flux_validator) -> list[str]:
         return []
     with tempfile.TemporaryDirectory() as tmp:
         victim = Path(tmp) / "victim.txt"
-        victim.write_text("untouched\n")
+        victim.write_text("untouched\n", encoding="utf-8")
         work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
         shutil.copytree(EXAMPLES, work)
         (work / bundle_tool.MANIFEST_NAME).unlink(missing_ok=True)
@@ -1027,7 +1027,7 @@ def check_manifest_write_never_follows_a_link(flux_validator) -> list[str]:
                 rc = bundle_tool.pack(work, out, flux_validator)
         finally:
             bundle_tool._symlink_entries = scan
-        if rc == 0 or f"cannot write {bundle_tool.MANIFEST_NAME}" not in said.getvalue() or victim.read_text() != "untouched\n":
+        if rc == 0 or f"cannot write {bundle_tool.MANIFEST_NAME}" not in said.getvalue() or victim.read_text(encoding="utf-8") != "untouched\n":
             return [f"[bundle] the manifest write followed a planted link: {said.getvalue().strip()}"]
     return []
 
@@ -1134,7 +1134,7 @@ def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
         # A file that is not UTF-8 is unreadable YAML, not an exception, and none of
         # its documents is returned, the one before the bad byte included.
         latin = Path(tmp) / "latin.flux.yml"
-        latin.write_bytes(b"kind: World\n---\nname: caf\xe9\n")
+        latin.write_bytes(b"kind: World\nnote: " + b"x" * 70_000 + b"\n---\nname: caf\xe9\n")
         try:
             docs, error = load_yaml_docs(latin)
         except UnicodeDecodeError as exc:
@@ -1151,6 +1151,28 @@ def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
         errors = Bundle(bundle, flux_validator).run()
         if not any("not UTF-8" in error for error in errors):
             failures.append(f"[utf-8] a bundle holding a file that is not UTF-8 passed: {errors[:3]}")
+
+        # A pack whose manifest is not UTF-8 is reported by verify, which never raises.
+        packed = Path(tmp) / "packed"
+        with contextlib.redirect_stdout(io.StringIO()):
+            bundle_tool.pack(EXAMPLES, packed, flux_validator)
+        archive = next(packed.glob("*.flux.tgz"))
+        rebuilt = Path(tmp) / "rebuilt.flux.tgz"
+        with tarfile.open(archive, "r:gz") as source, tarfile.open(rebuilt, "w:gz") as target:
+            for member in source.getmembers():
+                data = source.extractfile(member).read() if member.isfile() else None
+                if member.isfile() and member.name.endswith("flux-manifest.json"):
+                    data = b"\xff" + data
+                    member.size = len(data)
+                target.addfile(member, io.BytesIO(data) if data is not None else None)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as printed:
+                code = bundle_tool.verify(rebuilt, flux_validator)
+        except UnicodeDecodeError as exc:
+            failures.append(f"[utf-8] verify raised on a manifest that is not UTF-8: {exc!r}")
+        else:
+            if code != 1 or "not UTF-8 text" not in printed.getvalue():
+                failures.append(f"[utf-8] verify gave {code} on a manifest that is not UTF-8")
     return failures
 
 
@@ -1243,10 +1265,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         bundle = Path(tmp) / "bundle"
         shutil.copytree(EXAMPLES, bundle)
-        sim = (bundle / "simulation.flux.yml").read_text()
+        sim = (bundle / "simulation.flux.yml").read_text(encoding="utf-8")
         sim = sim.replace('start: "2026-07-01T00:00:00Z"', "start: 2026-07-01T00:00:00Z")
         sim = sim.replace('end: "2026-09-30T23:59:59Z"', "end: 2026-09-30T23:59:59Z")
-        (bundle / "simulation.flux.yml").write_text(sim)
+        (bundle / "simulation.flux.yml").write_text(sim, encoding="utf-8")
         errors = Bundle(bundle, flux_validator).run()
         if errors:
             failures.append(f"[validator] unquoted timestamps should be green: {errors[:3]}")
@@ -1262,9 +1284,9 @@ def main() -> int:
         failures.append("[enforcement] conformance vectors did not all pass")
 
     # every decision must satisfy the published decision contract
-    contract = json.loads((REPO / "schema" / "flux-enforcement-0.5.0.json").read_text())
+    contract = json.loads((REPO / "schema" / "flux-enforcement-0.5.0.json").read_text(encoding="utf-8"))
     decision_validator = Draft202012Validator({"$ref": "#/$defs/decision", "$defs": contract["$defs"]})
-    for v in json.loads(VECTORS.read_text())["vectors"]:
+    for v in json.loads(VECTORS.read_text(encoding="utf-8"))["vectors"]:
         for e in decision_validator.iter_errors(enforce.decide(v["policy"], v["request"], v.get("skill"))):
             failures.append(f"[enforcement] decision for {v['name']!r} violates the contract: {e.message}")
             break
@@ -1338,7 +1360,7 @@ def main() -> int:
         if archive.read_bytes() != first:
             failures.append("[bundle] archives are not byte-identical across repacks")
 
-        manifest = json.loads((work / "flux-manifest.json").read_text())
+        manifest = json.loads((work / "flux-manifest.json").read_text(encoding="utf-8"))
         if manifest["attestation"]["profile"] != "enterprise":
             failures.append(f"[bundle] expected enterprise profile, got {manifest['attestation']['profile']}")
         if bundle_tool.merkle_root(manifest["files"]) != manifest["merkleRoot"]:
@@ -1393,7 +1415,7 @@ def main() -> int:
         shutil.copytree(EXAMPLES, work)
         bundle_tool.pack(work, out, flux_validator)
         archive = out / f"{work.name}.flux.tgz"
-        statement = json.loads((out / f"{work.name}{bundle_tool.STATEMENT_SUFFIX}").read_text())
+        statement = json.loads((out / f"{work.name}{bundle_tool.STATEMENT_SUFFIX}").read_text(encoding="utf-8"))
         if statement.get("_type") != "https://in-toto.io/Statement/v1":
             failures.append(f"[bundle] statement _type is not in-toto v1: {statement.get('_type')}")
         subject = (statement.get("subject") or [{}])[0]
@@ -1487,7 +1509,7 @@ def main() -> int:
     # version-window pinning: released schema files are immutable, so a 0.4.0
     # document (extensions or not) must FAIL the 0.3.0 schema file
     old_schema = Draft202012Validator(
-        json.loads((REPO / "schema" / "flux-schema-0.3.0.json").read_text()),
+        json.loads((REPO / "schema" / "flux-schema-0.3.0.json").read_text(encoding="utf-8")),
         format_checker=FormatChecker(),
     )
     if not list(old_schema.iter_errors(envelope_040("Segment", query="x"))):
@@ -1498,7 +1520,7 @@ def main() -> int:
     if list(old_schema.iter_errors(envelope("Segment", query="x"))):
         failures.append("[schema] a plain 0.3.0 document should still pass the 0.3.0 schema")
     schema_050 = Draft202012Validator(
-        json.loads((REPO / "schema" / "flux-schema-0.5.0.json").read_text()),
+        json.loads((REPO / "schema" / "flux-schema-0.5.0.json").read_text(encoding="utf-8")),
         format_checker=FormatChecker(),
     )
     exact_076_as_050 = copy.deepcopy(sim_exact_076)

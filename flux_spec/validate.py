@@ -163,10 +163,11 @@ def load_yaml_docs(path: Path):
 
     The file is read as UTF-8 whatever the host's locale, so every host checks
     the text the FLUX engine reads as UTF-8 and takes its digests over. Read in
-    the locale's encoding instead, one file could be two documents: a byte the
-    engine reads as part of a value could end a comment on another host. A file
-    that is not UTF-8 is reported as unreadable rather than raised, and none of
-    its documents is returned, however many decoded before the bad byte.
+    the locale's encoding instead, one file could be two documents: a byte that
+    UTF-8 reads inside a comment can end the comment in another encoding, and
+    the rest of its line becomes a key the engine never reads. A file that is
+    not UTF-8 is reported as unreadable rather than raised, and none of its
+    documents is returned, however many decoded before the bad byte.
     """
     try:
         with path.open(encoding="utf-8") as fh:
