@@ -159,10 +159,21 @@ _StringTimestampLoader.add_constructor(
 
 
 def load_yaml_docs(path: Path):
-    """Load YAML documents; returns (docs, error_message_or_None)."""
+    """Load YAML documents; returns (docs, error_message_or_None).
+
+    The file is read as UTF-8 whatever the host's locale, so every host checks
+    the text the FLUX engine reads as UTF-8 and takes its digests over. Read in
+    the locale's encoding instead, one file could be two documents: a byte that
+    UTF-8 reads inside a comment can end the comment in another encoding, and
+    the rest of its line becomes a key the engine never reads. A file that is
+    not UTF-8 is reported as unreadable rather than raised, and none of its
+    documents is returned, however many decoded before the bad byte.
+    """
     try:
-        with path.open() as fh:
+        with path.open(encoding="utf-8") as fh:
             docs = list(yaml.load_all(fh, Loader=_StringTimestampLoader))
+    except UnicodeDecodeError:
+        return [], "unreadable YAML: not UTF-8 text"
     except (yaml.YAMLError, OSError) as exc:
         return [], f"unreadable YAML: {str(exc).splitlines()[0] if str(exc) else exc.__class__.__name__}"
     return [d for d in docs if d is not None], None
@@ -244,7 +255,7 @@ class Bundle:
         if version not in self._fluid_validators:
             schema_file = fluid_schema_file(version)
             self._fluid_validators[version] = (
-                Draft202012Validator(json.loads(schema_file.read_text()), format_checker=FormatChecker())
+                Draft202012Validator(json.loads(schema_file.read_text(encoding="utf-8")), format_checker=FormatChecker())
                 if schema_file is not None
                 else None
             )
@@ -549,7 +560,7 @@ class Bundle:
 
 
 def main(argv: list[str]) -> int:
-    flux_schema = json.loads(FLUX_SCHEMA_PATH.read_text())
+    flux_schema = json.loads(FLUX_SCHEMA_PATH.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(flux_schema)
     flux_validator = Draft202012Validator(flux_schema, format_checker=FormatChecker())
 

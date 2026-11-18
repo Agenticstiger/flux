@@ -278,7 +278,7 @@ def run_vectors(path: Path, gate=decide, label: str = "reference gate") -> tuple
     policyDigest, so a gate cannot pass by guessing verdicts while computing
     digests wrongly (or not at all).
     """
-    vectors = json.loads(path.read_text())
+    vectors = json.loads(path.read_text(encoding="utf-8"))
     messages = []
     for v in vectors["vectors"]:
         decision = gate(v["policy"], v["request"], v.get("skill"))
@@ -300,7 +300,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="FLUX reference policy gate (RFC-04)")
     ap.add_argument("--vectors", type=Path, default=DEFAULT_VECTORS)
     args = ap.parse_args(argv)
-    total = len(json.loads(args.vectors.read_text())["vectors"])
+    total = len(json.loads(args.vectors.read_text(encoding="utf-8"))["vectors"])
     failures, messages = run_vectors(args.vectors)
     if failures:
         print(f"FAIL — {failures}/{total} enforcement vectors failed")
