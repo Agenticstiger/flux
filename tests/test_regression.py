@@ -777,13 +777,17 @@ REPIN_ACCEPTS = {
     "a Glue registry without rules": _registry("glue"),
 }
 
-#: What it refuses, and where the preview says so. The first four validated
-#: under the 32fce8e3 pin.
+#: What it refuses, and where the preview says so. The enum forms all
+#: validated under the 32fce8e3 pin.
 REPIN_REFUSES = {
     "enum levels without commas": (_column("type", "enum('a' 'b')"), "$.exposes[0].contract.schema[4].type"),
     "an empty enum level": (_column("type", "enum(a,,b)"), "$.exposes[0].contract.schema[4].type"),
+    "a trailing comma in an enum": (_column("type", "enum(a, b,)"), "$.exposes[0].contract.schema[4].type"),
+    "text after a closing quote in an enum": (_column("type", "enum('a'b)"), "$.exposes[0].contract.schema[4].type"),
     "a tab inside a quoted enum level": (_column("type", "enum('a\tb')"), "$.exposes[0].contract.schema[4].type"),
     "a newline inside a quoted enum level": (_column("type", "enum('a\nb')"), "$.exposes[0].contract.schema[4].type"),
+    "a C1 control character inside a quoted enum level": (_column("type", "enum('a\x85b')"),
+                                                          "$.exposes[0].contract.schema[4].type"),
     "protobuf.field 19000, which Protobuf reserves": (_column("protobuf", {"field": 19000}, column=0),
                                                       "$.exposes[0].contract.schema[0].protobuf.field"),
     "protobuf.field 0": (_column("protobuf", {"field": 0}, column=0), "$.exposes[0].contract.schema[0].protobuf.field"),
@@ -816,6 +820,37 @@ def check_preview_repin(flux_validator) -> list[str]:
     if not list(schema_052.iter_errors(sim_exact_077_053)):
         failures.append("[schema] a 0.5.3 document should fail the immutable 0.5.2 schema (fluxVersion window)")
     return failures
+
+
+def check_pack_from_looser_preview(flux_validator) -> list[str]:
+    """verify reads the preview the running release carries (VERSIONING.md,
+    FLUID previews): a pack made while the 0.7.7 preview admitted
+    enum('a' 'b'), as flux-spec 0.5.2's 32fce8e3 pin did, no longer verifies,
+    and says why."""
+    validate_impl = sys.modules[Bundle.__module__]
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        # a stand-in for the old pin: this preview with the column type left
+        # open, so the pack step accepts enum('a' 'b') as 0.5.2 did
+        looser = json.loads((PREVIEW_DIR / "fluid-schema-0.7.7.json").read_text())
+        looser["$defs"]["column"]["properties"]["type"] = {"type": "string"}
+        looser_dir = tmp / "looser-preview"
+        looser_dir.mkdir()
+        (looser_dir / "fluid-schema-0.7.7.json").write_text(json.dumps(looser))
+        source = tmp / "source"
+        _towers_on(source, "0.7.7", "0.7.7", change=_column("type", "enum('a' 'b')"))
+        real = validate_impl.FLUID_PREVIEW_DIR
+        validate_impl.FLUID_PREVIEW_DIR = looser_dir
+        try:
+            rc, archive = _pack_as("0.5.2", source, tmp / "bundle", tmp / "dist")
+        finally:
+            validate_impl.FLUID_PREVIEW_DIR = real
+        if rc != 0:
+            return ["[bundle] could not pack enum('a' 'b') under a looser 0.7.7 preview, so its refusal is untested"]
+        rc, said = _verify_output(archive, flux_validator)
+        if rc == 0 or "bundle no longer validates against flux-schema-0.5.2.json" not in said or "fails FLUID 0.7.7 (preview)" not in said:
+            return [f"[bundle] a pack made under a looser 0.7.7 preview was not refused for its enum: {said.strip()}"]
+    return []
 
 
 def _repack(work: Path, out: Path, mutate, flux_validator):
@@ -1124,6 +1159,7 @@ def main() -> int:
 
     # 0.5.3: the FLUID 0.7.7 preview re-pinned to forge-cli e88301f7
     failures += check_preview_repin(flux_validator)
+    failures += check_pack_from_looser_preview(flux_validator)
 
     # ref-like keys inside free-form payloads must not be flagged
     with tempfile.TemporaryDirectory() as tmp:
@@ -1420,7 +1456,8 @@ def main() -> int:
         + 3   # 0.5.1: towers bundle green, broken 0.7.6 contract caught, 0.7.6 refused by 0.5.0
         + 20  # 0.5.2: pins, seam window, 7 bad pins, 4 sync refusals, 0.7.7 green, moved key, broken relationship,
               # range refused, 0.7.6 relationships refused, 0.7.7 refused by 0.5.1
-        + 16  # 0.5.3: 8 forms the re-pinned 0.7.7 preview accepts, 7 it refuses, 0.5.3 refused by 0.5.2
+        + 20  # 0.5.3: 8 forms the re-pinned 0.7.7 preview accepts, 10 it refuses, 0.5.3 refused by 0.5.2,
+              # a pack made under a looser preview refused
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2

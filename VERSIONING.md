@@ -41,6 +41,8 @@ never the remedy: it changes the manifest bytes and breaks a detached
 signature over them. A `schemaId` outside the window, from before a breaking
 reset or from a newer release, is refused with the versions the toolchain
 accepts. Verify that pack with a flux-spec release whose window includes it.
+One more case refuses a pack from inside the window: its FLUID contract
+declares a preview whose pin has moved since (FLUID previews, below).
 
 This leans on the rule above: a release that tightens a constraint is breaking
 and resets the window. So no schema inside the window accepts a document that
@@ -61,7 +63,8 @@ an older schema in the window gains nothing a current pack would be refused.
 Adding a required field, removing or renaming any field, tightening any
 constraint (pattern, enum, minimum, `additionalProperties`), narrowing the
 seam's `fluidVersion` enum, or changing validator semantics so a previously
-green bundle fails.
+green bundle fails. A FLUID preview's pin move is the one exception (FLUID
+previews, below).
 
 ## The FLUID seam window
 
@@ -88,6 +91,13 @@ fails on any byte difference.
   (`scripts/sync-fluid-preview.py --repin VERSION COMMIT`), and the move ships
   in a specification release with a schema-diff note. A preview can change
   between two such releases.
+- A pin move does not reset the window, even when the new pin refuses what the
+  old one accepted. `validate` and `verify` check a contract that declares a
+  preview against the preview the running release carries, whatever
+  `fluxVersion` the bundle's documents pin, so the move can refuse a bundle,
+  or a pack, that an earlier release accepted. The schema diff names what the
+  new pin refuses, and a pack it refuses verifies with the release that made
+  it.
 - When FLUID releases the version, the next specification release vendors the
   release in `vendor/fluid/` and removes the preview and its entry in
   `pins.json` (the file stays, with an empty list once no preview is left). An

@@ -7,18 +7,20 @@ One human-written diff per released version pair. The regression suite pins ever
 **The FLUX schema only widens its window; the FLUID 0.7.7 preview moves to a
 newer pin.** Every FLUX document that validated under 0.5.2 validates under
 0.5.3 (regression-asserted). A bundle's FLUID 0.7.7 contracts are checked
-against the new pin, which accepts more and refuses three malformed enum
-lists.
+against the new pin, which accepts more and refuses enum lists that are not
+comma-separated levels.
 
 - The 0.7.7 preview is re-pinned from forge-cli commit `32fce8e3` to
   `e88301f7`. A 0.7.7 contract may now give a column its Protobuf field number
   (`protobuf.field`), set `rules: true` on a Confluent schema registry, and
   write an enum level as quoted text with any character but a control
   character: `enum('Dr.', '>10000', 'O''Brien', 'a, b')`.
-- `enum('a' 'b')`, `enum(a,,b)` and a quoted level that holds a tab or a
-  newline validated under 0.5.2 and are refused under 0.5.3. A pack that 0.5.2
-  made from such a contract no longer verifies under 0.5.3: verify it with
-  flux-spec 0.5.2, or fix the contract and pack it again.
+- An enum list that is not comma-separated levels, such as `enum('a' 'b')`,
+  `enum(a,,b)` or `enum(a, b,)`, and a quoted level that holds a control
+  character, such as a tab or a newline, validated under 0.5.2 and are refused
+  under 0.5.3. A pack that 0.5.2 made from such a contract no longer verifies
+  under 0.5.3: verify it with flux-spec 0.5.2. The pin move does not reset the
+  window (VERSIONING.md, FLUID previews).
 - `fluxVersion` enum widens to
   `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2", "0.5.3"]`.
 - `$id` → `flux-schema-0.5.3.json`; `flux-schema-latest.json` aliases 0.5.3;

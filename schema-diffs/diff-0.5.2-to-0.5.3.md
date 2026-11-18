@@ -3,10 +3,10 @@
 **The FLUX schema only widens its window; the FLUID 0.7.7 preview moves to a
 newer pin.** Every FLUX document that validated under 0.5.2 validates under
 0.5.3 (regression-asserted). The preview's new pin accepts things the old pin
-refused, and refuses three kinds of enum list that the old pin accepted, so a
-bundle with a 0.7.7 contract can change result. VERSIONING.md lets a preview
-change between specification releases (FLUID previews), and a pin move ships
-in one, with this note.
+refused, and refuses enum lists that the old pin's looser pattern accepted, so
+a bundle with a 0.7.7 contract can change result. Under VERSIONING.md (FLUID
+previews), a pin move ships in a specification release with this note, and it
+does not reset the window.
 
 ## The FLUID 0.7.7 preview
 
@@ -36,15 +36,20 @@ in one, with this note.
 
 ## What 0.5.2 accepted that 0.5.3 refuses
 
-A 0.7.7 contract with one of these column types validated under the old pin.
-Under the new pin it fails with
-`fails FLUID 0.7.7 (preview): $.exposes[i].contract.schema[j].type: ... is not valid under any of the given schemas`:
+The new pin reads an `enum(...)` type as comma-separated levels, each a word
+list or a quoted string without control characters. The old pin's pattern was
+looser, so a 0.7.7 contract with another kind of list validated under 0.5.2
+and fails under 0.5.3 with
+`fails FLUID 0.7.7 (preview): $.exposes[i].contract.schema[j].type: ... is not valid under any of the given schemas`.
+For example:
 
 | Type | Why the new pin refuses it | Write instead |
 |---|---|---|
 | `enum('a' 'b')` | the levels are not separated by commas | `enum('a', 'b')` |
-| `enum(a,,b)` | a level is empty | `enum(a, b)` |
-| a quoted level that holds a tab or a newline | a quoted level holds no control character | the level without it, such as `enum('a b')` |
+| `enum(a,,b)`, `enum(,a)` | a level is empty | `enum(a, b)`, `enum(a)` |
+| `enum(a, b,)` | a trailing comma leaves an empty level | `enum(a, b)` |
+| `enum('a'b)` | text follows a closing quote | `enum('ab')` |
+| a quoted level that holds a control character: a tab, a newline, or a C1 control such as U+0085 | a quoted level holds no control character | the level without it, such as `enum('a b')` |
 
 A contract that declares a FLUID release, 0.7.3 to 0.7.6, is unaffected: those
 files are vendored unchanged.
@@ -72,6 +77,7 @@ files are vendored unchanged.
 - `verify` re-validates a pack the same way. A pack that flux-spec 0.5.2 made
   from such a contract no longer verifies under 0.5.3: it reports
   `bundle no longer validates against flux-schema-0.5.2.json` and names the
-  type. Verify that pack with flux-spec 0.5.2, which carries the old pin, or
-  fix the contract, pack it again and sign the new manifest. A pack whose
+  type (regression-asserted). Verify that pack with flux-spec 0.5.2, which
+  carries the old pin. For a pack that 0.5.3 verifies, fix the contract and
+  make a new pack, whose manifest needs a new signature. A pack whose
   contracts use none of the refused forms verifies as before.
