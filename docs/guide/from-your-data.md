@@ -9,20 +9,20 @@ one of those records. This guide takes you there in six steps:
 3. profile the data where it lives with `fluid profile`;
 4. write a FLUX Simulation from the profile's numbers;
 5. pin the profile's digest in the Simulation;
-6. generate the rows with `fluxsim run` and check them with `fluxsim verify`,
-   then pack them with `fluxsim ship`.
+6. generate the rows with `fluxsim run`, check them with `fluxsim verify`, and
+   pack them with `fluxsim ship`.
 
 Two documents travel from the data to the engine: the contract, which holds
 the schema, and the profile, which holds aggregates. The engine reads those and
 never a record.
 
-::: warning What works today
-- `fluid profile` (step 3) is on forge-cli's `main` branch, not in a release
-  yet. Every other step runs on the released packages, given the profile step 3
-  writes: flux-sim-engine reads a profile from 0.6.0.
-- The engine cannot yet pass a run checked against a profile that
-  `fluid profile` wrote, so `ship` withholds it. Step 6 says why, and shows how
-  to ship today with a slice of your records instead.
+::: tip What a profile checks today
+`fluid profile` writes, for each number column, the statistic a FLUX `mean`
+property is checked against, unless the output checks withhold it, so this
+guide's run is checked and packed against the profile alone. A property that
+needs another statistic, such as a `support` property or a mean over a date or
+timestamp column, waits for `fluid profile --bundle`, which is not released.
+Step 6 shows how to check those against a slice of your records instead.
 :::
 
 ## 1. Install
@@ -30,44 +30,29 @@ never a record.
 | Package | Latest on PyPI | Used here for | Status |
 |---|---|---|---|
 | `flux-spec` | 0.5.2 | validating the bundle (the engine installs it) | released |
-| `flux-sim-engine` | 0.6.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; 0.6.0 is the first release that reads a profile |
-| `data-product-forge` | 0.30.1 | `fluid init --discover` and `fluid profile` | `--discover` released; `fluid profile` on forge-cli `main`, not in a release yet, and it needs flux-stats from git |
-| `flux-stats` | 0.6.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; forge-cli `main` installs a commit of its own from git |
+| `flux-sim-engine` | 0.6.1 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
+| `data-product-forge` | 0.31.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
+| `flux-stats` | 0.6.1 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
 
-The engine needs Python 3.11 or newer. The released packages cover every step
-but step 3, which writes the profile steps 5 and 6 read. Without it, go from
-step 4 straight to the slice at the end of step 6.
+The engine needs Python 3.11 or newer. One environment holds both tools:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install flux-sim-engine "data-product-forge[local]"
+pip install flux-sim-engine 'data-product-forge[profile]>=0.31.0'
 ```
 
-For step 3, install forge-cli from `main` in an environment of its own, with
-the flux-stats commit it names: flux-sim-engine 0.6.0 needs flux-stats 0.6.0,
-and forge-cli `main` pins an earlier commit. `pip` needs `git` for these.
-
-```bash
-python3 -m venv .venv-forge
-.venv-forge/bin/pip install "data-product-forge[profile] @ git+https://github.com/Agenticstiger/forge-cli.git"
-.venv-forge/bin/pip install -r https://raw.githubusercontent.com/Agenticstiger/forge-cli/main/requirements/flux-stats.txt
-```
-
-The second line installs flux-stats at the commit forge-cli names. If it is
-missing, `fluid profile` stops before it reads anything and prints the command.
-
-Run `fluid profile` from `.venv-forge`, by its path
-(`.venv-forge/bin/fluid profile ...`) or with that environment activated, and
-every other command, the Python snippets included, from `.venv`. The commands
-below are written bare. `fluxsim --version` prints 0.6.0.
+The `[profile]` extra brings DuckDB, which `fluid init --discover` and
+`fluid profile` read files with, and flux-stats, which forms every statistic
+the profile holds; the engine uses the same flux-stats. Every command below,
+the Python snippets included, runs in this environment.
 
 ## 2. Get a FLUID contract from your data
 
 Put your file in a folder of its own, here `data/orders.parquet`.
 
 ::: details No data at hand? Make the file this guide uses first.
-The numbers below come from 600 made-up orders. DuckDB comes with
-`data-product-forge[local]` and with its `[profile]` extra:
+The numbers below come from 600 made-up orders. DuckDB comes with the
+`[profile]` extra:
 
 ```python
 # make_orders.py: run it with `mkdir -p data && python3 make_orders.py`
@@ -133,8 +118,6 @@ lists every source `--discover` reads.
 
 ## 3. Profile the data where it lives
 
-*Needs forge-cli from `main`, not in a release yet: run it from `.venv-forge`.*
-
 Run the profiler inside the environment that holds the data. It reads every
 record once and writes only aggregates that passed its output checks:
 
@@ -144,22 +127,24 @@ fluid profile contract.orders.fluid.yaml --expose orders \
 ```
 
 ```text
-Profiled exposes[orders]: 4 columns, 13 values published, 7 withheld.
+Profiled exposes[orders]: 4 columns, 14 values published, 7 withheld.
 Withheld, by CL_CONF_STATUS code: A (small count) 7.
+Fidelity statistics: mean/1 of 'amount', on fractionalBits 16 (the fidelity block must declare the same).
 Wrote /work/orders.profile.json (readable by you alone; read it before you share it).
 Pin it in the FLUX Simulation:
-  profile: {digest: sha256:0f11e6ceb5e6116d50082efbcf396612deef467d5d73cf5e36fec0b8a4bed8d7}
+  profile: {digest: sha256:bd2f9a689d119e6a489f1878891c695c3f6c7dd602c365a92fff491905b416a5}
 ```
 
-Your digest will differ: the document names the forge-cli build that wrote it.
-For the sample data, the profile holds these values:
+On data-product-forge 0.31.0 the sample data gives this digest. Other data, or
+another release, writes another, because the profile names the build that wrote
+it. For the sample data, the profile holds these values:
 
 | Column | Published | Withheld |
 |---|---|---|
 | the table | `rowCount` 600 | |
 | `order_id` | `count` 600, `distinctCount` 600 | `nullCount` |
 | `country` | `count` 600, `distinctCount` 5 | `nullCount` |
-| `amount` | `count` 600, `distinctCount` 10, `min` 10, `max` 100, quartiles 20, 35 and 50, `sum` 27750 | `nullCount` |
+| `amount` | `count` 600, `distinctCount` 10, `min` 10, `max` 100, quartiles 20, 35 and 50, `sum` 27750, and the statistic `mean/1` | `nullCount` |
 | `created_at` | `count` 600, `distinctCount` 310 | `nullCount`, `min`, `max`, quartiles |
 
 Some of that is the output checks at work. Every published count is rounded to
@@ -167,6 +152,13 @@ a multiple of 5, so the 4 countries read as 5 and the 12 distinct amounts as
 10. A null count of zero is withheld, because a zero counts as disclosive. A
 `min`, `max` or quantile is published only when at least 10 records hold that
 exact value, and no instant in `created_at` is held by 10 orders.
+
+`mean/1` is what a FLUX `mean` property is compared with: the column's count,
+rounded to 5 like every count, and its sum on a grid of 2^-16 steps. The grid
+is `--fractional-bits`, 16 unless you give another, and the Simulation's
+`encoding.fractionalBits` must be the same (step 4 uses 16). `fluid profile`
+writes one, ungrouped, for each number column it profiles, and publishes it
+only when the column's count and sum are published.
 
 ::: warning Aggregates only, and no privacy guarantee
 The profile holds aggregates and nothing else: no record, no sample of records,
@@ -392,7 +384,7 @@ Copy the line `fluid profile` printed into the Simulation's
 ```yaml
 extensions:
   com.agentics.flux/1:
-    profile: {digest: sha256:0f11e6ceb5e6116d50082efbcf396612deef467d5d73cf5e36fec0b8a4bed8d7}
+    profile: {digest: sha256:bd2f9a689d119e6a489f1878891c695c3f6c7dd602c365a92fff491905b416a5}
     emits:
       orders:
         rows: 600
@@ -416,10 +408,10 @@ fluxsim run bundle --profile orders.profile.json
 ```
 
 ```text
-plan written to .flux/runs/b177f268004765b7/plan.json (runId=b177f268004765b7, planDigest=sha256:...)
-applied to .flux/runs/b177f268004765b7 (runDigest=sha256:...)
+plan written to .flux/runs/8cea311995bc57d7/plan.json (runId=8cea311995bc57d7, planDigest=sha256:...)
+applied to .flux/runs/8cea311995bc57d7 (runDigest=sha256:...)
 emitted orders: 600 rows (generator)
-run b177f268004765b7 complete
+run 8cea311995bc57d7 complete
 ```
 
 The run writes under `.flux/runs/` in the current folder. Each row is a JSON
@@ -427,14 +419,14 @@ array in the contract's column order:
 
 ```console
 $ head -n 3 .flux/runs/*/emits/orders.ndjson
-["0e6a9b730dec8af295479e8eafe30f72","GB","19.26","2026-09-17T05:55:26.412Z"]
-["8923abbc7c9740d3bfb27afb47e8b86a","FR","19.66","2026-08-01T23:21:16.842Z"]
-["05ba68829245d7e593703335cd8bb328","IE","26.72","2026-07-11T04:14:34.165Z"]
+["272157ce5c149cdd5ace2757785abe75","FR","42.04","2026-08-30T12:12:57.137Z"]
+["4ae72e773938fce246a9787cd019b3cb","IE","22.63","2026-09-04T02:59:36.782Z"]
+["48a86b2e4b5bbe236997e76dea39cadc","IE","13.15","2026-08-19T15:24:18.484Z"]
 ```
 
-The same bundle gives the same bytes on any machine. Your run id and rows
-differ from these, because your contract records the path of your data folder,
-and the rows depend on the contract's bytes.
+The same bundle gives the same bytes on any machine. Your run id, rows and
+scores differ from these, because your contract records the path of your data
+folder, and the rows depend on the contract's bytes.
 
 Check the run against the contract and the profile. `$(ls -t .flux/runs | head -1)`
 names the newest run:
@@ -448,11 +440,10 @@ reproducible: not checked | validity: not asserted
   ...
   rows: ok
   ...
-  fidelity orders: failed -- 1 fail-closed condition met against the pinned profile
-    property 000:mean:amount (mean of amount): refused, not within the declared margin
-    refusal FLX-5037 on property 000:mean:amount: the profile holds no mean/1 statistic over this property's columns with its groupBy, bins, levels and level
-  scorecard: overall not measured against profile sha256:0f11e6ce...
-    ...
+  fidelity orders: passed -- 1 of 1 declared property within the margin against the pinned profile
+  scorecard: overall 0.9827 against profile sha256:bd2f9a68...
+    dimensions: marginals 0.9827; not measured: structure, joint, crossTable, temporal, invariants, queries, defects
+    table orders: 0.9827 (1 of 1 property scored)
     shape: no flags in 4 profiled columns (3 tests at 1/1000 per run)
 ```
 
@@ -460,47 +451,52 @@ Three things happened:
 
 - `rows: ok`: the emitted file reads back, with as many rows as the run
   recorded and one value per contract column.
+- The `mean` property compared the run's mean `amount` with the profile's
+  `mean/1` and landed within its 10% margin. The scorecard turns that into a
+  similarity, where 1 is an exact match;
+  [SCORECARD-SPEC](../engine/spec/SCORECARD-SPEC.md) defines the scores.
 - The shape flags compared each profiled column with the run, for example its
   distinct count against the one the profile allows, and found nothing unlikely.
-- The `mean` property was refused, with
-  [FLX-5037](../engine/reference/errors/FLX-5037.md). The engine compares a
-  property with a statistic the profile carries for it, such as `mean/1` or a
-  histogram over the declared bins. `fluid profile` writes the column metrics
-  shown in step 3, and none of those statistics yet.
 
-So `ship`, which packs only a run that passed its checks, withholds this one:
+Pack the run with its evidence:
 
 ```bash
 fluxsim ship bundle --run-id "$(ls -t .flux/runs | head -1)" --profile orders.profile.json -o out
 ```
 
 ```text
-withheld: orders
-  - profile.properties: 1 fail-closed condition met against the pinned profile
-  ...
-nothing was written to the output directory
-FLX-8001: withheld orders
+[ok] packed out/bundle.flux.tgz
+     ...
+shipped out/bundle.flux.tgz
 ```
 
-Without a profile, which is where the released packages alone leave you, the
-fidelity block is not checked at all: `fluxsim verify bundle --run-id ...` says
-`fidelity orders: declared, not checked -- declares a fidelity block; pass
---committed-slice orders=file://<path> to run the check`, and `fluxsim ship`
-withholds the run with `committed-slice.present: orders declares a fidelity
-block; ship needs --committed-slice for it`. The slice below is the way on in
-both cases.
+The pack holds the rows and the evidence for them, the scorecard included;
+[Ship with evidence](../engine/how-to/ship-with-evidence.md) says what is in it.
 
-### Ship today, with a slice of your records
+### When the profile cannot answer a property
 
-Until `fluid profile` writes those statistics, the way to an evidence pack is a
-committed slice: a file of the records themselves, from which the engine forms
-the statistics it compares. The engine then reads those records, which gives up
-the aggregate-only path this guide follows, so use it only where the records
-may reach the engine, on your own machine for example. It works with the
-released packages.
+`fluid profile` writes one ungrouped `mean/1` for each number column it
+profiles, and nothing else the fidelity check compares. A property that needs
+another statistic, such as a `support` property over `country` or a `mean` over
+`created_at`, is refused against the profile with
+[FLX-5037](../engine/reference/errors/FLX-5037.md), which names the statistic the
+profile lacks, and `ship` withholds the run. `fluid profile --bundle`, which is
+to write the statistics a Simulation declares, is not released.
 
-1. Take the `profile:` line out of the Simulation again: while a profile is
-   pinned, the check runs against the profile, slice or no slice.
+A `mean` whose sum the output checks withheld, for example because one or two
+records dominate it, cannot be scored against the profile either. With this
+guide's one property, `verify` then says the pinned profile withheld every group
+of every declared property, so nothing was scored, and `ship` withholds the run.
+
+Check a `support` property or a mean over a date or timestamp column against a
+committed slice instead: a file of the records themselves, from which the engine
+forms the statistics it compares. The engine then reads those records, which
+gives up the aggregate-only path this guide follows, so use it only where the
+records may reach the engine, on your own machine for example.
+
+1. Take the `profile:` line out of the Simulation: once a profile is pinned,
+   `run` and `ship` need it with `--profile`, and with it the check runs
+   against the profile.
 2. Write the records as one JSON object per line, each decimal as a string and
    each timestamp in RFC 3339 with milliseconds:
 
@@ -523,28 +519,23 @@ released packages.
    ```bash
    fluxsim run bundle
    fluxsim verify bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson
-   fluxsim ship bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson -o out
+   fluxsim ship bundle --run-id "$(ls -t .flux/runs | head -1)" --committed-slice orders=file://$PWD/orders.ndjson -o out-slice
    ```
 
-   ```text
-     ...
-     rows: ok
-     ...
-     fidelity orders: passed
-   ```
+   `verify` reports `fidelity orders: passed`, and `ship` writes
+   `out-slice/bundle.flux.tgz`. It packs into a folder of its own: `ship`
+   refuses to replace the pack written above in `out`, which holds another
+   run's evidence.
 
-   ```text
-   [ok] packed out/bundle.flux.tgz
-        ...
-   shipped out/bundle.flux.tgz
-   ```
+Where the records may not reach the engine at all, a property the profile
+cannot answer gets no pack: use the rows without one. They follow the contract
+and your declarations, and the same bundle gives the same rows again.
 
-The run's mean amount lands within 10% of the records' (45.94 against 46.25 in
-our run), so the `mean` property passes and the pack is written.
-[Ship with evidence](../engine/how-to/ship-with-evidence.md) says what the pack
-holds. Where the records may not reach the engine at all, use the rows without
-a pack: they follow the contract and your declarations, and the same bundle
-gives the same rows again.
+A run with neither a profile nor a slice is not checked at all: `fluxsim verify`
+says `fidelity orders: declared, not checked -- declares a fidelity block; pass
+--committed-slice orders=file://<path> to run the check`, and `fluxsim ship`
+withholds the run with `committed-slice.present: orders declares a fidelity
+block; ship needs --committed-slice for it`.
 
 ## Next
 
