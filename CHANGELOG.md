@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+The FLUID 0.7.7 preview is re-pinned from forge-cli commit `32fce8e3` to
+`e88301f7` (`vendor/fluid-preview/pins.json`, sha256 `24c5858a`). The
+specification and the FLUX schema are unchanged. Three forge-cli changes reach
+the vendored schema:
+
+- forge-cli #932 (`4fa06519`): a column may carry `protobuf.field`, its field
+  number in the `.proto` forge-cli generates when a topic's value is Protobuf,
+  an integer from 1 to 536870911 outside the reserved 19000 to 19999.
+- forge-cli #938 (`66dc2088`): a `schemaRegistry` block of kind `confluent` may
+  set `rules: true`, which registers the expose's error-severity row checks as
+  Confluent data-contract rules. A `glue` block is refused one.
+- forge-cli #952 (`e88301f7`): an `enum(...)` level may be a quoted string that
+  holds any character but a control character, a comma, a parenthesis, a dot
+  and `>` among them, with its own quote doubled (`'O''Brien'`), or a word list
+  as before. A list that is not comma-separated levels, such as
+  `enum('a' 'b')` or `enum(a,,b)`, and a quoted level holding a tab validated
+  under the old pin and are refused under the new one.
+
 ## 0.5.2 - 2026-11-17
 
 Specification 0.5.2, additive

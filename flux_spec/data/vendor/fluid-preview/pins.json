@@ -6,8 +6,8 @@
       "fluidVersion": "0.7.7",
       "repository": "https://github.com/Agenticstiger/forge-cli",
       "path": "fluid_build/schemas/fluid-schema-0.7.7.json",
-      "commit": "32fce8e3ae0a5bcb104af048a6fc67938c198f31",
-      "sha256": "4c72dea22a5f3c31dc1882723b07cc16de0bb52e0199db0f5daba8fdc480b4da"
+      "commit": "e88301f72d985a045f88d3ca84fe34367f2934cb",
+      "sha256": "24c5858a43b55e03c53080f084384f1157e087b8c806c63acffb64636288ffc4"
     }
   ]
 }
