@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **The supply-chain check digests each locked document once.** It took a
+  versioned ref's target's content digest once per ref, so a bundle of many
+  short refs to one large document paid for that document's whole size once per
+  ref. Each target is now digested once per check, and every ref is checked
+  against that digest as before, with the same errors.
 - **The validator reads every file as UTF-8, whatever the host's locale.**
   `flux_spec.validate.load_yaml_docs` opened a bundle's files in the locale's
   encoding, while the FLUX engine reads them as UTF-8 and takes its digests over

@@ -1176,6 +1176,48 @@ def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
     return failures
 
 
+def check_supply_chain_digests_each_target_once(flux_validator) -> list[str]:
+    """Many versioned refs to one locked document digest it once, and are each still checked."""
+    import validate as validate_module
+
+    failures: list[str] = []
+    ranges = ["^2.1", "~2.1", "2.1.3", "^2.0", "~2.1.0"]
+    with tempfile.TemporaryDirectory() as tmp:
+        bundle = Path(tmp) / "bundle"
+        shutil.copytree(EXAMPLES, bundle)
+        refs = [f"module-payment-recovery@{rng}" for rng in ranges]
+        mutate_yaml(bundle, "simulation.flux.yml", lambda d: d["spec"].__setitem__("moduleRefs", refs))
+        calls: list = []
+        original = validate_module.canonical_digest
+
+        def counting(doc):
+            calls.append(doc.get("id") if isinstance(doc, dict) else None)
+            return original(doc)
+
+        validate_module.canonical_digest = counting
+        try:
+            errors = Bundle(bundle, flux_validator).run()
+        finally:
+            validate_module.canonical_digest = original
+        if errors:
+            failures.append(f"[supply-chain] five refs to one locked module failed: {errors[:3]}")
+        if calls.count("module-payment-recovery") != 1:
+            failures.append(
+                f"[supply-chain] the locked module was digested {calls.count('module-payment-recovery')} times for 5 refs"
+            )
+
+        # A wrong digest is still reported for every ref that names the module.
+        lock = bundle / "flux.lock"
+        lock.write_text(
+            lock.read_text(encoding="utf-8").replace("sha256:1a06", "sha256:0000"), encoding="utf-8"
+        )
+        errors = Bundle(bundle, flux_validator).run()
+        mismatches = [error for error in errors if "content digest mismatch" in error]
+        if len(mismatches) != len(ranges):
+            failures.append(f"[supply-chain] {len(mismatches)} digest mismatches for {len(ranges)} refs")
+    return failures
+
+
 def main() -> int:
     failures = []
 
@@ -1496,6 +1538,7 @@ def main() -> int:
     failures += check_pack_refuses_symlinks(flux_validator)
     failures += check_manifest_write_never_follows_a_link(flux_validator)
     failures += check_verify_refuses_unsafe_members(flux_validator)
+    failures += check_supply_chain_digests_each_target_once(flux_validator)
     failures += check_reads_bundles_as_utf8(flux_validator)
 
     # a bundle that does not validate must never be packed
