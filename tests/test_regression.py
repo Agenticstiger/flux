@@ -1101,6 +1101,83 @@ def check_verify_refuses_unsafe_members(flux_validator) -> list[str]:
     return failures
 
 
+def _first_flip_raising(data: bytes, error: type) -> bytes | None:
+    """*data* with its first single-byte flip past the gzip header that makes
+    reading the archive's headers raise *error*, or None if no flip does."""
+    for i in range(10, len(data)):
+        flipped = data[:i] + bytes([data[i] ^ 0xFF]) + data[i + 1:]
+        try:
+            with tarfile.open(fileobj=io.BytesIO(flipped), mode="r:gz") as tar:
+                tar.getmembers()
+        except error:
+            return flipped
+        except Exception:  # noqa: BLE001 (another refusal: not the flip this needs)
+            continue
+    return None
+
+
+def check_verify_stops_at_its_caps_and_reports_a_broken_stream(flux_validator) -> list[str]:
+    """verify counts its member and byte caps as it reads each header, and
+    reports an archive whose gzip stream is cut short or corrupt.
+
+    Listing every header before the member cap was checked read an archive of
+    any number of headers in full. A cut stream raised gzip's EOFError, and a
+    corrupt one zlib.error, out of a function that says it never raises.
+    """
+    import zlib
+
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+        shutil.copytree(EXAMPLES, work)
+        bundle_tool.pack(work, out, flux_validator)
+        archive = out / "bundle.flux.tgz"
+
+        headers = []
+        real_next = tarfile.TarFile.next
+
+        def counting_next(self):
+            headers.append(1)
+            return real_next(self)
+
+        cap = bundle_tool.MAX_MEMBERS
+        bundle_tool.MAX_MEMBERS, tarfile.TarFile.next = 2, counting_next
+        try:
+            rc, said = _verify_output(archive, flux_validator)
+        finally:
+            bundle_tool.MAX_MEMBERS, tarfile.TarFile.next = cap, real_next
+        if rc == 0 or "members, above the 2 cap" not in said or len(headers) > 6:
+            failures.append(f"[bundle] verify read {len(headers)} headers past a member cap of 2: {said.strip()}")
+
+        data = archive.read_bytes()
+        broken = {"a gzip stream cut in half": (data[: len(data) // 2], None),
+                  # Raised by the read itself, as tarfile up to Python 3.13 lets it
+                  # out; 3.14's tarfile turns every flip into a ReadError.
+                  "zlib.error from the stream": (data, zlib.error("invalid distance too far back"))}
+        corrupt = _first_flip_raising(data, zlib.error)
+        if corrupt is not None:
+            broken["a corrupt gzip stream"] = (corrupt, None)
+        for i, (label, (blob, raised)) in enumerate(broken.items()):
+            target = Path(tmp) / f"broken{i}.flux.tgz"
+            target.write_bytes(blob)
+
+            def failing_next(self, raised=raised):
+                raise raised
+
+            if raised is not None:
+                tarfile.TarFile.next = failing_next
+            try:
+                rc, said = _verify_output(target, flux_validator)
+            except Exception as exc:  # noqa: BLE001 (a traceback is the failure)
+                failures.append(f"[bundle] CRASHED ({type(exc).__name__}: {exc}) on {label}")
+                continue
+            finally:
+                tarfile.TarFile.next = real_next
+            if rc == 0 or "not a readable gzip archive" not in said:
+                failures.append(f"[bundle] verify did not report {label}: {said.strip()}")
+    return failures
+
+
 def check_reads_bundles_as_utf8(flux_validator) -> list[str]:
     """A bundle's files are read as UTF-8 on every host, and a file that is not UTF-8 is refused.
 
@@ -1538,6 +1615,7 @@ def main() -> int:
     failures += check_pack_refuses_symlinks(flux_validator)
     failures += check_manifest_write_never_follows_a_link(flux_validator)
     failures += check_verify_refuses_unsafe_members(flux_validator)
+    failures += check_verify_stops_at_its_caps_and_reports_a_broken_stream(flux_validator)
     failures += check_supply_chain_digests_each_target_once(flux_validator)
     failures += check_reads_bundles_as_utf8(flux_validator)
 
