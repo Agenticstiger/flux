@@ -365,6 +365,10 @@ class Bundle:
             self.err("flux.lock", load_error or "lockfile is not a mapping")
             return
         entries = lock.get("modules", {}) if isinstance(lock.get("modules"), dict) else {}
+        # Each target is digested once, however many refs name it: a digest costs
+        # the target's whole size, and a bundle may hold many short refs to one
+        # large document.
+        digests: dict[str, str] = {}
         for doc_id, path, name, rng in versioned:
             entry = entries.get(name)
             if not isinstance(entry, dict):
@@ -380,7 +384,9 @@ class Bundle:
             if declared != pinned:
                 self.err(doc_id, f"{path}: {name} declares version {declared} but flux.lock pins {pinned}")
             digest = entry.get("digest")
-            actual = "sha256:" + canonical_digest(target)
+            if name not in digests:
+                digests[name] = "sha256:" + canonical_digest(target)
+            actual = digests[name]
             if digest != actual:
                 self.err(doc_id, f"{path}: {name} content digest mismatch — flux.lock has {digest}, bundle has {actual}")
 
