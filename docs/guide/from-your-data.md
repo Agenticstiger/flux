@@ -21,8 +21,9 @@ never a record.
 property is checked against, unless the output checks withhold it, so this
 guide's run is checked and packed against the profile alone. A property that
 needs another statistic, such as a `support` property or a mean over a date or
-timestamp column, waits for `fluid profile --bundle`, which is not released.
-Step 6 shows how to check those against a slice of your records instead.
+timestamp column, needs `fluid profile --bundle`, which shipped in
+data-product-forge 0.32.0. Step 6 shows it, and how to check a property against
+a slice of your records instead.
 :::
 
 ## 1. Install
@@ -487,19 +488,48 @@ The pack holds the rows and the evidence for them, the scorecard included;
 `fluid profile` writes one ungrouped `mean/1` for each number column it
 profiles, and nothing else the fidelity check compares. A property that needs
 another statistic, such as a `support` property over `country` or a `mean` over
-`created_at`, is refused against the profile with
+`created_at`, is refused against that profile with
 [FLX-5037](../engine/reference/errors/FLX-5037.md), which names the statistic the
-profile lacks, and `ship` withholds the run. `fluid profile --bundle`, which is
-to write the statistics a Simulation declares, is not released.
+profile lacks, and `ship` withholds the run.
+
+`fluid profile --bundle`, which shipped in data-product-forge 0.32.0, answers
+them. It reads the fidelity block of the bundle's Simulation and writes the
+statistic each declared property is compared with: a mean, a histogram over the
+declared bins or levels, a support or a quantile, per group where the property
+has a `groupBy`. It does not answer a correlation. Declare the properties
+first, here a `support` over `country` and a `mean` over `created_at` beside
+the `mean` over `amount` in the Simulation of step 4:
+
+```yaml
+# under fidelity: in bundle/simulation.flux.yml
+properties:
+  - { property: mean, column: amount, tolerance: { type: relative, value: "0.10" } }
+  - { property: support, column: country, tolerance: { type: count, max: 0 } }
+  - { property: mean, column: created_at, tolerance: { type: relative, value: "0.10" } }
+```
+
+Then profile again with the bundle:
+
+```bash
+fluid profile contract.orders.fluid.yaml --expose orders \
+    --source data/orders.parquet --bundle bundle --out orders.profile.json
+```
+
+It writes `support/1` of `country` and `mean/1` of `amount` and `created_at`.
+Pin the digest it prints in place of the old one, as in step 5, and `verify`
+reports `fidelity orders: passed -- 3 of 3 declared properties within the
+margin against the pinned profile`.
 
 A `mean` whose sum the output checks withheld, for example because one or two
-records dominate it, cannot be scored against the profile either. With this
+records dominate it, cannot be scored against any profile, `--bundle` or not.
+With this
 guide's one property, `verify` then says the pinned profile withheld every group
 of every declared property, so nothing was scored, and `ship` withholds the run.
 
-Check a `support` property or a mean over a date or timestamp column against a
-committed slice instead: a file of the records themselves, from which the engine
-forms the statistics it compares. The engine then reads those records, which
+A property the profile still cannot answer, a correlation or one whose
+statistic the checks withheld, can be checked against a committed slice
+instead: a file of the records themselves, from which the engine forms the
+statistics it compares. The engine then reads those records, which
 gives up the aggregate-only path this guide follows, so use it only where the
 records may reach the engine, on your own machine for example.
 
