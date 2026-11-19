@@ -51,11 +51,11 @@ coercion; `'1' == 1` is `FLX-6005`). Numeric literals are parsed as `Decimal`, n
 **Runtime totality**: a type-checked expression never raises. A `null` operand makes every comparison and `in`
 evaluate to `false`, `!= null` to `true`, and `isNull()` to `true`. Methods on `null` return `false`.
 
-## 3. Attribute model (`expr/attrs.py`) — three scopes, derived at `plan` time, printed by `fluxsim expr model`
+## 3. Attribute model (`expr/attrs.py`): three scopes, derived at `plan` time, printed by `fluxsim expr model`
 
 A versioned, canonical JSON document (`attrmodel/1`) whose digest is inside `inputDigest`.
 
-### `subject` scope — `Segment.spec.query`, `Journey` guards
+### `subject` scope: `Segment.spec.query`, `Journey` guards
 | path | type | source |
 |---|---|---|
 | `id` | string | subject id |
@@ -68,13 +68,13 @@ A versioned, canonical JSON document (`attrmodel/1`) whose digest is inside `inp
 | vertical-pack attributes (telco: `products: set<string>`, `tenureMonths: number`, `latePaymentCount: number`, `arpu: number`) | per pack | `World.spec.vertical` → `verticals/<pack>.py` (v0.1 stopgap; FLUX 0.6 RFC moves the declaration into the spec) |
 Bare `lifecycle`, `products`, … are sugar for `subject.<name>` where unambiguous.
 
-### `event` scope — `Detector.pattern[].predicate`, `Journey.spec.trigger.condition`
+### `event` scope: `Detector.pattern[].predicate`, `Journey.spec.trigger.condition`
 CloudEvents context: `type`, `source`, `time` (string, RFC 3339), `subject` (the subject id); payload fields typed
 from the Signal's `dataschema` when it is a bundled/fetchable JSON Schema, else from a `signalAttributes` block in
 the vertical pack (telco `sig-payment-aborted`: `amount: number`, `attempts: number`, `channel: string`). Payload
 paths are addressed as `data.<field>`; bare `amount` is sugar for `data.amount`.
 
-### `observed` scope — `Playback.spec.personaMapping[].behaviorPattern`
+### `observed` scope: `Playback.spec.personaMapping[].behaviorPattern`
 Aggregate features per observed subject computed by the ingest step (telco: `late_payment_count: number`,
 `tenure_months: number`, `arpu: number`). Never raw records.
 

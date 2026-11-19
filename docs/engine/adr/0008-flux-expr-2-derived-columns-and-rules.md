@@ -5,7 +5,8 @@
 Accepted (2026-11-16). The engine implements the language (`flux_engine.expr2`); generating from rules and
 checking runs against them come next. The specification is
 [EXPR-SPEC-2](../spec/EXPR-SPEC-2.md). Its core is FLUID SQL/1, defined by the FLUID RFC `RFC-data-rules.md` in the
-forge-cli repository (Agenticstiger/forge-cli#896, Proposed).
+forge-cli repository (Agenticstiger/forge-cli#896, Proposed). **Amended 2026-11-18:** flux-expr/3 adds three
+extensions, so the four of decision 3 are the first four of seven (see the amendment below).
 
 ## Context
 
@@ -132,3 +133,15 @@ The maintainers settled each open point on 2026-11-16:
   - how generation is partitioned across roots.
 - Twenty-two FLX codes are reserved: `FLX-6101` to `FLX-6113` for the language, and `FLX-6201` to `FLX-6209` for
   rules and dependencies.
+
+## Amendment of 2026-11-18
+
+[ADR 0013](./0013-flux-expr-3-date-parts-date-arithmetic-and-concatenation.md), accepted on 2026-11-18, adds
+flux-expr/3, the route this record keeps for new extensions:
+
+1. **Seven extensions.** The four of decision 3 are the first four of seven. flux-expr/3 is flux-expr/2 with three
+   more: a date part (`EXTRACT`), date arithmetic (`ADD_DAYS`, `ADD_MONTHS`, `ADD_YEARS`) and string concatenation
+   (`||`), as [EXPR-SPEC-3](../spec/EXPR-SPEC-3.md) specifies. flux-expr/2 keeps its four, stays closed, and is
+   unchanged.
+2. **Two languages for a FLUX-side rule.** `FLX-6102` accepts `flux-expr/2` and `flux-expr/3` as a FLUX-side rule's
+   `language`. A contract's texts stay FLUID SQL/1.

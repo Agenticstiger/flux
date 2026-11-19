@@ -5,6 +5,10 @@
 Accepted 2026-11-16. **Amended 2026-11-17:** the record reader's pure half
 moves into flux-stats too, as `flux_stats.reading`, and the fidelity block's
 grammar follows as `flux_stats.fidelity` (see the amendments below).
+**Amended 2026-11-18:** the exact YAML read of a bundle and the canonical form
+move too, as `flux_stats.exact_yaml` and `flux_stats.canonical`, with PyYAML
+as the optional `yaml` extra, and a bundle's files are held to size caps
+before they are read.
 
 ## Context
 
@@ -90,7 +94,7 @@ Checked on 2026-11-16 before choosing (search receipts in the pull request):
   installs both. The engine's core gains no third-party dependency.
 - The name `flux-stats` was free on PyPI, and the engine's exact pin would
   have made a squatted release run code on any plain-pip install from source.
-  The owner registered it on 2026-11-16, before this change went public, with a
+  The owner registered it on 2026-11-16, before the exact pin was published, with a
   placeholder 0.0.1 that holds no code. Before the first release that carries
   flux-stats, its trusted publisher has to name this repository's release
   workflow (docs/RELEASING.md).
@@ -103,7 +107,7 @@ Checked on 2026-11-16 before choosing (search receipts in the pull request):
   floors of `flux_stats.fixedpoint`, `flux_stats.definitions` and
   `flux_stats.registry` are now held by the suite that ships with the package.
 - flux-stats supports Python 3.10 and newer, one release below the engine's
-  floor (founder, 2026-11-16): `fluid profile` runs inside forge-cli, which still
+  floor (the maintainers, 2026-11-16): `fluid profile` runs inside forge-cli, which still
   supports 3.10. The CI job `flux-stats alone` runs on 3.10, so nothing newer
   creeps in, and the floor rises when forge-cli drops 3.10.
 - `--committed-slice`, the engine's one path that reads records, stays in the
@@ -111,7 +115,7 @@ Checked on 2026-11-16 before choosing (search receipts in the pull request):
 
 ## Amendment of 2026-11-17
 
-The founder decided on 2026-11-17 that the record reader's pure half moves
+The maintainers decided on 2026-11-17 that the record reader's pure half moves
 too, in a pull request of its own after the first.
 
 1. **What moves.** `flux_stats.reading` holds how the fidelity check reads a
@@ -180,7 +184,7 @@ Consequences of the amendment:
 
 ## Amendment of 2026-11-17: the fidelity block
 
-The founder decided on 2026-11-17 that the fidelity block's grammar moves too,
+The maintainers decided on 2026-11-17 that the fidelity block's grammar moves too,
 in a pull request of its own after the reader's.
 
 1. **What moves.** `flux_stats.fidelity` holds how a Simulation's fidelity
@@ -227,3 +231,93 @@ Consequences of the amendment:
 - `import flux_stats` now loads the module, so every code it registers is in
   the catalog without the engine; the closure a fresh interpreter loads grows by
   one module and stays standard library only.
+
+## Amendment of 2026-11-18: the bundle read
+
+The maintainers decided on 2026-11-18 that flux-stats exports the read of a bundle
+that the engine takes its digests over, so that forge-cli's profiler and the
+engine read a bundle with one reader. flux-stats's core stays standard library
+only, and an optional extra brings PyYAML.
+
+1. **What moves.** `flux_stats.canonical` holds the canonical form of
+   KERNEL-SPEC §2.1: `canonicalise`, `coerce_key`, `render_decimal`,
+   `JCS_MAX_SAFE_INTEGER` and the codes they raise, `FLX-1001` and `FLX-1003`
+   to `FLX-1007`, with their titles and explanations unchanged.
+   `flux_stats.exact_yaml` holds the exact YAML read: `ExactLoader` (no float,
+   no datetime, every number exact) and `FLX-3105`, with `load_documents`, the
+   read of a text's documents, and `check_documents`, which holds a text to the
+   read's bounds before another reader reads it. Both take text and open no
+   file.
+2. **What stays.** `flux_engine.core.canonical` re-exports those names and
+   keeps the steps that need more than the standard library or that make a
+   digest: the RFC 8785 bytes (`rfc8785`), the sha256 (`hashlib`), masking and
+   field paths. `flux_engine.seam.resolve` re-exports `ExactLoader` and
+   `FLX_3105`, and keeps which files a bundle reads, how it opens them, and the
+   budget each of the bundle's two reads shares across its files.
+3. **The extra.** `flux_stats.exact_yaml` imports the standard library alone,
+   so `import flux_stats` loads nothing else and still registers every code.
+   PyYAML is imported when a document is first read or `ExactLoader` is first
+   named, and without it either raises an `ImportError` that names
+   `pip install 'flux-stats[yaml]'`. The engine depends on PyYAML itself, so its
+   requirements do not change. PyYAML is in flux-stats's `test` group, so the
+   `flux-stats alone` job runs the read's tests.
+4. **Bounds.** The read carries over the bounds forge-cli's port of it gained
+   in review. A document may write out at most 1,000,000 values once its
+   aliases and merge keys are written out, and nest at most 64 levels, counted
+   through its aliases; a document that holds itself through an alias is
+   refused. The merge keys of one read of a bundle copy at most 100,000 pairs.
+   A number needs at most 1,000 digits written out. Text nested too deeply for
+   the parser is refused instead of raising `RecursionError`. Each bound
+   refuses with `FLX-3105`, naming the file and the line, never a value. The
+   largest bundle in this repository writes out 1,106 values, nests 11 levels
+   and uses no merge key, and a bundle within the bounds reads to the same
+   documents as before. The read also bounds the mappings the merge keys of a
+   document name (1,000,000, each counted for every mapping that holds the key)
+   and the characters a document writes out (64 MiB), since a string is one
+   value however long it is and a number is spelled in full: it counts as the
+   digits its decimal is spelled in when that is more than its text, and a zero
+   counts the digits its scale spells, since the canonical form keeps the
+   scale (`digits_written_out`, which the fidelity block's readers share). The
+   main branch of the FLUX validator holds a document to the same bounds since
+   2026-11-19 (Agenticstiger/flux#37, not yet released), counting a number as
+   its text.
+5. **The validator's read.** The FLUX reference validator reads a bundle with
+   a plain SafeLoader, which bounds nothing in any release so far. So before
+   it reads a file, the engine holds the file's text to the bounds with
+   `check_documents`, decoded as the validator decodes it (in the locale's
+   encoding, as `Path.open()` opens it): a file decoded two ways can hold a
+   document that one decoding shows and the other hides in a comment. The
+   check also builds each integer, float and boolean scalar as that read
+   would, so one it cannot build is refused by its position. A file that does
+   not decode, or that holds a character YAML does not allow, is refused
+   there, because the validator meets either only where the file holds it,
+   after building every document before it. A path that is not a regular file
+   is refused without being read.
+6. **File sizes.** Each read takes a file whole, so the maintainers decided on
+   2026-11-18 that a bundle's files are held to two caps by their sizes,
+   checked before a byte is read: 4 MiB for one file (`MAX_FILE_BYTES` in
+   `flux_engine.seam.resolve`, the cap forge-cli's profiler holds a bundle's
+   files to), and 256 MiB for its documents and lockfile together
+   (`MAX_BUNDLE_READ_BYTES`, flux_spec's cap on an archive's members), so a
+   directory and the archive packed from it meet one limit. Both are
+   constants, as every other bound is. `load_bundle` takes every file's size
+   with `stat` before it opens any, and each read (`read_bundle_file`) takes
+   the file's `stat` again, refuses a path that is not a regular file, such
+   as a FIFO or a device, with no byte read, and reads at most one byte past
+   the cap. Past either cap, the read refuses with `FLX-3105`, naming the file
+   and its size or the bundle's total. In an evidence archive,
+   `verify_evidence` holds each document, lockfile and pack product to the
+   file cap by the size its header declares, before flux_spec reads it, and
+   flux_spec's own cap of the same size holds the archive's members together.
+
+Consequences of the amendment:
+
+- forge-cli's `fluid profile --bundle` reads a Simulation with these modules
+  once a flux-stats release carries them, and its `profile` extra asks for
+  `flux-stats[yaml]`, so its own port of the read goes.
+- The flux_stats import-linter contract does not change. `exact_yaml` imports
+  `sys`, for CPython's limit on an integer's digits (4300 on Python 3.10.0 to
+  3.10.6, which have none), and PyYAML only inside functions.
+- The check and the validator open a file separately, so a file changed
+  between the two is read unchecked. A bundle is read from a directory the
+  person running the engine controls, which this accepts.

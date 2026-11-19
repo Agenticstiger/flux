@@ -538,6 +538,30 @@ the digit count, which agree because an exponent of zero counts
 that the definitions they reach do not read, and four spellings of the
 "bin edge" subject, for the same reason.
 
+On 2026-11-19 kernel 0.2.0 joined the run (ADR 0010): `flux_engine/core/kernel2.py`,
+its draws, and `flux_engine/generator/columns.py`, the path that computes a slice a
+column at a time, with kernel 0.2.0's tests (`tests/kernel2`, and
+`tests/generator/test_columns.py`, which holds the column path to the per-row path).
+Those tests reach `rng.py` and `seedtree.py` too, whose scores rose, and `rng.py`'s
+floor rose with its score. Measured the same way that day:
+
+| Module | Baseline (2026-11-19) | Floor |
+|---|---|---|
+| `flux_engine/core/kernel2.py` | 89.2% (1 226 of 1 375) | 85% |
+| `flux_engine/generator/columns.py` | 91.2% (496 of 544) | 90% |
+| `flux_engine/core/rng.py` | 81.2% (515 of 634) | 80% |
+| `flux_engine/core/seedtree.py` | 72.1% (508 of 705) | 70% |
+
+Most of these survivors are not gaps in the tests. In `columns.py` they are fast paths
+whose general path gives the same values (an integer histogram at exponent zero), the
+`strict` flag of a `zip`, and conditions that, flipped, hand a slice to the per-row
+path, which gives the same rows. In a sample of one survivor in fifteen in
+`kernel2.py`, most change a refusal's message, a NumPy argument with no effect on the
+values (`copy=False`, a dtype the caller converts), or a comparison at an edge no
+input reaches exactly. One weakened `philox_block`'s check of its word count, which no
+test drove with a wrong count; `tests/kernel2/test_kernel2_robustness.py` now does, so
+the next weekly run kills it.
+
 Two of the floors sat below the 75% that is a common expectation for core
 logic, for reasons that were measured, not assumed. In a sample of 40
 survivors per module, 17 in `fixedpoint.py` and 18 in `seedtree.py` changed
@@ -552,14 +576,18 @@ rounding mode on a value that is already on the grid changes nothing that
 can be observed.
 
 The tests mutmut runs from the root are the kernel's own unit tests
-(`tests/core`, `tests/concordance`, `tests/stats`), plus the two fast,
+(`tests/core`, `tests/concordance`, `tests/stats`), kernel 0.2.0's (`tests/kernel2`
+and `tests/generator/test_columns.py`), plus the two fast,
 deterministic accuracy modules (`gof/test_kernel_numerics.py` and
 `fidelity/test_s_metric_definitions.py`). From `packages/flux-stats` it runs
 that package's own tests.
 The statistical batteries are left out. Each one recomputes tens of
 thousands of draws in a module-scoped fixture, so running them for every
 mutant would cost hours a week, on mutants the unit tests already settle.
-The whole run took 11 minutes on 8 cores.
+The whole run took 11 minutes on 8 cores. With kernel 0.2.0's modules it took 88
+minutes on 8 workers on a loaded development machine, against 18 the same way
+without them: Philox and `uniform53` reach every kernel 0.2.0 test, so each of
+their mutants runs them all.
 
 ## Aggregate-only
 

@@ -1,4 +1,4 @@
-# Profile document: normative specification (format 1-0-0)
+# Profile document: normative specification (format 1-1-0)
 
 A profile is a JSON document of aggregate statistics about the data a bundle
 imitates. A profiler computes it where the data lives and lets out only
@@ -10,7 +10,8 @@ of from a committed slice (§7).
 Normative files beside this page:
 
 - [`profile-1.schema.json`](profile-1.schema.json): the JSON Schema, whose
-  `$id` is `https://agenticstiger.github.io/flux/engine/spec/profile/1-0-0/FluxProfile.json`.
+  `$id` is `https://agenticstiger.github.io/flux/engine/spec/profile/1-1-0/FluxProfile.json`.
+  It validates format `1-0-0` documents too.
   The schema checks the shape. The rules it cannot express are stated here,
   and the reader (`flux_stats.profile`, in the flux-stats distribution the
   engine depends on) applies both.
@@ -32,7 +33,7 @@ A profile is one JSON object (RFC 8259) in UTF-8.
 | Key | Required | Holds |
 |---|---|---|
 | `_producer` | yes | A URI naming the tool that wrote the profile. |
-| `_schemaURL` | yes | The schema's `$id`. This engine reads format `1-0-0` and refuses any other URL. |
+| `_schemaURL` | yes | The `$id` of the format the document is written in. This engine reads formats `1-0-0` and `1-1-0` (§8) and refuses any other URL. |
 | `encoding` | yes | The grid that encoded quantities were formed on (§2). |
 | `disclosureRules` | yes | The disclosure rules, by name (§2). |
 | `tables` | yes | One entry per table, keyed by the FLUID `exposeId` it conforms to (§5). |
@@ -72,8 +73,8 @@ never quotes a value.
 `encoding` is `{ "fractionalBits": n, "rounding": "floor" }`, with `n` from 0
 to 128. It is the grid that the statistics which depend on a grid were
 formed on (KERNEL-SPEC §12): `mean/1`, `correlation/1` and `quantile/1`,
-whose quantities are encoded values, and `marginalHistogram/1`, whose values
-are floored onto the grid before they are binned.
+whose quantities are encoded values, and `marginalHistogram/1` and
+`quantile/2`, whose values are floored onto the grid before they are binned.
 
 `disclosureRules` maps a rule name to the rule that was applied. Every
 statistic and metric names one rule. The fields are ACRO's output-checking
@@ -98,13 +99,13 @@ A statistic is an object with these keys:
 
 | Key | Holds |
 |---|---|
-| `definition` | A registered identifier: `mean/1`, `marginalHistogram/1`, `levelHistogram/1`, `support/1`, `correlation/1` or `quantile/1`. |
+| `definition` | A registered identifier: `mean/1`, `marginalHistogram/1`, `levelHistogram/1`, `support/1`, `correlation/1`, `quantile/1` or `quantile/2`. |
 | `sampleSize` | `{ "min": a, "max": b }`, the band the number of records behind the statistic lies in. `max` may be absent, and is never below `min`. |
 | `disclosure` | The name of the rule in `disclosureRules` that was applied. |
 | `groups` | The groups, sorted by key, each key at most once (below). |
-| `bins` | `marginalHistogram/1` only: at least two strictly increasing decimal strings, the bin edges. |
+| `bins` | `marginalHistogram/1` and `quantile/2` only: at least two strictly increasing decimal strings, the bin edges. |
 | `levels` | `levelHistogram/1` only: the levels counted, distinct and sorted by code point. |
-| `level` | `quantile/1` only: the quantile level, a decimal string in `[0, 1]` with no sign. |
+| `level` | `quantile/1` and `quantile/2` only: the quantile level, a decimal string in `[0, 1]` with no sign. |
 | `groupBy` | A column statistic grouped by a categorical column of the same table (§5). |
 | `of` | A period statistic: the number column it sums (§5). |
 
@@ -119,8 +120,78 @@ A group is spelled as `S` spells a group (SEAM-FIDELITY-SPEC §4), with a
 | `support/1` | `support`, the distinct members, sorted |
 | `correlation/1` | `Sx`, `Sy`, `Sxx`, `Sxy`, `Syy` |
 | `quantile/1` | `quantileWitness`, `quantileBelow`, `quantileAtOrBelow` |
+| `quantile/2` | `quantileBin`, `binBelow`, `binThrough` |
 
 Sums and the quantile witness are integers on the grid, written as strings.
+
+`quantile/2` states no witness (ADR 0012). Its order statistic, at index
+`j = ceil(level * k)`, lies in the bin `[e_i, e_{i+1})` (the last bin closed
+at the top, as a histogram's is) whose index is `quantileBin`. `binBelow`
+counts the records below `e_i` and `binThrough` the records below
+`e_{i+1}`, or all of them for the last bin, so `binBelow < j <= binThrough`.
+All three are JSON integers.
+
+A profiler publishes the statistics of a column that count records between
+edges, `marginalHistogram/1`, `levelHistogram/1`, `quantile/2` and
+`quantile/1`, only under ADR 0012's rule, which
+`flux_stats.edge_counts.check_edge_counts` applies to each column's statistics
+and to each relationship's. A level histogram's declared levels are read as
+bins, one per level in their declared order. A cell is small when it holds 1
+to `minimumCell - 1` records, or none when the rule holds zeros disclosive.
+
+- Every such statistic of the column, at every level and in every group, is
+  on one declared partition: the column's first histogram's bins or its first
+  `quantile/2`'s, which a quantile's bins equal or coarsen, or its declared
+  levels. Otherwise the statistic is withheld. A `quantile/1` counts at its
+  witness, an edge no declaration fixes, so it is published only as the one
+  such statistic of its column, and is withheld beside any other: a
+  histogram, a `quantile/2`, another level, or the whole beside a groupBy. A
+  quantile checked beside them declares bins.
+- On unrounded counts, a `quantile/2` group's records below its bin, in it and
+  above it each number at least `minimumCell`, or none at the ends of the
+  range, which lie outside the declared range. A `quantile/1` group's records
+  below its witness, holding it and above it do the same, except that none
+  below or above, which says that no record lies between the witness and the
+  end of the range, is a cell of no records: allowed only where zeros are not
+  disclosive. A histogram's small cell is withheld.
+- A group of 1 to `minimumCell - 1` records, or of none where zeros are
+  disclosive, is withheld, and so is every group of every grouped statistic of
+  its groupBy (histograms, quantiles, means and supports alike), since the
+  column's count less the other groups' sizes gives its size.
+- No small cell is one a reader can form by adding or subtracting these
+  statistics' counts, for which more is withheld: within a group, the records
+  between any two edges its counts tie together, and a count that ties none
+  of its group's edges to the first edge is withheld; across groups, what the
+  groups' sum to the whole gives; a groupBy that still leaves a group partly
+  unknown is withheld whole when the column publishes another count at its
+  edges.
+- Only then are the counts rounded, and a group whose rounded counts no
+  longer satisfy `binBelow < ceil(level * k) <= binThrough`, or no longer prove
+  a `quantile/1`'s witness by its ranks, or whose positive count rounds to
+  zero, is withheld.
+
+Whatever withholds it, a group or cell of a statistic this rule decides is
+withheld with `C` (below). The rule takes the sizes of the column's groups as
+known, since its means and supports publish them too, which is why the size
+rule reaches those. A profiler passes every such statistic of a column to the
+check in one call: a statistic checked in a call of its own is judged alone.
+
+Outside this rule, and to be weighed where zeros are disclosive (ADR 0012,
+amendment of 2026-11-18):
+
+- A `support/1`, and the groups a grouped statistic lists, say which declared
+  levels hold no record.
+- A published `min` or `max` (§4) says that no record lies below or above it,
+  so the part of the declared range beyond it holds none. This leaves the rule
+  inconsistent at the ends of the range: where zeros are disclosive, a
+  `quantile/1` whose witness is the column's smallest value is withheld
+  because no record lies below its witness, though a published `min` already
+  shows that, and one whose witness is the largest value is withheld because
+  no record lies above its witness, though a published `max` already shows
+  that.
+- A profiler that published a group's count of nulls would give the group's
+  size in one column back from its size in another.
+
 An ungrouped statistic has exactly one group, keyed by the empty string.
 A grouped statistic keys every group by a name. A group is written in its
 one canonical spelling: read back and spelled again, it is the same JSON.
@@ -150,6 +221,15 @@ labels.
   **cell** can be withheld on its own. `cellStatus` lists one status per
   cell, and a cell's count is `null` exactly when its status is not `F`.
   Without `cellStatus`, every cell is published.
+- In a **count table** (`marginalHistogram/1`, `levelHistogram/1` and
+  `quantile/2`), and in a `quantile/1`, a profiler marks every group and every
+  cell that an output check withholds `C`, whatever the check (ADR 0012). A code that named the
+  check would tell a reader a range: `A` says that a cell holds fewer than
+  `minimumCell` records, and a total a reader knows can turn that range into
+  the count, as cells of 10, 9, 9 and 10 records published `F`, `A`, `A`, `F`
+  give both withheld cells as 9. The profiler's own report says why each
+  value is withheld. A reader reads every code, so a profile that marks a
+  count table's cell, or a `quantile/1`'s group, `A` or `D` still reads.
 
 A rule may round the counts it publishes, ACRO's base 5 among them. A
 rounded total and its rounded cells need not add up, so a count table is
@@ -189,8 +269,8 @@ optional `columnPairs` and `periods`.
 
 **`columns.<name>`** holds `domain` (`category`, `number` or `timestamp`) and
 optionally `metrics` (§4) and `statistics`. A column's statistics are
-`mean/1`, `marginalHistogram/1` and `quantile/1` over a number or timestamp
-column, and `levelHistogram/1` and `support/1` over a categorical one. A
+`mean/1`, `marginalHistogram/1`, `quantile/1` and `quantile/2` over a number
+or timestamp column, and `levelHistogram/1` and `support/1` over a categorical one. A
 `groupBy` names a categorical column of the same table, other than the
 column itself. No two statistics of one list share a definition and a shape.
 
@@ -207,8 +287,8 @@ month and `Sx` the sum per month.
 **`relationships`** is a list of `{ "parent", "child", "statistics" }`. `parent`
 and `child` are `{ "table", "columns" }`, two tables of the profile and key
 columns of each, the same number on both sides. The statistics describe the
-number of child rows each parent row has: `mean/1`, `marginalHistogram/1` and
-`quantile/1`.
+number of child rows each parent row has: `mean/1`, `marginalHistogram/1`,
+`quantile/1` and `quantile/2`.
 
 **`queries`** is a list of `{ "name", "statistics" }` with distinct names. A
 query's statistics are `levelHistogram/1` over the levels `["false", "true"]`,
@@ -277,12 +357,13 @@ missing:
   column the property reads, its `groupBy` included;
 - each such column has the domain the declaration reads it in: a `support`
   column is `category`, and a `range` column is `number` or `timestamp`;
-- the table holds the kind's definition over the same column (or the same
+- the table holds the kind's definition (`quantile/2` for a quantile
+  property that declares bins) over the same column (or the same
   pair, in order, for a correlation), with the same `groupBy`, the same bin
   edges, the column's declared levels (sorted) for a level histogram, and the
   same quantile level;
-- for `mean/1`, `marginalHistogram/1`, `correlation/1` and `quantile/1`, the
-  profile's `fractionalBits` equals the block's. A sum, a moment and an order
+- for `mean/1`, `marginalHistogram/1`, `correlation/1`, `quantile/1` and
+  `quantile/2`, the profile's `fractionalBits` equals the block's. A sum, a moment and an order
   statistic are encoded values. A bin count depends on the grid too: a value
   is floored onto the grid before it is binned, so on a grid that misses an
   edge, a value within one grid step below that edge falls in the bin above
@@ -343,6 +424,10 @@ newest it knows. A change to what an existing key means is a new major
 format, `2-0-0`, with a new URL. Statistics follow the same rule one level
 down: forming or comparing a statistic another way is a new definition
 (`mean/2`), never a new meaning of `mean/1`.
+
+Format `1-1-0` adds one registered definition, `quantile/2` (§3,
+ADR 0012). A document that holds a `quantile/2` statistic names `1-1-0`,
+and one that names `1-0-0` and holds one is refused (`FLX-5036`).
 
 Every addition is an aggregate that a profiler computes where the data
 lives. The engine still reads no record, and `flux_stats` still imports

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenticstiger.github.io/flux/engine/spec/profile/1-0-0/FluxProfile.json",
-  "title": "FLUX profile document, format 1-0-0",
-  "description": "Aggregate statistics of the data a FLUX bundle imitates, computed where the data lives. Counts are JSON integers and every other number is a decimal string. The shape is checked here; docs/spec/PROFILE-SPEC.md states the rules a schema cannot express (registered definitions, sorted groups and levels, cells that line up with their statuses, names that refer to columns and tables of the profile).",
+  "$id": "https://agenticstiger.github.io/flux/engine/spec/profile/1-1-0/FluxProfile.json",
+  "title": "FLUX profile document, format 1-1-0",
+  "description": "Aggregate statistics of the data a FLUX bundle imitates, computed where the data lives. Counts are JSON integers and every other number is a decimal string. The shape is checked here; docs/spec/PROFILE-SPEC.md states the rules a schema cannot express (registered definitions, sorted groups and levels, cells that line up with their statuses, names that refer to columns and tables of the profile). Format 1-1-0 adds the quantile/2 statistic and changes nothing format 1-0-0 says: this schema validates documents of both formats, and the reader refuses a document that names 1-0-0 and holds a quantile/2 statistic.",
   "type": "object",
   "required": [
     "_producer",
@@ -19,8 +19,11 @@
       "description": "The tool that wrote the profile (OpenLineage BaseFacet)."
     },
     "_schemaURL": {
-      "const": "https://agenticstiger.github.io/flux/engine/spec/profile/1-0-0/FluxProfile.json",
-      "description": "This schema's $id (OpenLineage BaseFacet)."
+      "enum": [
+        "https://agenticstiger.github.io/flux/engine/spec/profile/1-0-0/FluxProfile.json",
+        "https://agenticstiger.github.io/flux/engine/spec/profile/1-1-0/FluxProfile.json"
+      ],
+      "description": "The $id of the format the document is written in (OpenLineage BaseFacet): this schema's own, or format 1-0-0's. A document that holds a quantile/2 statistic names 1-1-0."
     },
     "encoding": {
       "$ref": "#/$defs/Encoding"
@@ -426,6 +429,47 @@
         }
       }
     },
+    "QuantileBinGroup": {
+      "description": "A published quantile/2 group: the bin of the statistic's bins that holds the order statistic, and the records below and through that bin. It states no witness.",
+      "type": "object",
+      "required": [
+        "group",
+        "k",
+        "status",
+        "quantileBin",
+        "binBelow",
+        "binThrough"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "$ref": "#/$defs/GroupKey"
+        },
+        "k": {
+          "$ref": "#/$defs/Count"
+        },
+        "status": {
+          "const": "F"
+        },
+        "quantileBin": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Count"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The index of the bin that holds the order statistic; null exactly when k is 0, as quantile/1's witness is."
+        },
+        "binBelow": {
+          "$ref": "#/$defs/Count"
+        },
+        "binThrough": {
+          "$ref": "#/$defs/Count"
+        }
+      }
+    },
     "Mean": {
       "type": "object",
       "required": [
@@ -651,6 +695,52 @@
         }
       }
     },
+    "QuantileBinned": {
+      "type": "object",
+      "required": [
+        "definition",
+        "sampleSize",
+        "disclosure",
+        "groups",
+        "bins",
+        "level"
+      ],
+      "properties": {
+        "definition": {
+          "const": "quantile/2"
+        },
+        "sampleSize": {
+          "$ref": "#/$defs/SampleSize"
+        },
+        "disclosure": {
+          "$ref": "#/$defs/Name"
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/QuantileBinGroup"
+              },
+              {
+                "$ref": "#/$defs/SuppressedGroup"
+              }
+            ]
+          }
+        },
+        "bins": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/Decimal"
+          }
+        },
+        "level": {
+          "$ref": "#/$defs/UnitInterval"
+        }
+      }
+    },
     "ColumnStatistic": {
       "allOf": [
         {
@@ -669,6 +759,9 @@
             },
             {
               "$ref": "#/$defs/Quantile"
+            },
+            {
+              "$ref": "#/$defs/QuantileBinned"
             }
           ]
         },
@@ -729,6 +822,9 @@
             },
             {
               "$ref": "#/$defs/Quantile"
+            },
+            {
+              "$ref": "#/$defs/QuantileBinned"
             }
           ]
         }

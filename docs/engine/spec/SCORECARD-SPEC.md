@@ -73,6 +73,7 @@ The similarity says how close the two sides are, on one scale for every kind.
 | `marginalHistogram/1`, `levelHistogram/1` | `1 - TV`, with `TV = (1/2) * sum_i abs(c_i/k - c'_i/k')` over the compared cells | SDMetrics TVComplement; mostlyai-qa accuracy |
 | `mean/1` | `max(0, 1 - abs(m - m') / W)`, where `m = Sx/k` in grid units and `W` is the width of the column's declared range on the block's grid | SDMetrics StatisticSimilarity, over the declared range |
 | `quantile/1` | `max(0, 1 - abs(w - w') / W)`, over the two order-statistic witnesses | the same, for the witness |
+| `quantile/2` | `max(0, 1 - d / W)`, where `d` is the synthetic witness's distance in grid units from the reference bin, `0` inside it | the same, for a bin |
 | `support/1` | the share of the synthetic group's records whose value is a member of the reference support; `1` for a group with no record | SDMetrics CategoryAdherence |
 | `correlation/1` | a lower bound of `1 - abs(r - r') / 2` (below) | SDMetrics CorrelationSimilarity |
 

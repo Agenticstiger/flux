@@ -148,6 +148,7 @@ refused with `FLX-5030`, the block's own rule:
 | `fidelity.columns.<c>.mean`, `.stddev`, `.rate`, `.nullFraction`, `.identifierLength` | the generator's draw parameters |
 | `fidelity.properties[].tolerance.value`, `.max` | a property's tolerance |
 | `fidelity.properties[].bins[]`, `.level`, `.minVariance` | a property's bins, quantile level and variance floor |
+| `rules[].mustBe`, `.mustBeLessThan`, `.mustBeLessOrEqualTo`, `.mustBeGreaterThan`, `.mustBeGreaterOrEqualTo`, `.mustBeBetween[]` | the band of a FLUX-side rule (EXPR-SPEC-2 section 1) |
 
 and the scorecard thresholds' operands: `scorecard.thresholds.overall.<op>`,
 `scorecard.thresholds.dimensions.<d>.<op>` and
@@ -170,7 +171,7 @@ come from:
 | Key | Holds |
 |---|---|
 | `pointer` | An RFC 6901 JSON Pointer into the pinned profile. |
-| `definition` | The registered definition the pointer lands in: a statistic (`mean/1`, `marginalHistogram/1`, `levelHistogram/1`, `support/1`, `correlation/1`, `quantile/1`) or a column metric (`count/1`, `nullCount/1`, `distinctCount/1`, `sum/1`, `min/1`, `max/1`, `quantiles/1`). A table's `rowCount` has none. |
+| `definition` | The registered definition the pointer lands in: a statistic (`mean/1`, `marginalHistogram/1`, `levelHistogram/1`, `support/1`, `correlation/1`, `quantile/1`, `quantile/2`) or a column metric (`count/1`, `nullCount/1`, `distinctCount/1`, `sum/1`, `min/1`, `max/1`, `quantiles/1`). A table's `rowCount` has none. |
 
 `plan` is always handed the profile a Simulation pins (PROFILE-SPEC.md
 section 6), and it reads every citation in it before anything is written. A
