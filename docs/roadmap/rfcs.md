@@ -80,7 +80,7 @@ off-policy call.
 ([schema](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json))
 — input (model, useCase, purpose, tokens) → allow/deny + reason code +
 `policyDigest` audit anchor — with a fixed check order, fail-closed defaults,
-skill budget narrowing, the reference gate `scripts/enforce.py`, and 34
+skill budget narrowing, the reference gate `scripts/enforce.py`, and 35
 published conformance vectors CI runs on every commit — pinning `allow`,
 `reasonCode` and `policyDigest`, the last canonicalised per
 [RFC 8785 (JCS)](https://datatracker.ietf.org/doc/rfc8785/) so gates in

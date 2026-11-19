@@ -41,7 +41,15 @@ a plausible gate gets it wrong:
   homoglyph all slip past. Identifiers are NFC-normalised and stripped before
   comparison; matching is case-sensitive.
 - **Off-spec policies are rejected, not reinterpreted.** A missing or
-  non-integer `tokenBudget` is `INVALID_POLICY`, never "no budget".
+  non-integer `tokenBudget` is `INVALID_POLICY`, never "no budget". So is a
+  policy that holds a value RFC 8785 cannot write (a number that is not
+  finite, which a JSON parser may read `1e999` as, an integer past 2^53-1, or
+  a key that is not a string), since there is no digest of it to name: its
+  decision carries the digest of `{}`, as it does for a policy that is not an
+  object. A skill whose own `tokenBudget` is present and not an integer, or
+  that is not an object, is `INVALID_POLICY` too, never an unnarrowed policy;
+  an integer of any size is read as before, and `min(skill, policy)` keeps it
+  from widening.
 
 The order is normative because it makes decisions *comparable*: two
 independent gates, given the same policy and request, return not just the same
@@ -72,12 +80,12 @@ document that authorised it *and* see what actually applied.
 ### Conformance is a test suite, not a claim
 
 The vectors are published:
-[`tests/enforcement-vectors.json`](https://github.com/Agenticstiger/flux/blob/main/tests/enforcement-vectors.json)
-— 34 cases pinning `allow`, `reasonCode` **and** `policyDigest` across allow
-paths, every deny code, budget boundaries, skill narrowing (including a skill
-that tries to *widen*), malformed requests, off-spec policies, normalisation
-evasions, canonicalisation, and the check-order tie-breaks. Run the reference
-gate, or your own:
+[`tests/enforcement-vectors.json`](https://github.com/Agenticstiger/flux/blob/main/tests/enforcement-vectors.json),
+35 cases pinning `allow`, `reasonCode` **and** `policyDigest` (a policy RFC 8785
+cannot write has none) across allow paths, every deny code, budget boundaries,
+skill narrowing (including a skill that tries to *widen*), malformed requests,
+off-spec policies, normalisation evasions, canonicalisation, and the
+check-order tie-breaks. Run the reference gate, or your own:
 
 ```bash
 python3 scripts/enforce.py                    # the reference implementation

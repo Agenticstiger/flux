@@ -9,7 +9,9 @@ and answers it identically everywhere:
 
 Checks run in a fixed, normative order and the first failure wins:
 
-  0. INVALID_POLICY          the policy itself is off-spec (fail closed)
+  0. INVALID_POLICY          the policy itself is off-spec (fail closed): a missing or
+                             non-integer budget, a value RFC 8785 cannot write (a number that
+                             is not finite), a skill budget that is not an integer
   1. INVALID_REQUEST         the request is malformed
   2. MODEL_NOT_ALLOWED       model outside agentPolicy.allowedModels
   3. USE_CASE_DENIED         use case listed in deniedUseCases
@@ -142,6 +144,30 @@ def policy_digest(policy) -> str:
     return "sha256:" + hashlib.sha256(canonical_bytes(policy)).hexdigest()
 
 
+def digest_problem(document) -> str | None:
+    """Why *document* cannot be written in RFC 8785 form, or None.
+
+    JCS has no spelling for a number that is not finite (a NaN, an infinity, which `1e999` spells in
+    JSON and which a JSON parser may read as one), an integer past 2^53-1, a key that is not a string,
+    or text no UTF-8 holds. Such a policy has no `policyDigest`, so it is off-spec. Only the class of
+    the failure is named, in plain words, never a value: an integer of thousands of digits cannot even
+    be spelled.
+    """
+    try:
+        canonical_bytes(document)
+    except rfc8785.FloatDomainError:
+        return "a number that is not finite"
+    except rfc8785.IntegerDomainError:
+        return f"an integer past the JSON-safe domain ({MAX_SAFE_INTEGER})"
+    except (rfc8785.CanonicalizationError, UnicodeError):  # bytes, a key that is not text, a lone surrogate
+        return "a value or a key that JSON has no spelling for"
+    except RecursionError:
+        return "nesting too deep to write"
+    except ValueError:  # an integer of more digits than Python spells
+        return "an integer of too many digits to write"
+    return None
+
+
 def _string_list(value):
     return isinstance(value, list) and value and all(isinstance(v, str) and v.strip() for v in value)
 
@@ -167,6 +193,22 @@ def policy_problem(policy) -> str | None:
             return f"{field}, when present, must be a non-empty array of non-empty strings"
     if "purposeLimitation" in policy and not isinstance(policy["purposeLimitation"], bool):
         return "purposeLimitation must be a boolean"
+    detail = digest_problem(policy)
+    if detail:
+        return f"the policy holds a value RFC 8785 cannot write ({detail}), so it has no policyDigest"
+    return None
+
+
+def skill_problem(skill) -> str | None:
+    """Why this skill is off-spec, or None. A skill narrows the budget, so one whose own budget is present and
+    not an integer (a NaN, an infinity, text) must not mean "no narrowing": that is a wider budget than its
+    author gave it. Any integer is read as before, and `min(skill, policy)` keeps it from widening."""
+    if not skill:
+        return None
+    if not isinstance(skill, dict):
+        return "skill must be an object"
+    if "tokenBudget" in skill and as_int(skill["tokenBudget"]) is None:
+        return "a skill's tokenBudget, when present, must be an integer"
     return None
 
 
@@ -218,18 +260,30 @@ def effective_policy(policy: dict, skill: dict | None = None) -> dict:
     return narrowed
 
 
+def _policy_digest_of(policy) -> str:
+    """The `policyDigest` of a decision: the document's policy's, or that of `{}` when it has none, as for a
+    policy that is not an object. A policy RFC 8785 cannot write is INVALID_POLICY and nothing more, and
+    its decision is still an answer, not a raise."""
+    if isinstance(policy, dict):
+        try:
+            return policy_digest(policy)
+        except (ValueError, RecursionError):
+            pass
+    return policy_digest({})
+
+
 def _decision(allow, code, policy, request, skill=None, budget=None, **fmt):
     fields = {**(request if isinstance(request, dict) else {}), "budget": budget, **fmt}
     decision = {
         "allow": allow,
         "reasonCode": code,
         "reason": REASONS[code].format(**fields),
-        "policyDigest": policy_digest(policy) if isinstance(policy, dict) else policy_digest({}),
+        "policyDigest": _policy_digest_of(policy),
         "request": request if isinstance(request, dict) else {},
     }
     if budget is not None:
         decision["effectiveBudget"] = budget
-    if skill and isinstance(skill.get("name"), str):
+    if isinstance(skill, dict) and isinstance(skill.get("name"), str):
         decision["skillRef"] = skill["name"]
     return decision
 
@@ -241,7 +295,7 @@ def decide(policy: dict, request: dict, skill: dict | None = None) -> dict:
     pre-narrowed policy, so the decision's digest identifies the authorising
     document and `effectiveBudget`/`skillRef` record what actually applied.
     """
-    problem = policy_problem(policy)
+    problem = policy_problem(policy) or skill_problem(skill)
     if problem:
         return _decision(False, "INVALID_POLICY", policy, request, skill, detail=problem)
 

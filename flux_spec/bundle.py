@@ -47,6 +47,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import os
 import shutil
 import sys
@@ -416,6 +417,19 @@ def _extract_safely(tar: tarfile.TarFile, root: Path, problems: list[str]) -> Pa
     return root / tops.pop()
 
 
+def _refuse_constant(name: str):
+    """json reads NaN, Infinity and -Infinity, which JSON does not have: a number that is not finite is no value."""
+    raise ValueError(f"{name} is not JSON")
+
+
+def _finite_float(text: str) -> float:
+    """json reads `1e999` as an infinity, which is no value either: a number past what a float holds."""
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"a number past what a float holds is not a value ({text[:30]})")
+    return value
+
+
 def verify(archive: Path, validator=None) -> int:
     """Verify an archive offline. Always reports; never raises.
 
@@ -445,7 +459,9 @@ def verify(archive: Path, validator=None) -> int:
                 problems.append(f"no {MANIFEST_NAME}")
                 raise _Rejected()
             try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest = json.loads(
+                    manifest_path.read_text(encoding="utf-8"), parse_constant=_refuse_constant, parse_float=_finite_float
+                )
                 Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))).validate(manifest)
             except RecursionError:
                 # json decodes a nested array or object by recursion.

@@ -40,9 +40,11 @@ Runs fully offline: no network, no running engine. Exit code 0 = green.
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from collections.abc import Iterable
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 try:
@@ -107,6 +109,10 @@ REF_KINDS = {
 FREE_FORM_KEYS = {"payloadTemplate", "config", "demographics", "attributes", "annotations", "labels", "extensions"}
 
 SUM_TOLERANCE = 1e-9
+
+#: The most digits a number may need written out, as the FLUX engine's read holds it (a zero counts the
+#: digits its scale spells). A gate compares a number, so one the engine cannot read must not pass here.
+MOST_NUMBER_DIGITS = 1_000
 
 #: The most values one YAML document may write out once its aliases and merge
 #: keys are written out. PyYAML builds an alias as a shared reference, so a
@@ -412,11 +418,44 @@ def _construct_integer(loader, node):
     return value
 
 
+def _digits_written_out(number: Decimal) -> int:
+    """The digits the finite *number* needs written out without an exponent, a leading `0.` not counted, as
+    the FLUX engine's read counts them. A zero counts the digits its scale spells: `0.e-10000000` is
+    spelled in ten million, however little its value is."""
+    sign, coefficient, exponent = number.as_tuple()
+    if not number:
+        return max(1, -exponent)
+    return len(coefficient) + exponent if exponent >= 0 else max(len(coefficient), -exponent)
+
+
+def _construct_float(loader, node):
+    """A float scalar, or `_Unbuildable`: one its tag cannot build, one that is not finite (`.nan`, `.inf`,
+    or a number past what a float holds, `1.0e+400`), one that is no decimal number (an exponent past what
+    a decimal holds, `0.e-99999999999999999999`), or one that needs more than 1,000 digits written out
+    (`1.0e-1001`, `0.e-10000000`), as the FLUX engine's read refuses them. A NaN is neither above nor below
+    anything, so a gate that compares it passes it; none sees one."""
+    where = _where(node)
+    try:
+        value = yaml.SafeLoader.construct_yaml_float(loader, node)
+    except (ValueError, IndexError, KeyError, OverflowError) as exc:
+        raise _Unbuildable(f"a scalar read as a float has no float value {where}") from exc
+    if not math.isfinite(value):
+        raise _Unbuildable(f"an infinite or not-a-number value has no digest and no ordering {where}")
+    text = loader.construct_scalar(node).replace("_", "")
+    if ":" not in text:
+        try:
+            number = Decimal(text)
+        except InvalidOperation as exc:  # a number is not read that this cannot count, whatever its value
+            raise _Unbuildable(f"a scalar read as a float is not a decimal number {where}") from exc
+        if _digits_written_out(number) > MOST_NUMBER_DIGITS:
+            raise _Unbuildable(f"a number that needs more than {MOST_NUMBER_DIGITS} digits written out is too long {where}")
+    return value
+
+
 def _constructing(build, kind: str, noun: str):
     """*build*, a SafeLoader constructor, as one that raises `_Unbuildable` where it would raise a bare
-    ValueError, IndexError, KeyError or OverflowError for a scalar that cannot be built: one its explicit
-    tag cannot build (`!!float ZZZ`, `!!bool maybe`), or a sexagesimal float of so many parts that its
-    place values overflow a float (`1:1:` and so on, 175 parts or more, which YAML resolves by itself)."""
+    ValueError, IndexError, KeyError or OverflowError for a scalar its explicit tag cannot build
+    (`!!bool maybe`). A scalar YAML resolves by itself always builds."""
     def construct(loader, node):
         try:
             return build(loader, node)
@@ -446,8 +485,7 @@ _StringTimestampLoader.add_constructor(
     lambda loader, node: loader.construct_scalar(node),
 )
 _StringTimestampLoader.add_constructor("tag:yaml.org,2002:int", _construct_integer)
-_StringTimestampLoader.add_constructor(
-    "tag:yaml.org,2002:float", _constructing(yaml.SafeLoader.construct_yaml_float, "a float", "float"))
+_StringTimestampLoader.add_constructor("tag:yaml.org,2002:float", _construct_float)
 _StringTimestampLoader.add_constructor(
     "tag:yaml.org,2002:bool", _constructing(yaml.SafeLoader.construct_yaml_bool, "a boolean", "boolean"))
 
@@ -475,6 +513,11 @@ def load_yaml_docs(path: Path):
     where PyYAML raised a bare ValueError, IndexError or KeyError for it: an
     integer of more than 4300 digits, and a scalar its explicit tag cannot
     build (`!!int ''`, `!!float ZZZ`, `!!bool maybe`).
+
+    So is a float the FLUX engine's read refuses: one that is not finite (`.nan`,
+    `.inf`, a number past what a float holds), which no gate may compare, and one
+    that needs more than 1,000 digits written out (`0.e-10000000`). A sexagesimal
+    float reads, which the engine does not take.
     """
     try:
         with path.open(encoding="utf-8") as fh:
@@ -592,12 +635,12 @@ class Bundle:
             kind, spec = doc.get("kind"), doc.get("spec", {})
             if kind == "World":
                 mix = spec.get("population", {}).get("lifecycleMix", {})
-                if mix and abs(sum(mix.values()) - 1.0) > SUM_TOLERANCE:
+                if mix and not abs(sum(mix.values()) - 1.0) <= SUM_TOLERANCE:   # not `>`: a NaN must fail
                     self.err(doc_id, f"population.lifecycleMix sums to {sum(mix.values())}, expected 1.0")
             elif kind == "Experiment":
                 variants = spec.get("variants", [])
                 weights = [v.get("weight", 0) for v in variants]
-                if variants and abs(sum(weights) - 1.0) > SUM_TOLERANCE:
+                if variants and not abs(sum(weights) - 1.0) <= SUM_TOLERANCE:
                     self.err(doc_id, f"variant weights sum to {sum(weights)}, expected 1.0")
                 names = [v.get("name") for v in variants]
                 if len(names) != len(set(names)):
@@ -643,11 +686,11 @@ class Bundle:
                     continue
                 if trait.get("dist") == "categorical":
                     total = sum(v for v in trait.get("levels", {}).values() if isinstance(v, (int, float)))
-                    if abs(total - 1.0) > SUM_TOLERANCE:
+                    if not abs(total - 1.0) <= SUM_TOLERANCE:
                         self.err(doc_id, f"traits.{name}.levels sums to {total}, expected 1.0")
                 elif trait.get("dist") == "normal":
                     lo, hi = trait.get("min"), trait.get("max")
-                    if lo is not None and hi is not None and lo >= hi:
+                    if lo is not None and hi is not None and not lo < hi:
                         self.err(doc_id, f"traits.{name}: min {lo} must be below max {hi}")
 
     def _versioned_refs(self):
@@ -758,7 +801,7 @@ class Bundle:
                 if model and model not in allowed:
                     self.err(doc_id, f"skills[{i}].model '{model}' is not in agentPolicy.allowedModels")
                 sb = skill.get("tokenBudget")
-                if sb and sb > budget:
+                if sb and not sb <= budget:
                     self.err(doc_id, f"skills[{i}].tokenBudget {sb} exceeds agentPolicy.tokenBudget {budget}")
 
     def check_fluid_documents(self):
@@ -842,10 +885,10 @@ class Bundle:
             and p.get("spec", {}).get("worldRef") == world_ref
             and isinstance(p.get("spec", {}).get("scorecard"), dict)
         ]
-        scores = [c for c in scores if isinstance(c, (int, float))]
+        scores = [c for c in scores if isinstance(c, int) or isinstance(c, float) and math.isfinite(c)]   # a NaN is no credibility
         if not scores:
             self.err(doc_id, f"{where}: minCredibility {min_credibility} set but no Playback scorecard calibrates world '{world_ref}'")
-        elif max(scores) < min_credibility:
+        elif not max(scores) >= min_credibility:   # not `<`: a NaN minimum must fail too
             self.err(doc_id, f"{where}: twin credibility {max(scores)} is below the required minCredibility {min_credibility}")
 
     def _gating_consent_profiles(self, sim_doc):
