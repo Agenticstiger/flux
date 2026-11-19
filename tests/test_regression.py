@@ -167,10 +167,16 @@ sim_exact_077 = envelope_052(
 
 
 envelope_053 = functools.partial(envelope, flux_version="0.5.3")
+envelope_054 = functools.partial(envelope, flux_version="0.5.4")
 
 
 # 0.5.3: the window widens, and the FLUID 0.7.7 preview moves to a newer pin
 sim_exact_077_053 = envelope_053(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
+)
+# 0.5.4: the window widens, and no constraint of the schema changes
+sim_exact_077_054 = envelope_054(
     "Simulation", worldRef="w",
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
 )
@@ -185,6 +191,7 @@ sim_bad_digest = envelope_041(
 )
 
 CASES_PASS = {
+    "0.5.4: a 0.5.4 document pins the FLUID 0.7.7 preview exactly": sim_exact_077_054,
     "0.5.3: a 0.5.3 document pins the FLUID 0.7.7 preview exactly": sim_exact_077_053,
     "0.5.2: exact FLUID 0.7.7 (preview) pin at the seam": sim_exact_077,
     "0.5.1: exact FLUID 0.7.6 pin at the seam": sim_exact_076,
@@ -826,6 +833,29 @@ def check_preview_repin(flux_validator) -> list[str]:
     return failures
 
 
+def check_the_window_widens_in_0_5_4() -> list[str]:
+    """0.5.4 only widens the window (schema-diffs/diff-0.5.3-to-0.5.4.md): the immutable 0.5.3 file refuses a
+    0.5.4 document, and the two files differ in their id, the version their description names and the window."""
+    failures = []
+    schema_053 = json.loads((REPO / "schema" / "flux-schema-0.5.3.json").read_text(encoding="utf-8"))
+    schema_054 = json.loads((REPO / "schema" / "flux-schema-0.5.4.json").read_text(encoding="utf-8"))
+    if not list(Draft202012Validator(schema_053).iter_errors(sim_exact_077_054)):
+        failures.append("[schema] a 0.5.4 document should fail the immutable 0.5.3 schema (fluxVersion window)")
+    if schema_054["properties"]["fluxVersion"]["enum"] != schema_053["properties"]["fluxVersion"]["enum"] + ["0.5.4"]:
+        failures.append("[schema] the 0.5.4 window is not the 0.5.3 window and 0.5.4")
+
+    def without_the_version(schema, version):
+        stripped = copy.deepcopy(schema)
+        stripped.pop("$id")
+        stripped["description"] = stripped["description"].replace(f"FLUX v{version} ", "FLUX v<version> ")
+        stripped["properties"]["fluxVersion"].pop("enum")
+        return stripped
+
+    if without_the_version(schema_053, "0.5.3") != without_the_version(schema_054, "0.5.4"):
+        failures.append("[schema] 0.5.4 changes something besides its id, its description and the window")
+    return failures
+
+
 def check_pack_from_looser_preview(flux_validator) -> list[str]:
     """verify reads the preview the running release carries (VERSIONING.md,
     FLUID previews): a pack made while the 0.7.7 preview admitted
@@ -928,7 +958,7 @@ def check_packs_across_releases(flux_validator) -> list[str]:
         failures.append(f"[bundle] the window {WINDOW} does not resolve to one shipped schema per version: {sorted(accepted)}")
 
     # the releases that shipped the bundler before this one: their packs are in the wild
-    for version in ("0.5.0", "0.5.1", "0.5.2"):
+    for version in ("0.5.0", "0.5.1", "0.5.2", "0.5.3"):
         with tempfile.TemporaryDirectory() as tmp:
             work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
             rc, archive = _pack_as(version, EXAMPLES, work, out)
@@ -2707,6 +2737,9 @@ def main() -> int:
     failures += check_preview_repin(flux_validator)
     failures += check_pack_from_looser_preview(flux_validator)
 
+    # 0.5.4: the window widens and nothing else in the schema
+    failures += check_the_window_widens_in_0_5_4()
+
     # ref-like keys inside free-form payloads must not be flagged
     with tempfile.TemporaryDirectory() as tmp:
         bundle = Path(tmp) / "bundle"
@@ -3039,7 +3072,8 @@ def main() -> int:
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
         + 11  # RFC-09 negative fixtures: 8 archive attacks + 2 malformed inputs + size cap
-        + 8   # RFC-09 across releases: window resolves, 0.5.0, 0.5.1 and 0.5.2 packs verify, named
+        + 1   # 0.5.4: the window widens and nothing else in the schema
+        + 9   # RFC-09 across releases: window resolves, 0.5.0, 0.5.1, 0.5.2 and 0.5.3 packs verify, named
               # schema applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
         + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link
         + 1   # RFC-09 the manifest write never follows a link that appears after that refusal

@@ -2,6 +2,44 @@
 
 One human-written diff per released version pair. The regression suite pins every behavioral change.
 
+## 0.5.3 → 0.5.4
+
+**The FLUX schema only widens its window; the validator's input bounds
+tighten.** No constraint of the schema changes (regression-asserted). The
+validator, `pack`, `verify` and the reference enforcement gate refuse input
+that is outside the JSON data model or past an implementation limit, where
+0.5.3 read it, raised on it, or read it as another input. A document inside the
+bounds validates as it did.
+
+- Read by 0.5.3 and refused now, with the file, line and column: a NaN, an
+  infinity or a float past what a double holds (`.nan`, `.inf`, `1.0e+400`)
+  where the schema does not bound the field; a float that needs more than
+  1,000 digits written out (`1.0e-1001`, `0.e-10000000`); an integer of more
+  than 4,300 digits; a YAML document that writes out more than 1,000,000
+  values or 64 MiB of characters once its aliases and merge keys are written
+  out, that nests deeper than 64 levels, that holds itself through an alias or
+  whose merge keys name more than 1,000,000 mappings; and a file that is not
+  UTF-8 on a host whose locale is not. In the enforcement gate, `decide`
+  answers `INVALID_POLICY` for a skill whose `tokenBudget` is present and not
+  an integer, and for a skill that is falsy and not an object (`[]`, `false`,
+  `0`, `""`), which 0.5.3 allowed.
+- Raised on by 0.5.3 and reported now: a scalar PyYAML cannot build, a
+  document nested too deeply, a value RFC 8785 cannot write in a locked Module,
+  a broken gzip stream, a NUL byte in an archive path, a manifest that is not
+  UTF-8 or is nested too deeply, and a policy `decide` cannot digest. The diff
+  note lists each with what it is now.
+- A pack that 0.5.3 made from a document one of those bounds refuses no longer
+  verifies under 0.5.4: it reports `bundle no longer validates against
+  flux-schema-0.5.3.json` and names the document. Verify it with flux-spec
+  0.5.3. The bounds do not reset the window (VERSIONING.md, Input bounds).
+- `fluxVersion` enum widens to
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2", "0.5.3", "0.5.4"]`.
+- `$id` → `flux-schema-0.5.4.json`; `flux-schema-latest.json` aliases 0.5.4;
+  UI hints regenerate as `flux-ui-hints-0.5.4.json`. The enforcement and
+  manifest contracts are unchanged and keep their 0.5.0 files. The enforcement
+  conformance vectors gain three, 37 in all, all for the skill rule.
+- The FLUID window and the 0.7.7 preview pin are unchanged.
+
 ## 0.5.2 → 0.5.3
 
 **The FLUX schema only widens its window; the FLUID 0.7.7 preview moves to a

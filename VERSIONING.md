@@ -41,8 +41,10 @@ never the remedy: it changes the manifest bytes and breaks a detached
 signature over them. A `schemaId` outside the window, from before a breaking
 reset or from a newer release, is refused with the versions the toolchain
 accepts. Verify that pack with a flux-spec release whose window includes it.
-One more case refuses a pack from inside the window: its FLUID contract
-declares a preview whose pin has moved since (FLUID previews, below).
+Two more cases refuse a pack from inside the window: its FLUID contract
+declares a preview whose pin has moved since (FLUID previews, below), and one
+of its documents is outside an input bound that the current release sets
+(Input bounds, below).
 
 This leans on the rule above: a release that tightens a constraint is breaking
 and resets the window. So no schema inside the window accepts a document that
@@ -57,15 +59,16 @@ an older schema in the window gains nothing a current pack would be refused.
 - **Post-1.0:** SemVer. Patch = editorial/constraint-relaxing fixes; minor =
   additive only (every valid document stays valid, window widens); major =
   breaking, with a migration section in the diff. A FLUID preview's pin move
-  is outside these rules (FLUID previews, below).
+  and a change to an input bound are outside these rules (FLUID previews and
+  Input bounds, below).
 
 ## What counts as breaking
 
 Adding a required field, removing or renaming any field, tightening any
 constraint (pattern, enum, minimum, `additionalProperties`), narrowing the
 seam's `fluidVersion` enum, or changing validator semantics so a previously
-green bundle fails. A FLUID preview's pin move is the one exception (FLUID
-previews, below).
+green bundle fails. A FLUID preview's pin move (FLUID previews, below) and a
+change to an input bound (Input bounds, below) are the two exceptions.
 
 ## The FLUID seam window
 
@@ -104,3 +107,27 @@ fails on any byte difference.
   `pins.json` (the file stays, with an empty list once no preview is left). An
   exact pin keeps working, ranges start to reach the version, and the schema
   diff names anything the release changed from the preview.
+
+## Input bounds
+
+A release may refuse input that an earlier release accepted when the input is
+outside the JSON data model, or when it is past a limit that RFC 8259 (sections
+6 and 9) lets an implementation set. Three kinds of change fall under this
+rule:
+
+- **Outside the JSON data model.** A number that is not finite (NaN, an
+  infinity), a string that holds a lone surrogate, a mapping key that is not a
+  string, and a value JSON has no spelling for.
+- **Implementation limits.** The range and the precision of a number (a float
+  past what a double holds, a number that needs more than a set number of
+  digits written out), and the size, the depth and what a YAML document writes
+  out once its aliases and merge keys are written out.
+- **Enforcement input.** `decide` may answer input that is off-spec with
+  `INVALID_POLICY`, where an earlier release raised, or read the input as
+  another one: a policy RFC 8785 cannot write, and a skill that is not an
+  object or whose `tokenBudget` is not an integer.
+
+Such a change does not reset the window, even when it refuses a bundle, a pack
+or a call that an earlier release accepted. The schema diff of the release
+names each of them with what the earlier release accepted, and a pack that a
+bound refuses verifies with the release that made it.
