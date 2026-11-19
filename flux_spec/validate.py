@@ -107,6 +107,82 @@ FREE_FORM_KEYS = {"payloadTemplate", "config", "demographics", "attributes", "an
 
 SUM_TOLERANCE = 1e-9
 
+#: The most values one YAML document may write out once its aliases and merge
+#: keys are written out. PyYAML builds an alias as a shared reference, so a
+#: document of a kilobyte can stand for billions of values, and whatever walks
+#: the document or spells a value out pays for every one of them. This is the
+#: bound the FLUX engine's read holds a document to, so the validator refuses
+#: what the engine refuses. It bounds what a document stands for, not how long
+#: its text is: no example document writes out as many as 200.
+MAX_YAML_VALUES = 1_000_000
+
+#: The most levels one YAML document may nest, counted through its aliases and
+#: merge keys, the document itself being level 1. The engine's bound as well.
+MAX_YAML_DEPTH = 64
+
+#: The most characters one YAML document may write out, its aliases and merge keys
+#: written out, in the keys and values it holds. A string is one value however
+#: long it is, so the bound on values leaves a long string written out through
+#: many aliases to cost its length each time: a document of 58 KB held 2,000
+#: aliases of one 50,000 character string, and the schema message it raised
+#: spelled all of it out. A document that uses no alias writes out no more than
+#: its text holds, so only one of this size is refused; no example document
+#: writes out as many as 3,000. The size, 64 MiB, is about 64 characters for
+#: each of the 1,000,000 values a document may write out. Spelled out in a
+#: message a string can take several times its length (a repr escapes what it
+#: cannot print), so this bounds what is built to hundreds of MB, and the cap
+#: on messages bounds what is kept and printed. The engine's read does not
+#: count characters.
+MAX_YAML_CHARS = 64 * 1024 * 1024
+
+#: The most mappings the merge keys of one YAML document may name, each counted
+#: for every mapping that holds the key. A merge key adds what the mappings it
+#: names write out, and naming an empty one adds nothing, yet PyYAML visits each
+#: one every time: a thousand mappings that each merge a list of a thousand
+#: empty mappings write out about two thousand values and cost a million
+#: visits. A mapping that names a non-empty one adds at least two values, so a
+#: document within MAX_YAML_VALUES reaches this only by naming empty mappings.
+MAX_YAML_MERGED = 1_000_000
+
+#: The most characters one validator message keeps, and the most of the name of
+#: the document it is about. A schema message spells out the value it refuses,
+#: which can be large even inside the bounds above.
+MAX_MESSAGE = 1_000
+MAX_NAME = 200
+
+#: The most characters of one line of validator or verify output, past its indent:
+#: a name and a message, or what verify says about an archive, whose own names and
+#: manifest values it spells out as they come.
+MAX_LINE = 2_000
+
+_NOTE = " [... {} characters not shown ...] "
+
+
+def bounded(text: str, limit: int | None = None) -> str:
+    """*text* when it fits in *limit* characters (MAX_MESSAGE), else its start and its end.
+
+    jsonschema writes the value it refuses first and its verdict last
+    ("{...} is not of type 'string'"), so keeping only the start would drop the
+    part that says what is wrong. Both ends are kept, around a count of the
+    characters left out, so the first line still reads. The result is never
+    longer than *limit*, and the cost of making it is the limit, however long
+    *text* is.
+    """
+    limit = MAX_MESSAGE if limit is None else limit
+    if len(text) <= limit:
+        return text
+    kept = limit - len(_NOTE.format("")) - len(str(len(text)))   # the note's count has at most as many digits as len(text)
+    if kept < 1:
+        return text[:limit]
+    tail = kept // 4
+    head = kept - tail
+    return f"{text[:head]}{_NOTE.format(len(text) - kept)}{text[len(text) - tail:]}"
+
+
+def bounded_line(text: str) -> str:
+    """*text* as one line of output: at most MAX_LINE characters, the cap read when this is called."""
+    return bounded(text, MAX_LINE)
+
 
 def canonical_digest(doc) -> str:
     """Content digest for RFC-03 lockfiles and RFC-06 seam provenance.
@@ -143,13 +219,165 @@ def semver_satisfies(version: str, rng: str) -> bool:
         return False
 
 
+_MERGE_TAG = "tag:yaml.org,2002:merge"
+_COLLECTIONS = (yaml.MappingNode, yaml.SequenceNode)
+
+
+class _OutOfBounds(yaml.YAMLError):
+    """A document that writes out, or nests, more than a read may build."""
+
+
+def _where(node) -> str:
+    mark = node.start_mark
+    return f"(line {mark.line + 1}, column {mark.column + 1})"
+
+
+def _merged_parts(value_node) -> list:
+    """The mappings a merge key's value names: itself, or those of a sequence.
+
+    Anything else is left to the constructor, which refuses it as YAML.
+    """
+    if isinstance(value_node, yaml.MappingNode):
+        return [value_node]
+    if isinstance(value_node, yaml.SequenceNode):
+        return [part for part in value_node.value if isinstance(part, yaml.MappingNode)]
+    return []
+
+
+class _Measure:
+    """What a composed document writes out and how deep it goes, each node measured once.
+
+    PyYAML composes an alias as the node it names, so a composed document is a
+    graph that costs what its text costs. Building it is what costs what it
+    writes out: a scalar is one value and as many characters as it holds, a
+    collection is one value plus what its items (a mapping's keys and values)
+    write out, and an alias stands for all of its node wherever it is written.
+    A merge key (`<<`) copies the pairs of the mappings it names into the
+    mapping that holds it, at that mapping's level, so it adds what those
+    mappings write out, less the mappings themselves. The levels are counted
+    the same way, the document being level 1. What a merge key's value adds is
+    worked out once however many mappings hold the key, so the measure costs
+    what the text costs too.
+
+    The measure walks the document with a stack of generators, as PyYAML's own
+    constructor does, so how deep a document is, which its text sets, does not
+    use the interpreter's stack: every document PyYAML can compose is measured.
+
+    Measuring the composed document before it is constructed is the pattern of
+    the FLUX engine's read and of OmegaConf 2.4's loader (a `construct_document`
+    hook that counts expanded nodes and refuses an alias that holds itself);
+    go-yaml likewise refuses "excessive aliasing" while it decodes.
+    """
+
+    def __init__(self) -> None:
+        self.values, self.depth, self.merged, self.chars = MAX_YAML_VALUES, MAX_YAML_DEPTH, MAX_YAML_MERGED, MAX_YAML_CHARS
+        self.measured: dict[int, tuple[int, int, int]] = {}      # id(node) -> (values, levels, characters)
+        self.merges: dict[int, tuple[int, int, int, int]] = {}   # id(a merge key's value) -> (values, levels, characters, mappings)
+        self.named = 0                                           # mappings named by the merge keys met so far
+        self.on_path: set[int] = set()
+
+    def node(self, root, level: int = 1) -> tuple[int, int, int]:
+        """The values, levels and characters *root* writes out, met at *level*; refused past a bound."""
+        stack = [self._visit(root, level)]
+        result = None
+        while stack:
+            try:
+                call = stack[-1].send(result)
+            except StopIteration as done:
+                stack.pop()
+                result = done.value
+            else:
+                stack.append(self._visit(*call))
+                result = None
+        return result
+
+    def _scalar(self, node, level: int) -> tuple[int, int, int]:
+        if level > self.depth:
+            raise _OutOfBounds(f"a document nests deeper than {self.depth} levels {_where(node)}")
+        return 1, 1, len(node.value)
+
+    def _visit(self, node, level: int):
+        """Measure *node* met at *level*. A generator: it yields (child, level) for a collection it needs
+        measured and is sent that child's (values, levels, characters); it returns its own."""
+        if not isinstance(node, _COLLECTIONS):
+            return self._scalar(node, level)
+        if level > self.depth:
+            raise _OutOfBounds(f"a document nests deeper than {self.depth} levels {_where(node)}")
+        key = id(node)
+        known = self.measured.get(key)
+        if known is not None:
+            if level + known[1] - 1 > self.depth:
+                raise _OutOfBounds(f"a document nests deeper than {self.depth} levels {_where(node)}")
+            return known
+        if key in self.on_path:
+            raise _OutOfBounds(f"a document holds itself through an alias {_where(node)}")
+        self.on_path.add(key)
+        values, levels, chars = 1, 1, 0
+        if isinstance(node, yaml.MappingNode):
+            for key_node, value_node in node.value:
+                if key_node.tag == _MERGE_TAG:
+                    added, merged_levels, added_chars = yield from self._merge(node, value_node, level)
+                    values, levels, chars = values + added, max(levels, merged_levels), chars + added_chars
+                    continue
+                for part in (key_node, value_node):
+                    if isinstance(part, _COLLECTIONS):
+                        part_values, part_levels, part_chars = yield part, level + 1
+                    else:
+                        part_values, part_levels, part_chars = self._scalar(part, level + 1)
+                    values, levels, chars = values + part_values, max(levels, part_levels + 1), chars + part_chars
+        else:
+            for item in node.value:
+                if isinstance(item, _COLLECTIONS):
+                    item_values, item_levels, item_chars = yield item, level + 1
+                else:
+                    item_values, item_levels, item_chars = self._scalar(item, level + 1)
+                values, levels, chars = values + item_values, max(levels, item_levels + 1), chars + item_chars
+        self.on_path.discard(key)
+        if values > self.values:
+            raise _OutOfBounds(
+                f"a document writes out more than {self.values} values once its aliases "
+                f"and merge keys are written out {_where(node)}")
+        if chars > self.chars:
+            raise _OutOfBounds(
+                f"a document writes out more than {self.chars} characters once its aliases "
+                f"and merge keys are written out {_where(node)}")
+        self.measured[key] = (values, levels, chars)
+        return values, levels, chars
+
+    def _merge(self, host, value_node, level: int):
+        """What the mappings named by *value_node*, a merge key's value in *host*, add to *host* at *level*
+        (a generator, as `_visit` is): its values, levels and characters."""
+        key = id(value_node)
+        known = self.merges.get(key)
+        if known is None or level + known[1] - 1 > self.depth:
+            # The first time, or a mapping too deep from here: measuring them one by one refuses it.
+            parts = _merged_parts(value_node)
+            added, levels, chars = 0, 0, 0
+            for merged in parts:
+                merged_values, merged_levels, merged_chars = yield merged, level
+                added, levels, chars = added + merged_values - 1, max(levels, merged_levels), chars + merged_chars
+            known = self.merges[key] = (added, levels, chars, len(parts))
+        self.named += known[3]
+        if self.named > self.merged:
+            raise _OutOfBounds(
+                f"a document names more than {self.merged} mappings in its merge keys {_where(host)}")
+        return known[0], known[1], known[2]
+
+
 class _StringTimestampLoader(yaml.SafeLoader):
-    """SafeLoader that keeps unquoted timestamps as plain strings.
+    """SafeLoader that keeps unquoted timestamps as plain strings, within bounds.
 
     PyYAML would otherwise coerce `start: 2026-07-01T00:00:00Z` to a
     datetime object, which the schema (correctly) rejects as "not a string"
     with a confusing Python-typed error message.
+
+    Each document is measured once it is composed and before anything is built
+    from it (`_Measure`), since building it is what costs what it writes out.
     """
+
+    def construct_document(self, node):
+        _Measure().node(node, 1)
+        return super().construct_document(node)
 
 
 _StringTimestampLoader.add_constructor(
@@ -168,6 +396,14 @@ def load_yaml_docs(path: Path):
     the rest of its line becomes a key the engine never reads. A file that is
     not UTF-8 is reported as unreadable rather than raised, and none of its
     documents is returned, however many decoded before the bad byte.
+
+    A document is held to the bounds the engine's read holds it to, counted as
+    its aliases and merge keys are written out: at most MAX_YAML_VALUES values,
+    at most MAX_YAML_DEPTH levels, and no alias that holds itself. Its merge
+    keys may name at most MAX_YAML_MERGED mappings in all, and it may write out
+    at most MAX_YAML_CHARS characters. Past one it is reported as unreadable,
+    with its line and column, before anything is built from it, and none of the
+    file's documents is returned either.
     """
     try:
         with path.open(encoding="utf-8") as fh:
@@ -211,7 +447,7 @@ class Bundle:
         self._fluid_validators: dict[str, Draft202012Validator | None] = {}
 
     def err(self, source, message):
-        self.errors.append(f"{source}: {message}")
+        self.errors.append(f"{bounded(str(source), MAX_NAME)}: {bounded(message)}")
 
     # ---- loading ---------------------------------------------------------
 
@@ -585,7 +821,7 @@ def main(argv: list[str]) -> int:
         status = "FAIL" if errors else "ok"
         print(f"[{status}] {directory.relative_to(REPO) if directory.is_relative_to(REPO) else directory}")
         for e in errors:
-            print(f"       {e}")
+            print(f"       {bounded_line(e)}")
         failed = failed or bool(errors)
     return 1 if failed else 0
 

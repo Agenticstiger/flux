@@ -55,7 +55,7 @@ import tempfile
 import zlib
 from pathlib import Path
 
-from .validate import Bundle, load_yaml_docs
+from .validate import Bundle, bounded_line, load_yaml_docs
 from ._paths import REPO, schema_dir
 
 from jsonschema import Draft202012Validator, FormatChecker
@@ -301,13 +301,13 @@ def pack(directory: Path, out_dir: Path, validator) -> int:
     if links:
         print(f"[FAIL] {directory}: a pack holds regular files only; replace each link with a copy of its file")
         for link in links[:10]:
-            print(f"       {link}")
+            print(f"       {bounded_line(link)}")
         return 1
     manifest, errors = build_manifest(directory, validator)
     if errors:
         print(f"[FAIL] {directory}: bundle does not validate — refusing to pack")
         for e in errors[:10]:
-            print(f"       {e}")
+            print(f"       {bounded_line(e)}")
         return 1
     Draft202012Validator(json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))).validate(manifest)
 
@@ -498,7 +498,7 @@ def verify(archive: Path, validator=None) -> int:
     if problems:
         print(f"[FAIL] {archive}")
         for p in problems[:10]:
-            print(f"       {p}")
+            print(f"       {bounded_line(p)}")
         return 1
     print(f"[ok] {archive} — {len(manifest['files'])} files, merkle root verified, "
           f"attestation reproduced (profile={manifest['attestation']['profile']})")
