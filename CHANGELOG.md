@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+- **A number that is not finite never satisfies a gate, in the validator or
+  in the enforcement gate.** A NaN is neither above nor below anything, so a
+  comparison written the other way passes it: `credibility: .nan` satisfied a
+  Simulation's `minCredibility`, and a NaN in a weight, a persona's levels or
+  its `min` and `max` passed the sum and range checks. `decide` raised
+  `FloatDomainError` out of the gate on a policy that held one, and ignored a
+  skill whose `tokenBudget` was not a number.
+  - `load_yaml_docs` refuses a float that is not finite (`.nan`, `.inf`, or a
+    number past what a float holds, such as `1.0e+400`), one that is no decimal
+    number (an exponent past what a decimal holds, `0.e-99999999999999999999`)
+    and one that needs more than 1,000 digits written out (`1.0e-1001`, and
+    `0.e-10000000`, whose scale is spelled in full), as `unreadable YAML` with
+    its line and column, in the words of the FLUX engine's read. A zero counts
+    the digits its scale spells.
+  - Every numeric gate of the validator is written the way a NaN fails it
+    (`not x <= limit`, not `x > limit`): the sums of weights, levels and mixes,
+    a persona's `min` below `max`, a skill's budget against its policy's, and
+    a Simulation's `minCredibility`, which also ignores a credibility that is
+    not finite. The validator reads a float, so a sexagesimal number, which the
+    engine refuses, still reads here, as a float.
+  - `decide` answers where it raised or let a skill through. A policy that
+    RFC 8785 cannot write (a number that is not finite, an integer past 2^53-1, a
+    key that is not a string, bytes, text that is not valid Unicode, nesting
+    too deep) is `INVALID_POLICY`, with the cause in words, and its decision
+    names the digest of `{}`, as for a policy that is not an object. A skill
+    whose `tokenBudget` is present and not an integer (a NaN, an infinity,
+    text, `null`) is `INVALID_POLICY`, where it narrowed nothing, and so is a
+    skill that is not an object, where `decide` raised or, for `[]`, `false`, `0`
+    and `""`, read it as no skill; `{}` is still a skill that names no budget. An integer budget of
+    any size is read as it was, and `min(skill, policy)` still keeps it from
+    widening. A request is decided as before. Three new conformance vectors pin
+    the skill (37 in all); a number that is not finite has no spelling in JSON
+    that every parser reads (some refuse `1e999` as out of range), so the
+    reference gate's own checks pin those.
+  - `verify` refuses a manifest that holds `NaN`, `Infinity` or a number past
+    what a float holds, which JSON does not have.
 - **A scalar PyYAML cannot build is unreadable YAML, and `validate`, `pack` and
   `verify` report a hostile bundle instead of raising.** PyYAML raised
   `ValueError` for `!!int abc`, `!!float ZZZ` and an integer of more than 4300

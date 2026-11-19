@@ -910,6 +910,30 @@
       }
     },
     {
+      "name": "policy: a skill whose tokenBudget is not a number is off-spec, not an unnarrowed policy",
+      "policy": {"allowedModels": ["local-sovereign-8b"], "tokenBudget": 200000, "purposeLimitation": false},
+      "skill": {"name": "greedy-skill", "tokenBudget": "unlimited"},
+      "request": {"model": "local-sovereign-8b", "useCase": "persona_variation", "tokens": 1000},
+      "expect": {"allow": false, "reasonCode": "INVALID_POLICY", "policyDigest": "sha256:dfe2e2bfa3276ddc62dc0d040f97e9da8e0ed81933de22ee9938561707fae3a8"},
+      "note": "a skill narrows the budget, so one whose own budget is present and not an integer must not mean no narrowing. An integer budget of any size is read as before, and min(skill, policy) keeps it from widening. A number that is not finite has no spelling in JSON that every parser reads (some refuse 1e999 as out of range, and so cannot load this file), so the reference gate's own checks pin it."
+    },
+    {
+      "name": "policy: a skill that is an empty list is not an object, so it is not no skill",
+      "policy": {"allowedModels": ["local-sovereign-8b"], "tokenBudget": 200000, "purposeLimitation": false},
+      "skill": [],
+      "request": {"model": "local-sovereign-8b", "useCase": "persona_variation", "tokens": 1000},
+      "expect": {"allow": false, "reasonCode": "INVALID_POLICY", "policyDigest": "sha256:dfe2e2bfa3276ddc62dc0d040f97e9da8e0ed81933de22ee9938561707fae3a8"},
+      "note": "a skill is an object, or absent. An empty list is falsy but it is not an object, so it must not read as no skill: that would narrow nothing, as a skill whose budget cannot be read would. {} stays a skill that names no budget."
+    },
+    {
+      "name": "policy: a skill that is false is not an object, so it is not no skill",
+      "policy": {"allowedModels": ["local-sovereign-8b"], "tokenBudget": 200000, "purposeLimitation": false},
+      "skill": false,
+      "request": {"model": "local-sovereign-8b", "useCase": "persona_variation", "tokens": 1000},
+      "expect": {"allow": false, "reasonCode": "INVALID_POLICY", "policyDigest": "sha256:dfe2e2bfa3276ddc62dc0d040f97e9da8e0ed81933de22ee9938561707fae3a8"},
+      "note": "the same as an empty list: false is falsy, not an object, and not an absent skill."
+    },
+    {
       "name": "digest: unicode + float budget canonicalise per RFC 8785",
       "policy": {
         "allowedModels": [

@@ -2077,7 +2077,7 @@ def check_a_scalar_pyyaml_cannot_build_is_unreadable_yaml_by_its_position(flux_v
             "an octal integer of 4,301 digits, whose value is short": "0" + "7" * 4301,
             # int() reads each part of a sexagesimal integer on its own: 86 parts of 50 digits are 4,300 in all.
             "a tagged sexagesimal integer of 5,000 digits in parts of 50": "!!int " + ":".join(["1" * 49 + "2"] * 100),
-            "the spellings that build": "[0x1f, 0o17, 0b11, 1_000, 1:30:00, 1e3, .inf, -.inf, yes, no, on, off, ~]"}
+            "the spellings that build": "[0x1f, 0o17, 0b11, 1_000, 1:30:00, 1e3, 1.5e3, yes, no, on, off, ~]"}
     failures = []
     with tempfile.TemporaryDirectory() as tmp, _default_digit_limit():
         for label, (spelling, why) in refused.items():
@@ -2120,9 +2120,10 @@ def check_a_document_that_cannot_be_digested_is_reported_not_raised(flux_validat
     or a value JSON has no spelling for. A free-form field of a document that is otherwise valid can hold
     any of them, and the digest of a locked module and of the contract a Simulation emits raised.
 
-    Such a document is reported as one that cannot be digested, once, whatever the number of refs to it."""
-    hostile = {"a NaN": ".nan", "an infinity": "-.inf", "an integer past JSON's range": str(2 ** 60),
-               "a binary value": "!!binary aGk=", "a set": "!!set {a, b}"}
+    Such a document is reported as one that cannot be digested, once, whatever the number of refs to it.
+    The read refuses a NaN and an infinity, so those are put in place of a read, in a document that code
+    has put together."""
+    hostile = {"an integer past JSON's range": str(2 ** 60), "a binary value": "!!binary aGk=", "a set": "!!set {a, b}"}
     failures = []
     with tempfile.TemporaryDirectory() as tmp:
         for label, spelling in hostile.items():
@@ -2156,7 +2157,7 @@ def check_a_document_that_cannot_be_digested_is_reported_not_raised(flux_validat
                 failures.append(f"[digest] a contract holding {label} was not reported: {[e[:90] for e in errors][:3]}")
         # A key is digested too. RFC 8785 refuses one that is not a string (a NaN), and one that UTF-16
         # cannot hold (a lone surrogate) in another way: the second raised a UnicodeEncodeError.
-        for label, spelling in {"a NaN": ".nan", "a lone surrogate": '"\\ud800"'}.items():
+        for label, spelling in {"a lone surrogate": '"\\ud800"'}.items():
             for where, filename, old, new in (
                     ("a locked module", "module.flux.yml", "{ spec: cloudevents/1.0 }", "{ spec: cloudevents/1.0, " + spelling + ": 1 }"),
                     ("a contract", "payment-recovery.fluid.yml", "\nid:", "\n" + spelling + ": 1\nid:")):
@@ -2172,6 +2173,22 @@ def check_a_document_that_cannot_be_digested_is_reported_not_raised(flux_validat
                     continue
                 if sum("cannot be digested" in e for e in errors) != 1:
                     failures.append(f"[digest] {where} holding {label} as a key was not reported once: {[e[:90] for e in errors][:3]}")
+    for label, value in {"a NaN": float("nan"), "an infinity": float("-inf")}.items():
+        for where, check in (("a locked module", "check_supply_chain"), ("a contract", "check_fluid_seam")):
+            bundle = Bundle(EXAMPLES, flux_validator)
+            bundle.load()
+            if where == "a contract":
+                next(iter(bundle.fluid_docs.values()))[1]["x"] = value
+            else:
+                next(d for d in bundle.flux_docs.values() if d.get("kind") == "Module")["spec"]["x"] = value
+            bundle.errors = []
+            try:
+                getattr(bundle, check)()
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                failures.append(f"[digest] {where} holding {label} in memory raised {type(exc).__name__}: {str(exc)[:60]}")
+                continue
+            if sum("cannot be digested" in e for e in bundle.errors) != 1:
+                failures.append(f"[digest] {where} holding {label} in memory was not reported once: {[e[:90] for e in bundle.errors][:3]}")
     return failures
 
 
@@ -2424,6 +2441,207 @@ def check_hostile_yaml_never_raises_through_validate_pack_and_verify(flux_valida
                 except Exception as exc:  # noqa: BLE001 (a raise is the failure)
                     failures.append(f"[fuzz] {stage} raised {type(exc).__name__}: {str(exc)[:60]} on {where}")
             shutil.rmtree(work.parent, ignore_errors=True)
+    return failures
+
+
+def check_a_number_that_is_not_finite_or_too_long_is_unreadable_yaml(flux_validator) -> list[str]:
+    """The FLUX engine's read refuses a number that is not finite and one that needs more than 1,000 digits
+    written out, a zero counting the digits its scale spells, and so does this one, by line and column. A NaN
+    is neither above nor below anything, so a gate that compares one passes it: it reached the validator as
+    `credibility: .nan` and satisfied a `minCredibility` gate."""
+    import validate as validate_tool
+
+    not_finite = "an infinite or not-a-number value has no digest and no ordering"
+    too_long = "a number that needs more than 1000 digits written out is too long"
+    not_decimal = "a scalar read as a float is not a decimal number"
+    refused = {
+        "a NaN": (".nan", not_finite), "an infinity": (".inf", not_finite), "a negative infinity": ("-.inf", not_finite),
+        "a NaN with its tag": ("!!float nan", not_finite), "an infinity with its tag": ("!!float -Infinity", not_finite),
+        "a number past what a float holds": ("1.0e+400", not_finite), "a negative one": ("-1.0e+400", not_finite),
+        "a number of 1,002 digits": ("1.0e-1001", too_long), "a zero whose scale is ten million": ("0.e-10000000", too_long),
+        "a zero with 1,001 decimals": ("0." + "0" * 1001, too_long), "a negative zero of that scale": ("-0.e-1001", too_long),
+        # An exponent past what a decimal holds cannot be counted, and a float of it is 0.0: it was read.
+        "a zero whose scale is past what a decimal holds": ("0.e-99999999999999999999", not_decimal),
+        "a number of that scale": ("1.0e-99999999999999999999", not_decimal),
+        "a zero of that exponent": ("0.0e+99999999999999999999", not_decimal),
+        "a tagged number of that scale": ('!!float "1e-99999999999999999999"', not_decimal),
+    }
+    read = {
+        "a zero whose scale is 1,000": "0.e-1000", "a number of 1,000 digits": "1.0e-999", "a large float": "1.5e+300",
+        "a zero with a huge exponent": "0.e+99999999", "a negative zero": "-0.0", "underscores": "1_000.5",
+        "a sexagesimal float, which the engine refuses and this reads": "1:30.5",
+    }
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for label, (spelling, why) in refused.items():
+            try:
+                docs, error = _read_text(f"a: 1\nb: {spelling}\n", Path(tmp))
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                failures.append(f"[finite] load_yaml_docs raised {type(exc).__name__} on {label}")
+                continue
+            if docs or error != f"unreadable YAML: {why} (line 2, column 4)":
+                failures.append(f"[finite] {label} was not refused as '{why}' at (line 2, column 4): {len(docs)} documents, {error}")
+        for label, spelling in read.items():
+            docs, error = _read_text(f"a: 1\nb: {spelling}\n", Path(tmp))
+            if error or len(docs) != 1:
+                failures.append(f"[finite] {label} did not read: {error}")
+    return failures
+
+
+def _errors_of(flux_validator, check, edit):
+    """The errors the cross-check *check* of the example bundle reports once *edit* has changed its documents,
+    which are put in place as they are, as no gate meets a document that the read refused."""
+    bundle = Bundle(EXAMPLES, flux_validator)
+    bundle.load()
+    docs = copy.deepcopy(bundle.flux_docs)
+    edit(docs)
+    bundle.flux_docs, bundle.errors = docs, []
+    getattr(bundle, check)()
+    return bundle.errors
+
+
+def check_a_number_that_is_not_finite_never_satisfies_a_numeric_gate(flux_validator) -> list[str]:
+    """Every numeric gate of the validator is written so that a NaN fails it: a sum compares with `not <=`, not
+    `>`, an order with `not <`, a minimum with `not >=`. Each is put a NaN, and an infinity, directly, as no read
+    would let one through; and a bundle whose scorecard says `.nan` is refused by the read and does not satisfy
+    its Simulation's gate."""
+    nan, inf = float("nan"), float("inf")
+
+    def of(kind, docs):
+        return next(doc for doc in docs.values() if doc.get("kind") == kind)
+
+    def lifecycle(value):
+        return lambda docs: of("World", docs)["spec"]["population"]["lifecycleMix"].__setitem__("new", value)
+
+    def weight(value):
+        return lambda docs: of("Experiment", docs)["spec"]["variants"][0].__setitem__("weight", value)
+
+    def level(value):
+        return lambda docs: of("Persona", docs)["spec"]["traits"]["priceSensitivity"]["levels"].__setitem__("low", value)
+
+    def maximum(value):
+        def edit(docs):
+            trait = of("Persona", docs)["spec"]["traits"]["monthlySpend"]
+            trait["min"], trait["max"] = 0, value
+        return edit
+
+    def credibility(value):
+        return lambda docs: of("Playback", docs)["spec"]["scorecard"].__setitem__("credibility", value)
+
+    def minimum(value):
+        def edit(docs):
+            of("Simulation", docs)["spec"]["emits"][0]["minCredibility"] = value
+        return edit
+
+    def skill_budget(value):
+        return lambda docs: of("Simulation", docs)["skills"][0].__setitem__("tokenBudget", value)
+
+    # An infinity is above everything, so a maximum of one is in order; it fails the others.
+    cases = (
+        ("check_sums_and_sets", "population.lifecycleMix sums to", lifecycle, (nan, inf, -inf)),
+        ("check_sums_and_sets", "variant weights sum to", weight, (nan, inf, -inf)),
+        ("check_traits", "levels sums to", level, (nan, inf, -inf)),
+        ("check_traits", "must be below max", maximum, (nan,)),
+        ("check_fluid_seam", "minCredibility", credibility, (nan, inf, -inf)),
+        ("check_fluid_seam", "minCredibility", minimum, (nan, inf)),
+        ("check_agent_policy", "exceeds agentPolicy.tokenBudget", skill_budget, (nan, inf)),
+    )
+    failures = []
+    for check, expected, make, values in cases:
+        for value in values:
+            try:
+                errors = _errors_of(flux_validator, check, make(value))
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                failures.append(f"[finite] {check} raised {type(exc).__name__} for {make.__name__}({value})")
+                continue
+            if not any(expected in error for error in errors):
+                failures.append(f"[finite] {check} passed {make.__name__}({value}): {[e[:80] for e in errors][:2]}")
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp) / "bundle"
+        shutil.copytree(EXAMPLES, work)
+        playback = work / "playback.flux.yml"
+        playback.write_text(re.sub(r"credibility:\s*[0-9.]+", "credibility: .nan", playback.read_text(encoding="utf-8")), encoding="utf-8")
+        errors = Bundle(work, flux_validator).run()
+        if not any("not-a-number" in error for error in errors) or not any("minCredibility" in error for error in errors):
+            failures.append(f"[finite] a scorecard of .nan was not refused, or satisfied the gate: {[e[:90] for e in errors][:3]}")
+    return failures
+
+
+def check_the_enforcement_gate_answers_a_policy_it_cannot_digest_and_a_skill_it_cannot_read(flux_validator) -> list[str]:
+    """RFC 8785 has no spelling for a number that is not finite (JSON has none either: `1e999` is how a
+    parser reads one), so a policy that holds one has no policyDigest and is INVALID_POLICY, where `decide`
+    raised FloatDomainError out of the gate; so is a policy that holds a value or a key JSON has no spelling
+    for, or that nests past what can be written (it raised RecursionError). A skill whose own tokenBudget is
+    present and not an integer is INVALID_POLICY, never an unnarrowed policy; an integer of any size or sign
+    is read as it was. The request is not digested: the gate reads four of its fields, and decides on those,
+    as it did. Every decision names its cause in words, not as the name of an exception; one that echoes a
+    request the gate was given as it is, is one a strict JSON writer can write, and the published decision
+    contract accepts."""
+    nan, inf = float("nan"), float("inf")
+    good = {"allowedModels": ["m"], "tokenBudget": 1000}
+    req = {"model": "m", "useCase": "u", "tokens": 5, "purpose": "p"}
+    deep, nested = [], []
+    for _ in range(5000):
+        deep = [deep]
+    for _ in range(2000):
+        nested = [nested]
+    cases = {
+        "a NaN budget": ({**good, "tokenBudget": nan}, req, None, "INVALID_POLICY"),
+        "an infinite budget": ({**good, "tokenBudget": inf}, req, None, "INVALID_POLICY"),
+        "a NaN anywhere in the policy": ({**good, "x": nan}, req, None, "INVALID_POLICY"),
+        "bytes in the policy": ({**good, "x": b"y"}, req, None, "INVALID_POLICY"),
+        "an integer past 2^53 in the policy": ({**good, "x": 2 ** 60}, req, None, "INVALID_POLICY"),
+        "an integer of 5,000 digits in the policy": ({**good, "x": 10 ** 5000}, req, None, "INVALID_POLICY"),
+        "a key that is not text": ({**good, 1: "x"}, req, None, "INVALID_POLICY"),
+        "a lone surrogate key": ({**good, "\ud800": 1}, req, None, "INVALID_POLICY"),
+        "a lone surrogate value": ({**good, "x": "\ud800"}, req, None, "INVALID_POLICY"),
+        "a policy nested 5,000 deep": ({**good, "x": deep}, req, None, "INVALID_POLICY"),
+        "a NaN skill budget": (good, req, {"name": "s", "tokenBudget": nan}, "INVALID_POLICY"),
+        "an infinite skill budget": (good, req, {"name": "s", "tokenBudget": inf}, "INVALID_POLICY"),
+        "a skill budget that is text": (good, req, {"name": "s", "tokenBudget": "9"}, "INVALID_POLICY"),
+        "a skill budget that is null": (good, req, {"name": "s", "tokenBudget": None}, "INVALID_POLICY"),
+        "a skill budget that is a boolean": (good, req, {"name": "s", "tokenBudget": True}, "INVALID_POLICY"),
+        "a skill that is not an object": (good, req, ["s"], "INVALID_POLICY"),
+        "a skill that is an empty list": (good, req, [], "INVALID_POLICY"),
+        "a skill that is false": (good, req, False, "INVALID_POLICY"),
+        "a skill that is zero": (good, req, 0, "INVALID_POLICY"),
+        "a skill that is an empty string": (good, req, "", "INVALID_POLICY"),
+        "a skill that is an empty object": (good, req, {}, "ALLOWED"),
+        "no skill": (good, req, None, "ALLOWED"),
+        "a skill that narrows": (good, req, {"name": "s", "tokenBudget": 10}, "ALLOWED"),
+        "a skill that does not name a budget": (good, req, {"name": "s"}, "ALLOWED"),
+        "a skill budget above 2^53, which cannot widen": (good, req, {"name": "s", "tokenBudget": 2 ** 60}, "ALLOWED"),
+        "a skill budget of zero, which narrows to nothing": (good, req, {"name": "s", "tokenBudget": 0}, "TOKEN_BUDGET_EXCEEDED"),
+        "a lone surrogate in a purpose": (good, {**req, "purpose": "\ud83d"}, None, "ALLOWED"),
+    }
+    # The request is echoed as it is, so no strict JSON writer is asked to write these decisions.
+    as_given = {
+        "NaN tokens": (good, {**req, "tokens": nan}, None, "INVALID_REQUEST"),
+        "a request nested 2,000 deep": (good, {**req, "x": nested}, None, "ALLOWED"),
+        "an integer of 5,000 digits in a request": (good, {**req, "x": 10 ** 5000}, None, "ALLOWED"),
+    }
+    contract = json.loads((REPO / "schema" / "flux-enforcement-0.5.0.json").read_text(encoding="utf-8"))
+    decision_validator = Draft202012Validator({"$ref": "#/$defs/decision", "$defs": contract["$defs"]})
+    failures = []
+    for strict, group in ((True, cases), (False, as_given)):
+        for label, (policy, request, skill, expected) in group.items():
+            try:
+                decision = enforce.decide(policy, request, skill)
+                if strict:
+                    json.dumps(decision, allow_nan=False)
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                failures.append(f"[enforcement] {label}: raised {type(exc).__name__}: {str(exc)[:50]}")
+                continue
+            if decision["reasonCode"] != expected:
+                failures.append(f"[enforcement] {label}: {decision['reasonCode']}, expected {expected}")
+            if "Error" in decision["reason"]:
+                failures.append(f"[enforcement] {label}: the reason names an exception, not a cause: {decision['reason'][:90]}")
+            for error in decision_validator.iter_errors(decision) if strict else ():
+                failures.append(f"[enforcement] {label}: the decision violates the contract: {error.message[:60]}")
+                break
+    wide = enforce.decide(good, req, {"name": "s", "tokenBudget": 2 ** 60})
+    if wide.get("effectiveBudget") != 1000:
+        failures.append(f"[enforcement] a skill budget above 2^53 widened the policy's: {wide.get('effectiveBudget')}")
     return failures
 
 
@@ -2701,6 +2919,12 @@ def main() -> int:
              "not valid JSON"),
         "duplicate archive entries":
             (lambda e: e + [e[0]], "duplicate archive entry"),
+        "manifest holds a NaN, which JSON does not have":
+            (lambda e: [(n, b'{"merkleRoot": NaN}' if n.endswith(bundle_tool.MANIFEST_NAME) else d) for n, d in e],
+             "cannot read archive"),
+        "manifest holds a number past what a float holds":
+            (lambda e: [(n, b'{"merkleRoot": 1e999}' if n.endswith(bundle_tool.MANIFEST_NAME) else d) for n, d in e],
+             "cannot read archive"),
         "manifest holds an integer of more than 4300 digits":
             (lambda e: [(n, b'{"merkleRoot": ' + b"9" * 5000 + b"}" if n.endswith(bundle_tool.MANIFEST_NAME) else d) for n, d in e],
              "cannot read archive" if 0 < getattr(sys, "get_int_max_str_digits", lambda: 0)() < 5_000 else "violates the manifest schema"),
@@ -2768,6 +2992,9 @@ def main() -> int:
     failures += check_a_value_of_a_shape_no_check_expected_is_reported_not_raised(flux_validator)
     failures += check_a_line_with_a_lone_surrogate_is_printed_not_raised(flux_validator)
     failures += check_a_check_that_cannot_read_a_bundle_fails_it_instead_of_raising(flux_validator)
+    failures += check_a_number_that_is_not_finite_or_too_long_is_unreadable_yaml(flux_validator)
+    failures += check_a_number_that_is_not_finite_never_satisfies_a_numeric_gate(flux_validator)
+    failures += check_the_enforcement_gate_answers_a_policy_it_cannot_digest_and_a_skill_it_cannot_read(flux_validator)
     failures += check_hostile_yaml_never_raises_through_validate_pack_and_verify(flux_validator)
 
     # a bundle that does not validate must never be packed
@@ -2811,7 +3038,7 @@ def main() -> int:
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
-        + 10  # RFC-09 negative fixtures: 7 archive attacks + 2 malformed inputs + size cap
+        + 11  # RFC-09 negative fixtures: 8 archive attacks + 2 malformed inputs + size cap
         + 8   # RFC-09 across releases: window resolves, 0.5.0, 0.5.1 and 0.5.2 packs verify, named
               # schema applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
         + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link

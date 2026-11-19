@@ -79,8 +79,8 @@ that no FLUID contract is able to express, and the "at least as strict" check
 then has nothing to bind against on the FLUID side.
 
 This is not hypothetical. Of the eleven distinct use-case values appearing in
-FLUX's own 34 enforcement vectors — `advertising`, `persona_variation`,
-`journey_synthesis`, `pricing_optimisation`, `exfiltrate-pii` and the rest —
+FLUX's own 37 enforcement vectors (`advertising`, `persona_variation`,
+`journey_synthesis`, `pricing_optimisation`, `exfiltrate-pii` and the rest),
 **none** can be written into a FLUID contract. The seam comparison the previous
 wording described has never had a working example in this repository's test
 suite.
@@ -98,7 +98,7 @@ Two options, and this is an open decision, not a plan:
    `agentPolicy` `$id` instead of restating it. Cleanest, and it makes the seam
    claim true. It is a breaking change to FLUX (`tokenBudget` splits in two,
    `purposeLimitation` changes type, use-case values become constrained) and the
-   34 vectors would need rebasing. Cheapest while FLUX has no external
+   37 vectors would need rebasing. Cheapest while FLUX has no external
    implementers.
 2. **FLUX keeps its own vocabulary** and this table stands as the permanent,
    honest statement of what does and does not cross the seam.
