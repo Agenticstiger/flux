@@ -207,6 +207,7 @@ export default defineUserConfig({
               collapsible: true,
               children: [
                 '/engine/spec/KERNEL-SPEC.md',
+                '/engine/spec/KERNEL-SPEC-2.md',
                 '/engine/spec/SEAM-FIDELITY-SPEC.md',
                 '/engine/spec/PROFILE-SPEC.md',
                 '/engine/spec/SCORECARD-SPEC.md',
@@ -214,6 +215,7 @@ export default defineUserConfig({
                 '/engine/spec/PARAMETER-REGISTER-SPEC.md',
                 '/engine/spec/EXPR-SPEC.md',
                 '/engine/spec/EXPR-SPEC-2.md',
+                '/engine/spec/EXPR-SPEC-3.md',
               ],
             },
           ],

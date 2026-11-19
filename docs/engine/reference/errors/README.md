@@ -44,6 +44,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-2116](./FLX-2116.md) | the recorded parameter register is missing or no longer matches the plan |
 | [FLX-2117](./FLX-2117.md) | a run file is a link or is not a regular file |
 | [FLX-2118](./FLX-2118.md) | a state directory is a link, or holds one |
+| [FLX-2119](./FLX-2119.md) | the plan names a kernel this engine does not implement |
 | [FLX-2201](./FLX-2201.md) | run touched a seed-tree path the plan did not anticipate |
 | [FLX-2202](./FLX-2202.md) | seed-tree input outside its declared domain |
 | [FLX-2301](./FLX-2301.md) | the run's cast does not resolve |
@@ -132,6 +133,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-5040](./FLX-5040.md) | population declaration cannot be materialised |
 | [FLX-5041](./FLX-5041.md) | value is outside the domain the kernel can hash |
 | [FLX-5042](./FLX-5042.md) | the World names no vertical this engine ships |
+| [FLX-5050](./FLX-5050.md) | this process flushes subnormal results to zero |
 
 ## 6000: expression language
 
@@ -156,8 +158,13 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-6112](./FLX-6112.md) | a value does not fit its column when the row is made |
 | [FLX-6113](./FLX-6113.md) | a name that the row scope does not know |
 | [FLX-6201](./FLX-6201.md) | a rule has no id, a repeated id, or an id that is not an identifier |
+| [FLX-6202](./FLX-6202.md) | a FLUX setting names a column for a rule that cannot generate it |
+| [FLX-6203](./FLX-6203.md) | a column has two sources across the contract and the bundle |
+| [FLX-6204](./FLX-6204.md) | a band that this run cannot meet |
 | [FLX-6206](./FLX-6206.md) | a rule's check, when, or the expr of a bool column is not bool |
+| [FLX-6208](./FLX-6208.md) | rules that determine columns in a cycle |
 | [FLX-6209](./FLX-6209.md) | a FLUX-side rule the contract can carry |
+| [FLX-6210](./FLX-6210.md) | a rule that determines a column in a way this version does not generate yet |
 
 ## 7000: calibration
 

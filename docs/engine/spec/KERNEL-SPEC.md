@@ -3,6 +3,8 @@
 Status: normative for `flux_engine.core`, `flux_engine.world`, `flux_engine.runtime`, `flux_engine.expr`,
 `flux_engine.seam`. Every rule here is either pinned by a published vector file, a golden, or a property test.
 A change to any rule is a `kernelVersion` bump with a `GOLDEN-CHANGELOG.md` row.
+Kernel `0.2.0` is specified in [KERNEL-SPEC-2.md](./KERNEL-SPEC-2.md): it replaces the rules it names and keeps the rest
+of this document, which stays normative for kernel `0.1.0`.
 
 Vocabulary used in code and tests: "subject" = one synthetic entity of the population; "run" = one execution of a
 `Simulation` under one effective seed; "tick" = one virtual time step.
@@ -13,30 +15,35 @@ Vocabulary used in code and tests: "subject" = one synthetic entity of the popul
 
 | Name | Meaning | Where |
 |---|---|---|
-| `kernelVersion` | semver of *normative behaviour* (this document). Bump = goldens move on purpose | inside `inputDigest`, receipt |
+| `kernelVersion` | semver of *normative behaviour* (this document). Bump = goldens move on purpose | `plan.json`, inside `inputDigest`, receipt, run digest document |
 | `seedTreeVersion` | `"flux-seed/1"` | receipt, `plan.json` |
 | `traceVersion` | `"flux-trace/1"` | receipt, run digest document |
 | `runFormatVersion` | shape of `run-digest.json` | run digest document |
-| engine package version | `flux_engine.__version__` — informational only, never hashed | receipt (masked) |
+| engine package version | `flux_engine.__version__`: informational only, never hashed | receipt (masked) |
 
-## 2. Canonicalisation and digests (`core/canonical.py`) — the only module that imports `rfc8785` and `hashlib`
+A plan names its kernel. `apply`, `replay`, `verify` and `ship` run and stamp the kernel the plan names, never the
+one a new plan would take, so a plan recomputes the same `inputDigest`, and every digest after it, on any engine that
+implements its kernel. An engine that does not implement it refuses the plan (`FLX-2119`), and a `run-digest.json`
+that names a different kernel from its plan's is refused (`FLX-2113`).
+
+## 2. Canonicalisation and digests (`core/canonical.py`): the only module that imports `rfc8785` and `hashlib`
 
 1. **Canonical JSON** = RFC 8785 (JCS) via `rfc8785.dumps`, applied after:
    - recursive NFC normalisation of every `str` value **and every key**;
    - coercion of non-`str` mapping keys to `str` (`True`→`"true"`, `1`→`"1"`), because PyYAML yields bool/int keys;
-   - rejection (`FLX-1001`) of any `float` anywhere in the object — values that carry numbers are `int` or
+   - rejection (`FLX-1001`) of any `float` anywhere in the object: values that carry numbers are `int` or
      `Decimal`; `Decimal` is serialised as a **string** with its declared scale (`"42.0000"`), never as a JSON number.
 2. **Digest** = `"sha256:" + hex(sha256(canonical_bytes))`.
-3. **Digest domains** — a digest is always a `DigestRef(value, domain, subject)`; comparing two refs of different
+3. **Digest domains**: a digest is always a `DigestRef(value, domain, subject)`; comparing two refs of different
    domains raises `FLX-1002`:
-   - `raw-bytes` — file bytes exactly as on disk (manifest `files`, the shipped `.fluid.yml`);
-   - `jcs-document` — canonical JSON of a parsed document (`contractDigest`, `planDigest`, `inputDigest`, run digest);
-   - `jcs-ndjson-stream` — the emit stream (§8).
+   - `raw-bytes`: file bytes exactly as on disk (manifest `files`, the shipped `.fluid.yml`);
+   - `jcs-document`: canonical JSON of a parsed document (`contractDigest`, `planDigest`, `inputDigest`, run digest);
+   - `jcs-ndjson-stream`: the emit stream (§8).
 4. **`flux_engine.core.canonical.NON_DIGEST_FIELDS`** = `{"generated_at", "generated_by", "engineVersion", "hostname", "durationMs"}` plus the
    self-referential fields of the document being digested (`planDigest` inside plan.json, `baselineDigest`,
    `outputDigest`). A totality test enumerates every receipt field and asserts it is either digested or listed.
    The name is qualified because `flux_engine.core.artifact` defines a constant spelled the same way holding a
-   different, smaller set — the two envelope-only fields (`generated_at`, `generated_by`) an artifact envelope
+   different, smaller set: the two envelope-only fields (`generated_at`, `generated_by`) an artifact envelope
    masks. The digest mask is the `canonical` one; `artifact`'s is a subset of it, and nothing outside that module
    reads it.
 
@@ -75,29 +82,29 @@ Canonical paths (closed list; adding one is a `kernelVersion` bump):
 | `("sweep", run_index)` | stochastic sweeps: run `k` uses `effective_seed = baseSeed + k` |
 | `("sim", sim_id, "agentic", skill_name, "subject", ordinal, call_ordinal)` | v0.3 |
 
-Every path materialised during a run is recorded (sorted) in `seed-paths.ndjson` beside the plan (one canonical path per line; raw-bytes digest = `seedTreeDigest`) and only `seedTreeDigest` plus a per-shape count table are written into `plan.json` — the plan stays small and is the artifact that is golden-pinned; a run that touches a path the plan did not anticipate fails with `FLX-2201`.
+Every path materialised during a run is recorded (sorted) in `seed-paths.ndjson` beside the plan (one canonical path per line; raw-bytes digest = `seedTreeDigest`) and only `seedTreeDigest` plus a per-shape count table are written into `plan.json`, which stays small and is the artifact that is golden-pinned; a run that touches a path the plan did not anticipate fails with `FLX-2201`.
 
 **Insertion stability** (property test): adding an unreferenced document to the bundle, or a new consumer that uses
 a new path, changes no existing stream.
 
-## 4. Draws (`core/rng.py`) — fixed draw count, no rejection, no float branch decisions
+## 4. Draws (`core/rng.py`): fixed draw count, no rejection, no float branch decisions
 
 - `uniform53(stream) -> int` in `[0, 2**53)`: `random_raw() >> 11`.
-- `bernoulli(stream, p: Decimal) -> bool`: `uniform53 < floor(p * 2**53)` — the comparison is integer.
+- `bernoulli(stream, p: Decimal) -> bool`: `uniform53 < floor(p * 2**53)`; the comparison is integer.
 - `categorical(stream, levels: Mapping[str, Decimal]) -> str`: cumulative integer thresholds over levels
   **sorted by NFC key**; one draw.
 - `bounded_uint(stream, n) -> int`: Lemire's nearly-divisionless method, **debiased by a fixed 64-draw budget**:
   draw up to 64 raw words; if all are rejected (probability < 2^-64·64), take the last word modulo `n` (documented
   bias, effectively unreachable). Draw count is bounded, never data-dependent beyond the bound; the bound is
   consumed in full (all 64 words are always drawn) so the stream position is data-independent.
-- `permutation(stream, n)`: Fisher–Yates over `bounded_uint`.
+- `permutation(stream, n)`: Fisher-Yates over `bounded_uint`.
 - `truncated_normal(stream, mean, stddev, lo, hi) -> Decimal`: **one** `uniform53`, mapped through the inverse CDF of
-  the normal truncated to `[lo, hi]` — `u' = Φ(lo) + u·(Φ(hi) − Φ(lo))`, `x = Φ⁻¹(u')` — where `Φ` and `Φ⁻¹` are
+  the normal truncated to `[lo, hi]`: `u' = Φ(lo) + u·(Φ(hi) − Φ(lo))`, `x = Φ⁻¹(u')`, where `Φ` and `Φ⁻¹` are
   evaluated in the `decimal` module at 28 digits (Acklam's rational approximation with one Halley refinement step,
-  `Decimal.ln()`/`.sqrt()`/`.exp()` — correctly rounded by the General Decimal Arithmetic spec, therefore
+  `Decimal.ln()`/`.sqrt()`/`.exp()`, correctly rounded by the General Decimal Arithmetic spec, therefore
   bit-identical across libm and architectures). Result quantised to the trait's declared scale (default 6 dp).
 - `exponential`, `poisson` (for rates): inverse CDF in `decimal`; poisson by sequential search with a hard cap at
-  `mean + 10·sqrt(mean) + 10` (fixed, documented) — one uniform per draw.
+  `mean + 10·sqrt(mean) + 10` (fixed, documented); one uniform per draw.
 
 Never: `random`, `numpy.random.Generator.<distribution>`, `math.exp/log/erf` on a digest path, rejection loops.
 
@@ -138,8 +145,8 @@ Property: sum equals `n` exactly; invariant to input order; changing the seed ne
 A dial `t ∈ [0,1]` for an outcome with authored rate `p` over an eligible set of subjects is realised as:
 1. partition the eligible subjects (in canonical ordinal order) by LRM into a **frozen share** `1−t` and a
    **stochastic share** `t`;
-2. in the frozen share, exactly `LRM(count, p)` subjects (the first ones in ordinal order) get the positive outcome —
-   no draw;
+2. in the frozen share, exactly `LRM(count, p)` subjects (the first ones in ordinal order) get the positive outcome,
+   with no draw;
 3. in the stochastic share, each subject draws `bernoulli(stream(temperature path), p)`.
 `E[outcome rate] = p` for every `t`; `t = 0` consumes no draw; variance is monotone in `t`. Dial names are open;
 `engagement` scales event-arrival rates, `campaignResponse` scales `Journey.personaReactions[].successProbability`.

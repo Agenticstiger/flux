@@ -3,14 +3,14 @@ title: "Python API"
 description: "flux_engine.api and flux_engine.engine: the governed extension contract and the library entry point, name by name."
 ---
 
-# `flux_engine.api` — the governed extension contract
+# `flux_engine.api`: the governed extension contract
 
 This package is the surface a third-party implementation targets and an
 in-process consumer imports against. Everything outside `flux_engine.api`
 and `flux_engine.engine` (the facade described under "The engine facade"
 below) is internal and may move without notice; everything inside this
 package is governed by `__api_version__`, which is `"0.1"` today and
-moves on its own schedule — removing or renaming anything listed below is
+moves on its own schedule; removing or renaming anything listed below is
 a breaking change to that number regardless of what the engine's own
 version does.
 
@@ -58,7 +58,7 @@ against, not extension points to ship against, and the tables below mark them.
 | Name | What it is |
 |---|---|
 | `EmitHeader` | The declared shape of one emitted stream: the expose, its columns in declared order, their types, and the contract they were declared under. |
-| `EmitSink` | Somewhere rows are written — opened once, written to, closed once, including when the run fails. The stream's digest is taken above the sink, so which sink is in use cannot change what the run is answerable for. |
+| `EmitSink` | Somewhere rows are written: opened once, written to, closed once, including when the run fails. The stream's digest is taken above the sink, so which sink is in use cannot change what the run is answerable for. |
 
 ### Calibration
 
@@ -103,7 +103,7 @@ against, not extension points to ship against, and the tables below mark them.
 | `ModelPort` | The one place a language model can be reached. It may only return content; it has no path to the scheduler, the trace, or an emitted row. |
 | `SkillRunner` | *Reserved.* Runs a skill through a model port under a token budget, reusing an earlier answer when the call is identical. |
 | `SkillInvocation` | One call, addressed by everything that makes it repeatable: the seed path, the request, and the governing policy. |
-| `SkillProposal` | Content offered to the engine, which decides what to do with it — including whether the content was reused rather than asked for again. |
+| `SkillProposal` | Content offered to the engine, which decides what to do with it, including whether the content was reused rather than asked for again. |
 
 ### Lineage
 
@@ -118,7 +118,7 @@ against, not extension points to ship against, and the tables below mark them.
 
 | Name | What it is |
 |---|---|
-| `VerifyVerdict` | Two disjoint answers and their claims. `headline()` renders both in one line — `reproducible: yes \| validity: not asserted` — because the second half's absence reads, to every reader, as the stronger claim. |
+| `VerifyVerdict` | Two disjoint answers and their claims. `headline()` renders both in one line: `reproducible: yes \| validity: not asserted`, because the second half's absence reads, to every reader, as the stronger claim. |
 | `Reproducibility` | Reproducible, not reproducible, or not checked. The third is not a negative answer. |
 | `Validity` | Not asserted, supported, or not supported. Not asserted is the default, and the honest answer for a run that measured nothing against the world. |
 
@@ -129,7 +129,7 @@ against, not extension points to ship against, and the tables below mark them.
 | `StageResult` | What one stage returned: its exit code, its captured output, and a read-only view of its structured artefacts. |
 | `StageName` | The seven stages, in order: validate, plan, apply, run, verify, ship, replay. |
 | `EngineError` | Base failure. Catch it to handle any stage. |
-| `ValidateFailed`, `PlanFailed`, `ApplyFailed`, `RunFailed`, `VerifyFailed`, `ShipFailed`, `ReplayFailed` | One per stage, so a caller that cares about exactly one — a withheld bundle, say — does not have to match on text. |
+| `ValidateFailed`, `PlanFailed`, `ApplyFailed`, `RunFailed`, `VerifyFailed`, `ShipFailed`, `ReplayFailed` | One per stage, so a caller that cares about exactly one (a withheld bundle, say) does not have to match on text. |
 
 `StageResult.success` answers one question about one stage. It is not a
 verdict about a run; that is `VerifyVerdict`, and it deliberately does not
@@ -142,7 +142,7 @@ failure. Call `result.raise_for_status()` to get the stage's typed exception.
 ## The engine facade
 
 `flux_engine.api` is the vocabulary; `flux_engine.engine` is the way in.
-It is the library entry point a host process imports — one `async def`
+It is the library entry point a host process imports: one `async def`
 per stage, dispatching to the synchronous stage functions via
 `asyncio.to_thread`, so an in-process consumer never blocks its event
 loop on a run that takes real wall-clock time. It mirrors forge-cli's
@@ -177,7 +177,7 @@ and everything else by keyword.
 
 **A soft timeout.** Every callable accepts `timeout: float | None`. When
 it fires the awaiter gets `TimeoutError`, but the stage thread keeps
-running in the background — Python threads cannot be cancelled — so this
+running in the background (Python threads cannot be cancelled), so this
 is a bound on how long the *caller* waits, not a kill. Same contract
 forge-cli's engine documents.
 
@@ -212,7 +212,7 @@ asks for the same refusal, and `strict_coverage=False` does not turn that off.
 Stability here is governed by the frozen-kwarg promise in that module's
 own docstring, not by `__api_version__`: `__api_version__` covers the
 names exported from `flux_engine.api`, and the facade exports none of
-them — it returns them. Nothing in `flux_engine.engine` is on a digest
+them; it returns them. Nothing in `flux_engine.engine` is on a digest
 path (the import-linter contract in `pyproject.toml` forbids the kernel
 packages from importing it), so it is orchestration over
 `flux_engine.stages` and nothing else.
@@ -229,7 +229,7 @@ verdict = VerifyVerdict(
 assert verdict.headline() == "reproducible: yes | validity: not asserted"
 ```
 
-Implementing a port is a matter of matching its shape — nothing needs to be
+Implementing a port is a matter of matching its shape: nothing needs to be
 registered or subclassed, and every port can be checked at a boundary with
 `isinstance`:
 
