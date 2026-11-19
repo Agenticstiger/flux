@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 try:
@@ -180,8 +181,13 @@ def bounded(text: str, limit: int | None = None) -> str:
 
 
 def bounded_line(text: str) -> str:
-    """*text* as one line of output: at most MAX_LINE characters, the cap read when this is called."""
-    return bounded(text, MAX_LINE)
+    """*text* as one line of output: at most MAX_LINE characters, the cap read when this is called, and
+    text that stdout can encode. YAML can build a string that no encoding holds (a lone surrogate), and
+    a document can name what the encoding of stdout lacks (a terminal that is not UTF-8): a message that
+    spells either made `print` raise. What stdout cannot encode is written as its escape instead."""
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    cut = bounded(text, MAX_LINE).encode(encoding, "backslashreplace").decode(encoding)
+    return bounded(cut, MAX_LINE)   # an escape is longer than the character it writes
 
 
 def canonical_digest(doc) -> str:
@@ -225,6 +231,10 @@ _COLLECTIONS = (yaml.MappingNode, yaml.SequenceNode)
 
 class _OutOfBounds(yaml.YAMLError):
     """A document that writes out, or nests, more than a read may build."""
+
+
+class _Unbuildable(yaml.YAMLError):
+    """A scalar PyYAML cannot build: its tag names a kind that its text is not."""
 
 
 def _where(node) -> str:
@@ -364,6 +374,57 @@ class _Measure:
         return known[0], known[1], known[2]
 
 
+def _most_integer_digits() -> int:
+    """The most digits an integer may have: what this interpreter turns into text, and at most 4300.
+
+    CPython will not turn an integer of more than 4300 digits into decimal text, or decimal text of
+    more into an integer (CVE-2020-10735), so a longer one raised ValueError from PyYAML, or from the
+    first message that spelled it when it was written in hex and loaded. Python 3.10.0 to 3.10.6 have
+    no limit and take the same one, so every Python refuses what the later ones do. The FLUX engine's
+    read has the same bound.
+    """
+    limit = getattr(sys, "get_int_max_str_digits", lambda: 0)()
+    return min(limit, 4300) if limit else 4300
+
+
+def _construct_integer(loader, node):
+    """An integer scalar, or `_Unbuildable`: one too long to read, or that its tag cannot build.
+
+    "Too long" is more than 4300 decimal digits, counted in the value. A decimal spelling (and each part
+    of a sexagesimal one) is counted in its text before `int()` is called, which refuses it past the
+    limit. A hex, octal or binary spelling forms at any length, so its value is checked once it is built:
+    it is the value that is too long to print, not the spelling."""
+    most, where = _most_integer_digits(), _where(node)
+    too_long = f"an integer of more than {most} digits is too long to read {where}"
+    text = loader.construct_scalar(node)
+    unsigned = text.replace("_", "").lstrip("+-")
+    in_a_power_of_two = unsigned[:2] in ("0x", "0b") or (unsigned[:1] == "0" and unsigned[1:2].isdigit())
+    # More than that many parts is a value of more than that many digits, and is refused before it is built:
+    # PyYAML adds a sexagesimal integer up part by part, which costs the square of their number.
+    if not in_a_power_of_two and (text.count(":") > most or max(sum(c.isdigit() for c in part) for part in text.split(":")) > most):
+        raise _Unbuildable(too_long)
+    try:
+        value = yaml.SafeLoader.construct_yaml_int(loader, node)
+    except (ValueError, IndexError) as exc:
+        raise _Unbuildable(f"a scalar read as an integer has no integer value {where}") from exc
+    if value.bit_length() > 64 and not -(10 ** most) < value < 10 ** most:
+        raise _Unbuildable(too_long)
+    return value
+
+
+def _constructing(build, kind: str, noun: str):
+    """*build*, a SafeLoader constructor, as one that raises `_Unbuildable` where it would raise a bare
+    ValueError, IndexError, KeyError or OverflowError for a scalar that cannot be built: one its explicit
+    tag cannot build (`!!float ZZZ`, `!!bool maybe`), or a sexagesimal float of so many parts that its
+    place values overflow a float (`1:1:` and so on, 175 parts or more, which YAML resolves by itself)."""
+    def construct(loader, node):
+        try:
+            return build(loader, node)
+        except (ValueError, IndexError, KeyError, OverflowError) as exc:
+            raise _Unbuildable(f"a scalar read as {kind} has no {noun} value {_where(node)}") from exc
+    return construct
+
+
 class _StringTimestampLoader(yaml.SafeLoader):
     """SafeLoader that keeps unquoted timestamps as plain strings, within bounds.
 
@@ -384,6 +445,11 @@ _StringTimestampLoader.add_constructor(
     "tag:yaml.org,2002:timestamp",
     lambda loader, node: loader.construct_scalar(node),
 )
+_StringTimestampLoader.add_constructor("tag:yaml.org,2002:int", _construct_integer)
+_StringTimestampLoader.add_constructor(
+    "tag:yaml.org,2002:float", _constructing(yaml.SafeLoader.construct_yaml_float, "a float", "float"))
+_StringTimestampLoader.add_constructor(
+    "tag:yaml.org,2002:bool", _constructing(yaml.SafeLoader.construct_yaml_bool, "a boolean", "boolean"))
 
 
 def load_yaml_docs(path: Path):
@@ -404,6 +470,11 @@ def load_yaml_docs(path: Path):
     at most MAX_YAML_CHARS characters. Past one it is reported as unreadable,
     with its line and column, before anything is built from it, and none of the
     file's documents is returned either.
+
+    A scalar PyYAML cannot build is reported the same way, by its position,
+    where PyYAML raised a bare ValueError, IndexError or KeyError for it: an
+    integer of more than 4300 digits, and a scalar its explicit tag cannot
+    build (`!!int ''`, `!!float ZZZ`, `!!bool maybe`).
     """
     try:
         with path.open(encoding="utf-8") as fh:
@@ -589,6 +660,21 @@ class Bundle:
                         name, rng = value.split("@", 1)
                         yield doc_id, f"spec.{field}[{i}]", name, rng
 
+    def _digest(self, source, what, doc):
+        """The content digest of *doc*, or None once it is reported that it has none.
+
+        JCS cannot write a NaN or an infinity, an integer past JSON's range, a key that is
+        not a string, a value JSON has no spelling for (`!!binary`, `!!set`), or text UTF-16
+        cannot hold (a lone surrogate, which a key reports as a UnicodeError rather than as
+        a CanonicalizationError), and a free-form field of a document that is otherwise valid
+        can hold any of them.
+        """
+        try:
+            return "sha256:" + canonical_digest(doc)
+        except (rfc8785.CanonicalizationError, UnicodeError) as exc:
+            self.err(source, f"{what} cannot be digested (RFC 8785): {str(exc).splitlines()[0] if str(exc) else type(exc).__name__}")
+            return None
+
     def check_supply_chain(self):
         """RFC-03: every versioned ref resolves through flux.lock to an exact
         version and a content digest of the in-bundle document."""
@@ -608,7 +694,7 @@ class Bundle:
         # Each target is digested once, however many refs name it: a digest costs
         # the target's whole size, and a bundle may hold many short refs to one
         # large document.
-        digests: dict[str, str] = {}
+        digests: dict[str, str | None] = {}
         for doc_id, path, name, rng in versioned:
             entry = entries.get(name)
             if not isinstance(entry, dict):
@@ -625,9 +711,9 @@ class Bundle:
                 self.err(doc_id, f"{path}: {name} declares version {declared} but flux.lock pins {pinned}")
             digest = entry.get("digest")
             if name not in digests:
-                digests[name] = "sha256:" + canonical_digest(target)
+                digests[name] = self._digest(doc_id, f"{path}: {name}", target)
             actual = digests[name]
-            if digest != actual:
+            if actual is not None and digest != actual:
                 self.err(doc_id, f"{path}: {name} content digest mismatch — flux.lock has {digest}, bundle has {actual}")
 
     def check_semantics(self):
@@ -641,7 +727,8 @@ class Bundle:
             for bind in doc.get("spec", {}).get("binds", []) or []:
                 if bind.get("port") == "ossie-model":
                     bound = True
-                    for m in (bind.get("config", {}) or {}).get("measures", []) or []:
+                    declared = (bind.get("config", {}) or {}).get("measures")
+                    for m in declared if isinstance(declared, Iterable) else []:   # as it was read: a mapping names them by key
                         if isinstance(m, str):
                             measures.add(m)
                         elif isinstance(m, dict) and isinstance(m.get("name"), str):
@@ -729,14 +816,15 @@ class Bundle:
                 provenance = emit.get("provenance") or {}
                 contract_digest = provenance.get("contractDigest")
                 if contract_digest:
-                    actual = "sha256:" + canonical_digest(fluid_doc)
-                    if contract_digest != actual:
+                    actual = self._digest(doc_id, f"{where}: the contract {product_ref}", fluid_doc)
+                    if actual is not None and contract_digest != actual:
                         self.err(doc_id, f"{where}: provenance.contractDigest mismatch — declared {contract_digest}, bundle contract is {actual}")
                 # RFC-05: seam gate on the twin's own credibility
                 min_credibility = emit.get("minCredibility")
                 if min_credibility is not None:
                     self._check_seam_credibility(doc_id, where, doc, min_credibility)
-                exposes = [e for e in fluid_doc.get("exposes", []) if isinstance(e, dict)]
+                declared_exposes = fluid_doc.get("exposes")
+                exposes = [e for e in declared_exposes if isinstance(e, dict)] if isinstance(declared_exposes, list) else []
                 expose = next((e for e in exposes if e.get("exposeId") == expose_id), None)
                 if expose is None:
                     self.err(doc_id, f"{where}.exposeId '{expose_id}' is not an expose of {product_ref} (has: {[e.get('exposeId') for e in exposes]})")
@@ -774,8 +862,18 @@ class Bundle:
 
     def _check_consent_strictness(self, doc_id, where, expose, profiles):
         """The emitted contract must be at least as strict as every gating ConsentProfile."""
-        policy = expose.get("policy", {}).get("agentPolicy", {}) if isinstance(expose.get("policy"), dict) else {}
-        contract_allowed = set(policy.get("allowedUseCases", []) or [])
+        policy = expose.get("policy")
+        agent_policy = policy.get("agentPolicy") if isinstance(policy, dict) else None
+        allowed = agent_policy.get("allowedUseCases") if isinstance(agent_policy, dict) else None
+        if not ((agent_policy is None or isinstance(agent_policy, dict))
+                and (allowed is None or isinstance(allowed, list) and all(isinstance(use, str) for use in allowed))):
+            # What the contract allows cannot be read, so it cannot be shown to be as strict as a profile that
+            # gates it: that is an error, not an allow-list with nothing in it.
+            for profile in profiles:
+                self.err(doc_id, f"{where}: the contract's policy.agentPolicy.allowedUseCases cannot be read as a list of "
+                                 f"use case names, so it cannot be compared with ConsentProfile {profile.get('id')}")
+            return
+        contract_allowed = set(allowed or [])
         for profile in profiles:
             pid, pspec = profile.get("id"), profile.get("spec", {})
             denied = set(pspec.get("deniedUseCases", []) or [])
@@ -791,18 +889,27 @@ class Bundle:
         if not self.dir.is_dir():
             self.err(str(self.dir), "bundle directory does not exist or is not a directory")
             return self.errors
-        self.load()
+        self._guarded(self.load)
         if not self.flux_docs and not self.errors:
             self.err(str(self.dir), "bundle contains no .flux.yml documents")
-        self.check_refs()
-        self.check_sums_and_sets()
-        self.check_traits()
-        self.check_supply_chain()
-        self.check_semantics()
-        self.check_agent_policy()
-        self.check_fluid_documents()
-        self.check_fluid_seam()
+        for check in (self.check_refs, self.check_sums_and_sets, self.check_traits, self.check_supply_chain,
+                      self.check_semantics, self.check_agent_policy, self.check_fluid_documents, self.check_fluid_seam):
+            self._guarded(check)
         return self.errors
+
+    def _guarded(self, step):
+        """Run *step*, reporting instead of raising where a document holds a value it was not written for.
+
+        The cross-checks read free-form fields no schema describes, and the FLUID contracts, which no FLUX
+        schema covers, so a hostile document can reach a read nobody guarded. Each shape known to do so is
+        handled where it is read, with a message of its own; this is for the rest, so that the validator
+        reports such a bundle and never crashes on it. A step that could not run fails the bundle."""
+        try:
+            step()
+        except Exception as exc:  # noqa: BLE001 (the point is that nothing raises)
+            detail = str(exc).splitlines()[0] if str(exc) else ""
+            self.err(str(self.dir), f"{step.__name__} could not read this bundle ({type(exc).__name__}"
+                                    f"{': ' + detail if detail else ''}): a document holds a value of a shape it does not expect")
 
 
 def main(argv: list[str]) -> int:

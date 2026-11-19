@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+- **A scalar PyYAML cannot build is unreadable YAML, and `validate`, `pack` and
+  `verify` report a hostile bundle instead of raising.** PyYAML raised
+  `ValueError` for `!!int abc`, `!!float ZZZ` and an integer of more than 4300
+  digits, `IndexError` for `!!int ''`, `KeyError` for `!!bool maybe` and
+  `OverflowError` for a sexagesimal float of 175 parts or more, out of a read
+  that says it never raises. A document of a shape no check expected, or that
+  holds a value JSON has no spelling for, raised from the checks after it.
+  - `load_yaml_docs` now reports each of those scalars as `unreadable YAML`,
+    placed by line and column, in the words of the FLUX engine's read. An
+    integer is too long when its value has more than 4300 digits: a decimal
+    spelling is counted before `int()` is called, and a hex, octal or binary
+    one, which forms at any length and then broke the first message that
+    spelled it, once it is built.
+  - RFC 8785 cannot write a NaN or an infinity, an integer past JSON's range, a
+    key that is not a string or that UTF-16 cannot hold, or a value JSON has no
+    spelling for (`!!binary`, `!!set`). A free-form field of a valid document
+    can hold any of them, and the digest of a locked module, and of the
+    contract a Simulation emits for its provenance, raised. Such a document is
+    now reported once as one that "cannot be digested".
+  - YAML can build a string that UTF-8 cannot hold (`"\ud800"`, a lone
+    surrogate), and a message that spelled one made `print` raise out of the
+    three commands. A line is now written with it as its escape.
+  - The checks read fields that no schema describes: a Module's
+    `config.measures`, and the FLUID contracts, whose `exposes` and
+    `policy.agentPolicy.allowedUseCases` no FLUX schema covers. A value of the
+    wrong shape in one raised `TypeError` or `AttributeError`. Each is now read
+    where it is: a Module whose `measures` is not a list declares none, a
+    contract whose `exposes` is not a list has none, and a contract whose
+    `allowedUseCases` cannot be read as a list of names is an error where a
+    ConsentProfile gates it, so it is never an allow-list with nothing in it. A
+    read that nobody guarded is reported by `Bundle.run()` as the check that
+    could not make it, which fails the bundle.
+  - `verify` reports an integer of more than 4300 digits in the manifest, which
+    `json` refuses with a plain `ValueError`, not a `JSONDecodeError`.
+  - A sweep puts 15 shapes in place of every node of an example's contract,
+    lockfile and Module configs and runs the checks on them, and a seeded fuzz
+    puts a hostile spelling in place of a scalar or a key of an example bundle,
+    reads it and, for one case in four, packs it and verifies an archive that
+    holds it. Nothing may raise, and no check may report that it could not read
+    the bundle. Every bundle that validated before validates the same, apart
+    from one that holds an integer of more than 4300 digits, which an
+    interpreter set to allow it read.
 - **The validator bounds what a YAML document writes out and how deep it
   nests, and caps the messages it prints.** PyYAML builds an alias as a shared
   reference, so a document of a kilobyte could stand for billions of values:
