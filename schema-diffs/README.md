@@ -4,6 +4,7 @@ One document per released version pair, generated alongside each release.
 The diff is part of the release deliverable: a version bump without a diff
 document does not ship.
 
+- [0.5.3 → 0.5.4](diff-0.5.3-to-0.5.4.md): the FLUX window widens and no constraint of the schema changes; the validator, `pack`, `verify` and the enforcement gate refuse input outside the JSON data model or past an implementation limit, which 0.5.3 read or raised on (VERSIONING.md, Input bounds)
 - [0.5.2 → 0.5.3](diff-0.5.2-to-0.5.3.md): the FLUX window widens; the FLUID 0.7.7 preview moves to forge-cli `e88301f7`, which refuses enum lists that are not comma-separated levels
 - [0.5.1 → 0.5.2](diff-0.5.1-to-0.5.2.md): additive; the FLUID 0.7.7 preview joins the seam, selected only by an exact pin
 - [0.5.0 → 0.5.1](diff-0.5.0-to-0.5.1.md) — additive; the FLUID seam window widens to 0.7.6

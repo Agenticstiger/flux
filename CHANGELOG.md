@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.5.4 - 2026-11-19
+
+Specification 0.5.4
+([schema-diffs/diff-0.5.3-to-0.5.4.md](schema-diffs/diff-0.5.3-to-0.5.4.md)).
+The FLUX schema only widens its window. The validator, `pack`, `verify` and the
+reference enforcement gate now refuse input that is outside the JSON data model
+or past an implementation limit, where 0.5.3 read it, raised on it, or read it
+as another input (VERSIONING.md, Input bounds). The schema diff names each such
+input with what 0.5.3 accepted. None of them resets the window, and a document
+inside the bounds reads as it did.
 
 - **A number that is not finite never satisfies a gate, in the validator or
   in the enforcement gate.** A NaN is neither above nor below anything, so a
@@ -166,6 +175,24 @@
   The `Bundle` and `_guarded` docstrings say so, and a regression check holds
   it in place: every step runs through `_guarded`, and a subclass's override
   lets its exception out of `run()`. No behaviour changes.
+- **schema**: `schema/flux-schema-0.5.4.json`, with the `fluxVersion` window
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2", "0.5.3", "0.5.4"]`
+  and no other change; `flux-schema-latest.json` aliases it, the UI hints
+  regenerate as `flux-ui-hints-0.5.4.json`, and `flux_spec.SCHEMA_VERSION` and
+  the package version are `0.5.4`.
+- **evidence packs**: a pack that 0.5.3 made from a document that one of the
+  input bounds refuses verifies with 0.5.3 and fails under 0.5.4 with `bundle
+  no longer validates against flux-schema-0.5.3.json`. Verify it with flux-spec
+  0.5.3. Every other pack made inside the window verifies as before.
+- **policy**: VERSIONING.md gains Input bounds: a release may refuse what is
+  outside the JSON data model, may set the implementation limits RFC 8259
+  allows, and may answer off-spec enforcement input with `INVALID_POLICY`, and
+  none of that resets the window. The schema diff names each change with what
+  the earlier release accepted.
+- **tests**: the regression suite checks that the immutable 0.5.3 file refuses
+  `fluxVersion: "0.5.4"`, that the two files differ in their id, the version
+  in their description and the window alone, and that a 0.5.3 pack of the
+  example verifies.
 
 ## 0.5.3 - 2026-11-18
 
