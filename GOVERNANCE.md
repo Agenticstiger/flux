@@ -40,7 +40,7 @@ maintainers. The bar is judgment on compatibility questions, not volume.
 
 ## Maintainers and contact
 
-Current steward-maintainer: [@Speculator55005](https://github.com/Speculator55005)
+Current steward-maintainer: [@fas89](https://github.com/fas89)
 (Agenticstiger). Conduct reports and private disclosures: use GitHub's private
 vulnerability reporting on this repository, or contact the maintainer directly
 via their GitHub profile. This section must list at least one reachable
