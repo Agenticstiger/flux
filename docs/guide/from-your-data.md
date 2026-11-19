@@ -30,9 +30,9 @@ Step 6 shows how to check those against a slice of your records instead.
 | Package | Latest on PyPI | Used here for | Status |
 |---|---|---|---|
 | `flux-spec` | 0.5.4 | validating the bundle (the engine installs it) | released |
-| `flux-sim-engine` | 0.6.2 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
-| `data-product-forge` | 0.31.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
-| `flux-stats` | 0.6.2 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
+| `flux-sim-engine` | 0.7.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
+| `data-product-forge` | 0.33.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
+| `flux-stats` | 0.7.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
 
 The engine needs Python 3.11 or newer. One environment holds both tools:
 
@@ -45,6 +45,12 @@ The `[profile]` extra brings DuckDB, which `fluid init --discover` and
 `fluid profile` read files with, and flux-stats, which forms every statistic
 the profile holds; the engine uses the same flux-stats. Every command below,
 the Python snippets included, runs in this environment.
+
+For now this environment gets flux-sim-engine 0.6.2 and flux-stats 0.6.2.
+flux-sim-engine 0.7.0 needs flux-stats 0.7.0, and data-product-forge 0.33.0
+and earlier take a flux-stats below 0.7, so pip settles on the 0.6.2 pair
+until a data-product-forge release takes flux-stats 0.7. Every step of this
+guide runs on them.
 
 ## 2. Get a FLUID contract from your data
 
