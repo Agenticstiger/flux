@@ -158,6 +158,13 @@
   read as UTF-8 too, and `verify` reports a manifest that is not UTF-8 instead
   of raising. On a UTF-8 host, every bundle that validated before validates the
   same.
+- **`Bundle._guarded` is documented as the seam of a subclass that refuses a
+  bundle with an exception of its own.** `run()` reports what `load` and each
+  check raise, so the FLUX engine's `SeamBundle`, which raises its own refusal
+  from `load` and from `check_supply_chain`, overrides `_guarded` to let it out.
+  The `Bundle` and `_guarded` docstrings say so, and a regression check holds
+  it in place: every step runs through `_guarded`, and a subclass's override
+  lets its exception out of `run()`. No behaviour changes.
 
 ## 0.5.3 - 2026-11-18
 

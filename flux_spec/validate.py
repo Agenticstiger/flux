@@ -552,6 +552,17 @@ def walk_refs(node, field_path, out):
 
 
 class Bundle:
+    """A bundle directory, read and checked offline: `run()` loads every document, then runs each check.
+
+    A subclass may change how it reads (the FLUX engine's `SeamBundle` overrides `load`). `run()` runs `load`
+    and every check through `_guarded(step)`, which reports what a step raises as an error of the bundle, so
+    that a hostile document never crashes the validator. A subclass that must refuse a bundle by raising an
+    exception of its own, as `SeamBundle` does from `load` and from `check_supply_chain`, overrides
+    `_guarded` to let that exception out of `run()`: the guard reports it like any other, and the subclass
+    raises it afterwards (see `_guarded`). tests/test_regression.py holds the steps `run()` sends through
+    the guard, and this seam, in place.
+    """
+
     def __init__(self, directory: Path, flux_validator: Draft202012Validator):
         self.dir = directory
         self.flux_validator = flux_validator
@@ -946,7 +957,27 @@ class Bundle:
         The cross-checks read free-form fields no schema describes, and the FLUID contracts, which no FLUX
         schema covers, so a hostile document can reach a read nobody guarded. Each shape known to do so is
         handled where it is read, with a message of its own; this is for the rest, so that the validator
-        reports such a bundle and never crashes on it. A step that could not run fails the bundle."""
+        reports such a bundle and never crashes on it. A step that could not run fails the bundle.
+
+        This is the seam of a subclass that must refuse a bundle with an exception of its own: `run()` calls it
+        with `load` and with each check, and with nothing else. The subclass overrides it to let that exception
+        out of `run()` at the step that raised it, and leaves every other exception to the guard:
+
+            def _guarded(self, step):
+                refused = []
+
+                @functools.wraps(step)  # the guard names the step in its report
+                def refusing():
+                    try:
+                        step()
+                    except MyRefusal as exc:
+                        refused.append(exc)
+                        raise
+
+                super()._guarded(refusing)
+                if refused:
+                    raise refused[0]
+        """
         try:
             step()
         except Exception as exc:  # noqa: BLE001 (the point is that nothing raises)

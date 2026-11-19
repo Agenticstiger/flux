@@ -1236,6 +1236,74 @@ def check_verify_never_raises_on_deep_nesting_or_a_nul_path(flux_validator) -> l
     return failures
 
 
+def check_a_subclass_lets_its_own_refusal_out_of_run_through_the_guard(flux_validator) -> list[str]:
+    """`Bundle.run` runs `load` and every check through `_guarded`, and reports what a step raises. A subclass
+    that must refuse a bundle with an exception of its own, as the FLUX engine's `SeamBundle` does from `load`
+    and from `check_supply_chain`, overrides `_guarded` to let it out of `run` (the pattern is in its
+    docstring). That is a contract of this class: a step that ran outside the guard, or a guard under another
+    name, would let the engine's refusal be reported as a string, or raise a hostile document's exception out
+    of `run`, and this check fails then, in this repository's own CI."""
+    class Refusal(Exception):
+        pass
+
+    def let_out(self, step):
+        refused = []
+
+        @functools.wraps(step)
+        def refusing():
+            try:
+                step()
+            except Refusal as exc:
+                refused.append(exc)
+                raise
+
+        Bundle._guarded(self, refusing)
+        if refused:
+            raise refused[0]
+
+    steps = ("load", "check_refs", "check_sums_and_sets", "check_traits", "check_supply_chain",
+             "check_semantics", "check_agent_policy", "check_fluid_documents", "check_fluid_seam")
+    failures = []
+
+    seen = []
+
+    class Watching(Bundle):
+        def _guarded(self, step):
+            seen.append(step.__name__)
+            super()._guarded(step)
+
+    Watching(EXAMPLES, flux_validator).run()
+    missing, extra = sorted(set(steps) - set(seen)), sorted(set(seen) - set(steps))
+    if missing or extra or len(seen) != len(steps) or seen[:1] != ["load"]:
+        failures.append(
+            f"[guard] run() must send load first and each check once through _guarded; the steps this check holds "
+            f"are `steps` here: add a new check to it, or find the step that runs outside the guard "
+            f"(not sent: {missing}; sent but not held: {extra}; sent: {seen})")
+
+    for name in steps:
+        def refuse(self, _name=name):
+            raise Refusal(_name)
+
+        refuse.__name__ = name  # the guard names the step in its report
+        try:
+            errors = type("Reporting", (Bundle,), {name: refuse})(EXAMPLES, flux_validator).run()
+        except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+            failures.append(f"[guard] {name}: the guard let {type(exc).__name__} out of run()")
+        else:
+            if not any(f"{name} could not read this bundle (Refusal" in e for e in errors):
+                failures.append(f"[guard] {name}: the guard did not report the exception of the step: {errors[:2]}")
+        try:
+            type("LettingOut", (Bundle,), {name: refuse, "_guarded": let_out})(EXAMPLES, flux_validator).run()
+        except Refusal as exc:
+            if exc.args != (name,):
+                failures.append(f"[guard] {name}: the refusal that came out of run() is not the one of the step: {exc.args}")
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"[guard] {name}: run() raised {type(exc).__name__}, not the subclass's own exception")
+        else:
+            failures.append(f"[guard] {name}: a subclass's override did not let its exception out of run()")
+    return failures
+
+
 def _pax_record(key: bytes, value: bytes) -> bytes:
     """One PAX extended-header record: its own length, then ` key=value` and a newline."""
     body = b" " + key + b"=" + value + b"\n"
@@ -2902,6 +2970,7 @@ def main() -> int:
     failures += check_verify_refuses_unsafe_members(flux_validator)
     failures += check_verify_stops_at_its_caps_and_reports_a_broken_stream(flux_validator)
     failures += check_verify_never_raises_on_deep_nesting_or_a_nul_path(flux_validator)
+    failures += check_a_subclass_lets_its_own_refusal_out_of_run_through_the_guard(flux_validator)
     failures += check_verify_reports_a_pax_header_tarfile_cannot_parse(flux_validator)
     failures += check_supply_chain_digests_each_target_once(flux_validator)
     failures += check_reads_bundles_as_utf8(flux_validator)
