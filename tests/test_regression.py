@@ -1934,6 +1934,431 @@ def check_validator_messages_are_capped(flux_validator) -> list[str]:
     return failures
 
 
+def _scalar_spans(text: str, kind: str = "value") -> list[tuple[int, int]]:
+    """The character spans of the scalars of *text*: its "value"s, or its mapping "key"s. A span starts at a
+    node's tag or anchor, when it has one."""
+    spans: list[tuple[int, int]] = []
+
+    def walk(node, is_key=False):
+        if isinstance(node, yaml.ScalarNode):
+            if is_key == (kind == "key"):
+                spans.append((node.start_mark.index, node.end_mark.index))
+        elif isinstance(node, yaml.SequenceNode):
+            for item in node.value:
+                walk(item)
+        elif isinstance(node, yaml.MappingNode):
+            for key_node, value_node in node.value:
+                walk(key_node, True)
+                walk(value_node)
+
+    for root in yaml.compose_all(text):
+        walk(root)
+    return spans
+
+
+def _sexagesimal(parts: int) -> str:
+    """A YAML 1.1 sexagesimal float of *parts* parts (`1:1:1.0`), which PyYAML builds as a float: the place
+    value of the first part is 60 to the power of one less than *parts*."""
+    return ":".join(["1"] * (parts - 1)) + ":1.0"
+
+
+@contextlib.contextmanager
+def _default_digit_limit():
+    """CPython's own limit on integer text, 4,300 digits, whatever the environment set (PYTHONINTMAXSTRDIGITS):
+    the checks that name it expect it."""
+    if not hasattr(sys, "set_int_max_str_digits"):
+        yield
+        return
+    saved = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(4300)
+    try:
+        yield
+    finally:
+        sys.set_int_max_str_digits(saved)
+
+
+def check_a_scalar_pyyaml_cannot_build_is_unreadable_yaml_by_its_position(flux_validator) -> list[str]:
+    """PyYAML raised a bare ValueError, IndexError or KeyError for a scalar its explicit tag cannot build,
+    ValueError for an integer of more than 4300 digits, and OverflowError for a sexagesimal float of 175
+    parts or more, out of a read that says it never raises. Each is now unreadable YAML, placed by line and
+    column, as the FLUX engine's read refuses them.
+
+    An integer written in hex, octal or binary forms at any length and then broke the first message that
+    spelled it, so the length of its value is bounded too."""
+    import validate as validate_tool
+
+    integer, flt, boolean = ("a scalar read as an integer has no integer value", "a scalar read as a float has no float value",
+                             "a scalar read as a boolean has no boolean value")
+    too_long = "an integer of more than 4300 digits is too long to read"
+    refused = {
+        "a sexagesimal float of 175 parts, which overflows a float": (_sexagesimal(175), flt),
+        "the same, with its tag": ("!!float " + _sexagesimal(200), flt),
+        "a sexagesimal integer of 3,000 parts, whose value is too long": (":".join(["1"] * 3000), too_long),
+        "an integer its tag cannot build": ("!!int abc", integer), "an empty integer": ("!!int ''", integer),
+        "a hex integer with no digit": ("0x_", integer), "a sexagesimal integer with a letter": ("!!int 1:x", integer),
+        "a float its tag cannot build": ("!!float ZZZ", flt), "an empty float": ("!!float ''", flt),
+        "a boolean its tag cannot build": ("!!bool maybe", boolean), "an empty boolean": ("!!bool ''", boolean),
+        "a decimal integer of 4,301 digits": ("9" * 4301, too_long), "a negative one": ("-" + "9" * 4301, too_long),
+        "a hex integer of 3,600 digits": ("0x" + "f" * 3600, too_long),
+        "a binary integer of 15,000 digits": ("0b" + "1" * 15_000, too_long),
+    }
+    read = {"a decimal integer of 4,300 digits": "9" * 4300, "a hex integer of 3,560 digits": "0x" + "f" * 3560,
+            "a sexagesimal float of 174 parts, the most a float holds": _sexagesimal(174),
+            # A spelling in a power of two forms at any length: it is the value that is too long to print.
+            "a binary integer of 4,301 digits, whose value is short": "0b" + "1" * 4301,
+            "an octal integer of 4,301 digits, whose value is short": "0" + "7" * 4301,
+            # int() reads each part of a sexagesimal integer on its own: 86 parts of 50 digits are 4,300 in all.
+            "a tagged sexagesimal integer of 5,000 digits in parts of 50": "!!int " + ":".join(["1" * 49 + "2"] * 100),
+            "the spellings that build": "[0x1f, 0o17, 0b11, 1_000, 1:30:00, 1e3, .inf, -.inf, yes, no, on, off, ~]"}
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp, _default_digit_limit():
+        for label, (spelling, why) in refused.items():
+            try:
+                docs, error = _read_text(f"a: 1\nb: {spelling}\n", Path(tmp))
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                failures.append(f"[scalars] load_yaml_docs raised {type(exc).__name__} on {label}")
+                continue
+            if docs or error != f"unreadable YAML: {why} (line 2, column 4)":
+                failures.append(f"[scalars] {label} was not refused as '{why}' at (line 2, column 4): {len(docs)} documents, {error}")
+        for label, spelling in read.items():
+            try:
+                docs, error = _read_text(f"a: 1\nb: {spelling}\n", Path(tmp))
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"[scalars] load_yaml_docs raised {type(exc).__name__} on {label}")
+                continue
+            if error or len(docs) != 1:
+                failures.append(f"[scalars] {label} did not read: {error}")
+        # PyYAML adds a sexagesimal integer up part by part, which costs the square of their number, so one
+        # of more parts than the limit has digits is refused before it is built, and that is all it can be.
+        built = []
+        real_build = yaml.SafeLoader.construct_yaml_int
+        with _patched(yaml.SafeLoader, construct_yaml_int=lambda loader, node: built.append(1) or real_build(loader, node)):
+            docs, error = _read_text("b: !!int " + ":".join(["1"] * 40_000) + "\n", Path(tmp))
+        if docs or error != f"unreadable YAML: {too_long} (line 1, column 4)" or built:
+            failures.append(f"[scalars] a sexagesimal integer of 40,000 parts was not refused before it was built: {len(docs)} documents, {error}, built {len(built)}")
+        # A later document of the file is placed by its own lines, and none of the file's documents is returned.
+        try:
+            docs, error = _read_text("a: 1\n---\nb: 2\n---\nc: !!bool maybe\n", Path(tmp))
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"[scalars] load_yaml_docs raised {type(exc).__name__} on a later document")
+        else:
+            if docs or error != f"unreadable YAML: {boolean} (line 5, column 4)":
+                failures.append(f"[scalars] a later document with a scalar that cannot build was not refused where it is: {len(docs)} documents, {error}")
+    return failures
+
+
+def check_a_document_that_cannot_be_digested_is_reported_not_raised(flux_validator) -> list[str]:
+    """RFC 8785 cannot write a NaN or an infinity, an integer past JSON's range, a key that is not a string,
+    or a value JSON has no spelling for. A free-form field of a document that is otherwise valid can hold
+    any of them, and the digest of a locked module and of the contract a Simulation emits raised.
+
+    Such a document is reported as one that cannot be digested, once, whatever the number of refs to it."""
+    hostile = {"a NaN": ".nan", "an infinity": "-.inf", "an integer past JSON's range": str(2 ** 60),
+               "a binary value": "!!binary aGk=", "a set": "!!set {a, b}"}
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for label, spelling in hostile.items():
+            for where, filename, old, new in (("a locked module", "module.flux.yml", "{ spec: cloudevents/1.0 }", "{ spec: " + spelling + " }"),
+                                              ("a locked module, as a key", "module.flux.yml", "{ spec: cloudevents/1.0 }", "{ spec: x, 1: " + spelling + " }")):
+                work = Path(tmp) / f"{where}-{label}" / "bundle"
+                shutil.copytree(EXAMPLES, work)
+                text = (work / filename).read_text(encoding="utf-8")
+                assert old in text
+                (work / filename).write_text(text.replace(old, new, 1), encoding="utf-8")
+                try:
+                    errors = Bundle(work, flux_validator).run()
+                except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                    failures.append(f"[digest] {where} holding {label} raised {type(exc).__name__}: {str(exc)[:60]}")
+                    continue
+                if sum("cannot be digested" in e for e in errors) != 1:
+                    failures.append(f"[digest] {where} holding {label} was not reported once: {[e[:90] for e in errors][:3]}")
+            # The contract a Simulation emits, digested for its provenance, is any YAML document.
+            work = Path(tmp) / f"contract-{label}" / "bundle"
+            shutil.copytree(EXAMPLES, work)
+            fluid = work / "payment-recovery.fluid.yml"
+            text = fluid.read_text(encoding="utf-8")
+            start, end = _scalar_spans(text)[4]
+            fluid.write_text(text[:start] + spelling + text[end:], encoding="utf-8")
+            try:
+                errors = Bundle(work, flux_validator).run()
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"[digest] a contract holding {label} raised {type(exc).__name__}: {str(exc)[:60]}")
+                continue
+            if not any("cannot be digested" in e and "the contract" in e for e in errors):
+                failures.append(f"[digest] a contract holding {label} was not reported: {[e[:90] for e in errors][:3]}")
+        # A key is digested too. RFC 8785 refuses one that is not a string (a NaN), and one that UTF-16
+        # cannot hold (a lone surrogate) in another way: the second raised a UnicodeEncodeError.
+        for label, spelling in {"a NaN": ".nan", "a lone surrogate": '"\\ud800"'}.items():
+            for where, filename, old, new in (
+                    ("a locked module", "module.flux.yml", "{ spec: cloudevents/1.0 }", "{ spec: cloudevents/1.0, " + spelling + ": 1 }"),
+                    ("a contract", "payment-recovery.fluid.yml", "\nid:", "\n" + spelling + ": 1\nid:")):
+                work = Path(tmp) / f"key-{where}-{label}" / "bundle"
+                shutil.copytree(EXAMPLES, work)
+                text = (work / filename).read_text(encoding="utf-8")
+                assert old in text
+                (work / filename).write_text(text.replace(old, new, 1), encoding="utf-8")
+                try:
+                    errors = Bundle(work, flux_validator).run()
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(f"[digest] {where} holding {label} as a key raised {type(exc).__name__}: {str(exc)[:60]}")
+                    continue
+                if sum("cannot be digested" in e for e in errors) != 1:
+                    failures.append(f"[digest] {where} holding {label} as a key was not reported once: {[e[:90] for e in errors][:3]}")
+    return failures
+
+
+#: What a value of the wrong shape can be: none of them is what a document is written to hold.
+_SHAPES = (5, None, True, "x", [], {}, [1], [[1]], [{"a": 1}], {"a": 1}, "\ud800", float("nan"), 10 ** 30, {1, 2}, {"\ud800": 1})
+_CROSS_CHECKS = ("check_refs", "check_sums_and_sets", "check_traits", "check_supply_chain", "check_semantics",
+                 "check_agent_policy", "check_fluid_documents", "check_fluid_seam")
+
+
+def _node_paths(node, prefix=()):
+    """The path to every node below *node*: the keys and indexes that lead to it."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield prefix + (key,)
+            yield from _node_paths(value, prefix + (key,))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield prefix + (index,)
+            yield from _node_paths(value, prefix + (index,))
+
+
+def _cross_check_that_raises(bundle, flux_docs, fluid_docs, lock_docs):
+    """The name and exception of the first cross-check of *bundle* that raises on these documents, or None.
+
+    The checks are run one by one, not through Bundle.run(), which reports what it could not read instead of
+    raising: this finds a read that nobody guarded, which that report would hide."""
+    import validate as validate_tool
+
+    real_load = validate_tool.load_yaml_docs
+    bundle.errors = []
+    bundle.flux_docs, bundle.fluid_docs = flux_docs, fluid_docs
+    with _patched(validate_tool, load_yaml_docs=lambda path: (copy.deepcopy(lock_docs), None) if path.name == "flux.lock" else real_load(path)):
+        for name in _CROSS_CHECKS:
+            try:
+                getattr(bundle, name)()
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                return f"{name} raised {type(exc).__name__}: {str(exc)[:50]}"
+    return None
+
+
+def check_a_value_of_a_shape_no_check_expected_is_reported_not_raised(flux_validator) -> list[str]:
+    """The cross-checks read fields no schema describes: a Module's `config.measures`, and the FLUID contracts,
+    which no FLUX schema covers (`exposes`, `policy.agentPolicy.allowedUseCases`). A value of the wrong shape
+    in one of them raised TypeError or AttributeError out of Bundle.run(), `pack` and `verify`.
+
+    Each is now read where it is, and what a check could still not read is reported by Bundle.run() as that
+    check's. This puts each of 15 shapes in place of every node of the example's contract, of its lockfile and
+    of its Modules' configs, and in the places a contract may name that this one does not, and runs the checks
+    on them one by one: a read that nobody guarded raises here, which Bundle.run() would report instead."""
+    base = Bundle(EXAMPLES, flux_validator)
+    base.load()
+    sweeper = Bundle(EXAMPLES, flux_validator)   # one for every run, so that its FLUID validators are built once
+    lock = list(yaml.safe_load_all((EXAMPLES / "flux.lock").read_text(encoding="utf-8")))
+    contract_id, (contract_path, contract) = next(iter(base.fluid_docs.items()))
+    failures: list[str] = []
+
+    def put(document, path, value):
+        for step in path[:-1]:
+            document = document[step]
+        document[path[-1]] = value
+
+    def run(label, flux_docs=None, fluid_docs=None, lock_docs=None):
+        raised = _cross_check_that_raises(sweeper, flux_docs or base.flux_docs, fluid_docs or base.fluid_docs,
+                                          lock if lock_docs is None else lock_docs)
+        if raised:
+            failures.append(f"[shapes] {label}: {raised}")
+
+    for path in list(_node_paths(contract)):
+        for shape in _SHAPES:
+            mutated = copy.deepcopy(contract)
+            put(mutated, path, copy.deepcopy(shape))
+            run(f"the contract's {'.'.join(map(str, path))} as {shape!r:.20}", fluid_docs={contract_id: (contract_path, mutated)})
+    for path in list(_node_paths(lock[0])):
+        for shape in _SHAPES:
+            mutated = copy.deepcopy(lock[0])
+            put(mutated, path, copy.deepcopy(shape))
+            run(f"the lockfile's {'.'.join(map(str, path))} as {shape!r:.20}", lock_docs=[mutated])
+    for module_id, module in base.flux_docs.items():
+        if module.get("kind") != "Module":
+            continue
+        for path in [p for p in _node_paths(module) if "config" in p]:
+            for shape in _SHAPES:
+                mutated = copy.deepcopy(module)
+                put(mutated, path, copy.deepcopy(shape))
+                if not list(flux_validator.iter_errors(mutated)):   # as load() does: an invalid document is left out
+                    run(f"{module_id}'s {'.'.join(map(str, path))} as {shape!r:.20}", flux_docs={**base.flux_docs, module_id: mutated})
+    # What a contract may hold that this one does not: a policy, and the use cases it allows.
+    for shape in _SHAPES:
+        for label, policy in (("a policy", shape), ("an agentPolicy", {"agentPolicy": shape}),
+                              ("allowedUseCases", {"agentPolicy": {"allowedUseCases": shape}})):
+            mutated = copy.deepcopy(contract)
+            mutated["exposes"][0]["policy"] = copy.deepcopy(policy)
+            run(f"{label} of {shape!r:.20}", fluid_docs={contract_id: (contract_path, mutated)})
+    # A contract whose allow-list cannot be read cannot be shown to be as strict as the profile that gates it
+    # (the example's does): that is an error, and not an allow-list with nothing in it.
+    for shape in (5, True, "x", {"advertising": True}, [[1]], [{"a": 1}], [1]):
+        for label, policy in (("allowedUseCases", {"agentPolicy": {"allowedUseCases": shape}}), ("an agentPolicy", {"agentPolicy": [shape]})):
+            mutated = copy.deepcopy(contract)
+            mutated["exposes"][0]["policy"] = copy.deepcopy(policy)
+            run(f"{label} of {shape!r:.20}", fluid_docs={contract_id: (contract_path, mutated)})
+            if not any("cannot be read as a list of use case names" in error for error in sweeper.errors):
+                failures.append(f"[shapes] {label} of {shape!r:.20} was not reported where a ConsentProfile gates the contract")
+    # A Module may name its measures as the keys of a mapping: that read before, and reads still.
+    for module_id, module in base.flux_docs.items():
+        for bind in module["spec"].get("binds", []) if module.get("kind") == "Module" else []:
+            declared = (bind.get("config") or {}).get("measures")
+            if bind.get("port") == "ossie-model" and isinstance(declared, list):
+                mutated = copy.deepcopy(module)
+                for changed in mutated["spec"]["binds"]:
+                    if changed.get("port") == "ossie-model":
+                        changed["config"]["measures"] = {(m if isinstance(m, str) else m["name"]): {"type": "count"} for m in declared}
+                run(f"{module_id}'s measures as a mapping", flux_docs={**base.flux_docs, module_id: mutated})
+                if any("is not declared by the bound semantic model" in error for error in sweeper.errors):
+                    failures.append(f"[shapes] {module_id}'s measures, named as the keys of a mapping, are no longer read")
+    return failures
+
+
+def _strict_stdout(encoding: str = "utf-8"):
+    """A stdout that encodes as a terminal's does, and raises for what it cannot encode. A StringIO takes
+    anything, so it cannot tell a line that `print` would raise on."""
+    return io.TextIOWrapper(io.BytesIO(), encoding=encoding, errors="strict")
+
+
+def check_a_line_with_a_lone_surrogate_is_printed_not_raised(flux_validator) -> list[str]:
+    """YAML can build a string UTF-8 cannot hold: "\\ud800" is a lone surrogate. A message that spells one with
+    an f-string (a duplicate document id does) made `print` raise out of validate, pack and verify, which
+    print what they find. Such a line is written as its escape."""
+    import validate as validate_tool
+
+    failures = []
+    if validate_tool.bounded_line("id '\ud800' twice") != "id '\\ud800' twice":
+        failures.append("[print] bounded_line did not write a lone surrogate as its escape")
+    if len(validate_tool.bounded_line("\ud800" * 5_000)) > validate_tool.MAX_LINE:
+        failures.append("[print] a line of lone surrogates, written as their escapes, is longer than MAX_LINE")
+    # A stdout that is not UTF-8 lacks more than a surrogate: cp1252, a Windows pipe's, has no CJK.
+    for encoding, ident, escaped in (("utf-8", "\\ud800", "\\ud800"), ("cp1252", "\\u65e5\\u672c", "\\u65e5\\u672c")):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "bundle"
+            shutil.copytree(EXAMPLES, work)
+            fluid = work / "payment-recovery.fluid.yml"
+            text = re.sub(r"(?m)^id:.*$", lambda match: f'id: "{ident}"', fluid.read_text(encoding="utf-8"), count=1)
+            fluid.write_text(text, encoding="utf-8")
+            (work / "second.fluid.yml").write_text(text, encoding="utf-8")
+            shown = _strict_stdout(encoding)
+            try:
+                with contextlib.redirect_stdout(shown):
+                    code = validate_tool.main([str(work)])
+                    packed = bundle_tool.pack(work, Path(tmp) / "dist", flux_validator)
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                failures.append(f"[print] {type(exc).__name__} raised printing a duplicate id that a {encoding} stdout cannot hold: {str(exc)[:60]}")
+                continue
+            shown.flush()
+            said = shown.buffer.getvalue().decode(encoding)
+            if code != 1 or packed != 1 or said.count(escaped) < 2:
+                failures.append(f"[print] a duplicate id that a {encoding} stdout cannot hold was not reported as its escape by validate ({code}) and pack ({packed}): {said[:200]!r}")
+    return failures
+
+
+def _broken_check(name):
+    """A stand in for the cross-check *name* that raises, as one that met a value it was not written for would."""
+    def broken(self):
+        raise TypeError("a value of no shape this check expected")
+    broken.__name__ = name
+    return broken
+
+
+def check_a_check_that_cannot_read_a_bundle_fails_it_instead_of_raising(flux_validator) -> list[str]:
+    """Each shape known to raise is read where it is. Bundle._guarded is what keeps one that nobody guarded from
+    raising out of validate, pack and verify: a check that raises fails the bundle, by name, and a bundle that
+    fails is not packed."""
+    failures = []
+    for name in ("check_refs", "check_semantics", "check_fluid_seam"):
+        with tempfile.TemporaryDirectory() as tmp:
+            work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
+            shutil.copytree(EXAMPLES, work)
+            try:
+                with _patched(Bundle, **{name: _broken_check(name)}), contextlib.redirect_stdout(_strict_stdout()):
+                    errors = Bundle(work, flux_validator).run()
+                    packed = bundle_tool.pack(work, out, flux_validator)
+            except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                failures.append(f"[guarded] {name} raised {type(exc).__name__} out of run() or pack: {str(exc)[:60]}")
+                continue
+            if not any(f"{name} could not read this bundle (TypeError: a value of no shape this check expected)" in e for e in errors):
+                failures.append(f"[guarded] a bundle whose {name} raised was not reported by that check: {[e[:100] for e in errors][:2]}")
+            if packed == 0 or list(out.glob("*.flux.tgz")):
+                failures.append(f"[guarded] a bundle whose {name} could not read it was packed")
+    return failures
+
+
+#: Spellings no real document holds, one for each way PyYAML or what reads after it can fail on a scalar.
+_HOSTILE = (
+    "!!int abc", "!!int ''", "0x_", "9" * 5000, "-" + "9" * 5000, "0x" + "f" * 5000, str(2 ** 60), "!!float ZZZ", "1e999", ".nan",
+    _sexagesimal(175), "!!bool maybe", "!!binary aGVsbG8=", "!!set x", "!!python/object:os.system x", "2026-13-45", '"\\ud800"',
+    "'" + "x" * 50_000 + "'", '"\\x00\\x01"', "~",
+)
+#: Spellings for a mapping key: PyYAML builds a key of any hashable kind, and JSON has only strings.
+_HOSTILE_KEYS = ("1", ".nan", "true", "null", "0x10", "!!binary aGk=", '"\\ud800"')
+
+
+def check_hostile_yaml_never_raises_through_validate_pack_and_verify(flux_validator) -> list[str]:
+    """A seeded fuzz: each case puts one hostile spelling in place of one scalar or one mapping key of one file of
+    an example bundle (the lockfile and the FLUID contract included), then reads the bundle with Bundle.run(),
+    and, for one case in four, packs it and verifies an archive that holds it. Nothing may raise.
+
+    A quarter of such cases raised on the code before this check, from several places: PyYAML's constructors,
+    jsonschema's message for a very long integer, RFC 8785's digest, a line that stdout could not encode, and
+    an f-string that spelled an integer. What a check could still not read is reported by Bundle.run() as that
+    check's, not raised, and this fails for it as well: a read nobody guarded is a bug to fix where it is read."""
+    import random
+
+    rng = random.Random(20261119)
+    files = sorted(p for p in EXAMPLES.iterdir() if p.suffix in (".yml", ".yaml") or p.name == "flux.lock")
+    texts = {p.name: p.read_text(encoding="utf-8") for p in files}
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        clean = Path(tmp) / "clean" / "bundle"
+        shutil.copytree(EXAMPLES, clean)
+        with contextlib.redirect_stdout(_strict_stdout()):
+            bundle_tool.pack(clean, Path(tmp) / "clean-dist", flux_validator)
+        with tarfile.open(Path(tmp) / "clean-dist" / "bundle.flux.tgz") as tar:
+            members = [(m.name, tar.extractfile(m).read()) for m in tar.getmembers()]
+        cases = [(spelling, "value") for spelling in _HOSTILE] + [(spelling, "key") for spelling in _HOSTILE_KEYS]
+        for number, (spelling, kind) in enumerate(cases):
+            name = rng.choice(files).name
+            start, end = rng.choice(_scalar_spans(texts[name], kind))
+            hostile = texts[name][:start] + spelling + texts[name][end:]
+            where = f"{spelling[:24]!r} for a {kind} of {name}"
+            work = Path(tmp) / f"w{number}" / "bundle"
+            shutil.copytree(EXAMPLES, work)
+            (work / name).write_text(hostile, encoding="utf-8")
+            stages = ["run"] + (["pack", "verify"] if number % 4 == 0 else [])
+            for stage in stages:
+                try:
+                    with contextlib.redirect_stdout(_strict_stdout()):
+                        if stage == "run":
+                            errors = Bundle(work, flux_validator).run()
+                            assert all(isinstance(e, str) for e in errors)
+                            failures += [f"[fuzz] {e[:110]} on {where}" for e in errors if "could not read this bundle" in e]
+                        elif stage == "pack":
+                            bundle_tool.pack(work, Path(tmp) / f"d{number}", flux_validator)
+                        else:
+                            attacked = Path(tmp) / f"a{number}.flux.tgz"
+                            with tarfile.open(attacked, "w:gz") as dst:
+                                for member, data in members:
+                                    data = hostile.encode("utf-8") if member.endswith("/" + name) else data
+                                    info = tarfile.TarInfo(member)
+                                    info.size, info.mtime, info.mode = len(data), 0, 0o644
+                                    dst.addfile(info, io.BytesIO(data))
+                            bundle_tool.verify(attacked, flux_validator)
+                except Exception as exc:  # noqa: BLE001 (a raise is the failure)
+                    failures.append(f"[fuzz] {stage} raised {type(exc).__name__}: {str(exc)[:60]} on {where}")
+            shutil.rmtree(work.parent, ignore_errors=True)
+    return failures
+
+
 def main() -> int:
     failures = []
 
@@ -2208,6 +2633,9 @@ def main() -> int:
              "not valid JSON"),
         "duplicate archive entries":
             (lambda e: e + [e[0]], "duplicate archive entry"),
+        "manifest holds an integer of more than 4300 digits":
+            (lambda e: [(n, b'{"merkleRoot": ' + b"9" * 5000 + b"}" if n.endswith(bundle_tool.MANIFEST_NAME) else d) for n, d in e],
+             "cannot read archive" if 0 < getattr(sys, "get_int_max_str_digits", lambda: 0)() < 5_000 else "violates the manifest schema"),
     }
     for label, (mutate, expected) in BUNDLE_ATTACKS.items():
         with tempfile.TemporaryDirectory() as tmp:
@@ -2266,6 +2694,12 @@ def main() -> int:
     failures += check_the_bounds_hold_through_validate_and_verify(flux_validator)
     failures += check_bounded_keeps_both_ends_of_a_long_message(flux_validator)
     failures += check_validator_messages_are_capped(flux_validator)
+    failures += check_a_scalar_pyyaml_cannot_build_is_unreadable_yaml_by_its_position(flux_validator)
+    failures += check_a_document_that_cannot_be_digested_is_reported_not_raised(flux_validator)
+    failures += check_a_value_of_a_shape_no_check_expected_is_reported_not_raised(flux_validator)
+    failures += check_a_line_with_a_lone_surrogate_is_printed_not_raised(flux_validator)
+    failures += check_a_check_that_cannot_read_a_bundle_fails_it_instead_of_raising(flux_validator)
+    failures += check_hostile_yaml_never_raises_through_validate_pack_and_verify(flux_validator)
 
     # a bundle that does not validate must never be packed
     with tempfile.TemporaryDirectory() as tmp:
@@ -2308,7 +2742,7 @@ def main() -> int:
         + 12  # RFC-04: vectors, contract conformance, self-contradiction, 6 broken gates, canonicalisation x3
         + 8   # RFC-09: pack, verify, determinism, profile, merkle x2, tamper, refuse-invalid
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
-        + 9   # RFC-09 negative fixtures: 6 archive attacks + 2 malformed inputs + size cap
+        + 10  # RFC-09 negative fixtures: 7 archive attacks + 2 malformed inputs + size cap
         + 8   # RFC-09 across releases: window resolves, 0.5.0, 0.5.1 and 0.5.2 packs verify, named
               # schema applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
         + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link

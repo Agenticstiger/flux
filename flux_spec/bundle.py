@@ -490,6 +490,9 @@ def verify(archive: Path, validator=None) -> int:
         problems.append(f"{MANIFEST_NAME} is not UTF-8 text")
     except json.JSONDecodeError as exc:
         problems.append(f"{MANIFEST_NAME} is not valid JSON: {exc}")
+    except ValueError as exc:
+        # json reads an integer of more than 4300 digits with a plain ValueError, not a JSONDecodeError.
+        problems.append(f"cannot read archive: {str(exc).splitlines()[0] if str(exc) else type(exc).__name__}")
     except ValidationError as exc:
         problems.append(f"{MANIFEST_NAME} violates the manifest schema: {exc.message}")
     except OSError as exc:
