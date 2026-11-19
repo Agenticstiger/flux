@@ -81,7 +81,7 @@ document that authorised it *and* see what actually applied.
 
 The vectors are published:
 [`tests/enforcement-vectors.json`](https://github.com/Agenticstiger/flux/blob/main/tests/enforcement-vectors.json),
-35 cases pinning `allow`, `reasonCode` **and** `policyDigest` (a policy RFC 8785
+37 cases pinning `allow`, `reasonCode` **and** `policyDigest` (a policy RFC 8785
 cannot write has none) across allow paths, every deny code, budget boundaries,
 skill narrowing (including a skill that tries to *widen*), malformed requests,
 off-spec policies, normalisation evasions, canonicalisation, and the

@@ -11,7 +11,8 @@ Checks run in a fixed, normative order and the first failure wins:
 
   0. INVALID_POLICY          the policy itself is off-spec (fail closed): a missing or
                              non-integer budget, a value RFC 8785 cannot write (a number that
-                             is not finite), a skill budget that is not an integer
+                             is not finite), a skill that is not an object, a skill budget
+                             that is not an integer
   1. INVALID_REQUEST         the request is malformed
   2. MODEL_NOT_ALLOWED       model outside agentPolicy.allowedModels
   3. USE_CASE_DENIED         use case listed in deniedUseCases
@@ -200,10 +201,12 @@ def policy_problem(policy) -> str | None:
 
 
 def skill_problem(skill) -> str | None:
-    """Why this skill is off-spec, or None. A skill narrows the budget, so one whose own budget is present and
-    not an integer (a NaN, an infinity, text) must not mean "no narrowing": that is a wider budget than its
-    author gave it. Any integer is read as before, and `min(skill, policy)` keeps it from widening."""
-    if not skill:
+    """Why this skill is off-spec, or None. A skill is an object, or there is none (`None`). One that is not an
+    object is off-spec even when it is falsy (`[]`, `false`, `0`, `""`): it must not read as no skill. A skill
+    narrows the budget, so one whose own budget is present and not an integer (a NaN, an infinity, text) must
+    not mean "no narrowing" either: that is a wider budget than its author gave it. `{}` is a skill that names
+    no budget. Any integer is read as before, and `min(skill, policy)` keeps it from widening."""
+    if skill is None:
         return None
     if not isinstance(skill, dict):
         return "skill must be an object"

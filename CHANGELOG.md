@@ -29,10 +29,11 @@
     names the digest of `{}`, as for a policy that is not an object. A skill
     whose `tokenBudget` is present and not an integer (a NaN, an infinity,
     text, `null`) is `INVALID_POLICY`, where it narrowed nothing, and so is a
-    skill that is not an object, where `decide` raised. An integer budget of
+    skill that is not an object, where `decide` raised or, for `[]`, `false`, `0`
+    and `""`, read it as no skill; `{}` is still a skill that names no budget. An integer budget of
     any size is read as it was, and `min(skill, policy)` still keeps it from
-    widening. A request is decided as before. One new conformance vector pins
-    the skill (35 in all); a number that is not finite has no spelling in JSON
+    widening. A request is decided as before. Three new conformance vectors pin
+    the skill (37 in all); a number that is not finite has no spelling in JSON
     that every parser reads (some refuse `1e999` as out of range), so the
     reference gate's own checks pin those.
   - `verify` refuses a manifest that holds `NaN`, `Infinity` or a number past
