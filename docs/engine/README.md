@@ -9,7 +9,7 @@ The FLUX Simulation Engine runs a [FLUX](https://agenticstiger.github.io/flux/) 
 declared universe of synthetic customers, against the
 [FLUID](https://open-data-protocol.github.io/fluid/) contract it refers to. The same
 bundle and the same seed give the same bytes on every system the project's CI checks
-(Linux and macOS, Python 3.11 to 3.13). A run that passes its checks can be packed into
+(Linux and macOS, Python 3.11 to 3.14). A run that passes its checks can be packed into
 an evidence archive. Anyone can check offline that the archive's files match its
 manifest, and the report inside says plainly what the run does not show. The command is
 `fluxsim`.
@@ -27,7 +27,7 @@ install, and how a run moves through them.
 | Learn by doing | [Tutorial](./tutorial/README.md) | A lesson that works the first time. |
 | Get a job done | [How-to guides](./how-to/README.md) | Steps for one goal, for a reader who knows the basics. |
 | Look something up | [Reference](./reference/README.md) | The command line, every error code, the Python API, the schemas. |
-| Understand why | [Explanation](./explanation/README.md) | Background: the architecture, the loop, determinism, the seam, the evidence pack. |
+| Understand why | [Explanation](./explanation/README.md) | Background: the architecture, the loop, determinism, the seam, the evidence pack, running offline. |
 | Read the rules | [Specifications](./spec/README.md) | What the engine must do, rule by rule: the kernel, the seam, the expression languages, the profile and the scores. |
 | See why it was decided | [Decision records](./adr/README.md) | One record per design decision, with what else was considered. |
 

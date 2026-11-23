@@ -22,6 +22,19 @@ The data owner makes the profile where the data lives, with
 and the contract usually comes from `fluid init --discover`. This page writes both by
 hand so it runs anywhere: 600 orders with an id, a country, an amount and a time.
 
+If you have the contract and no profile yet, `init` runs in two steps. Give it the contract
+alone and it writes a profile request, the list of statistics, column metrics and fact shares
+a profiler must measure where the data lives ([PROFILE-REQUEST-SPEC](../spec/PROFILE-REQUEST-SPEC.md)):
+
+```text
+fluxsim init bundle --contract contract.orders.fluid.yaml
+```
+
+It writes `bundle.profile-request.yml` beside the directory, never inside it, and never over a
+file that exists (`--request FILE` names another place). A profiler reads the request and writes
+the profile; then run the command above with `--profile`. The request holds names and registered
+identifiers and no value of your data.
+
 ## 1. The two documents
 
 The contract, as `fluid init --discover` writes it for a Parquet file:
@@ -163,11 +176,21 @@ created bundle from contract.orders.fluid.yaml and orders.profile.json (4 files)
 
 orders: 600 rows, 4 columns
   order_id    an identifier: 600 distinct values in 600, so the engine derives one per row
-  country     5 opaque levels, at equal weights
-  amount      a histogram over 5 published order statistics, shaped to the published mean
+  country     5 opaque levels, at equal weights; allocated exactly, since the table is small ...
+  amount      a histogram over 5 published order statistics, shaped to the published mean; allocated exactly, since the table is small ...
   created_at  uniform within the run's time window: the profile publishes no order statistic
 
-parameters: 34 declared -- 12 from the pinned profile, 19 assumed, 3 default
+profile: 21 statistics -- 11 used, 3 unused, 7 withheld
+unused (no number rests on these; the register lists them):
+  - /tables/orders/columns/country/metrics/count (count/1): no rule of fluxsim init reads this statistic for this column
+  - /tables/orders/columns/created_at/metrics/count (count/1): no rule of fluxsim init reads this statistic for this column
+  - /tables/orders/columns/created_at/metrics/distinctCount (distinctCount/1): no rule of fluxsim init reads this statistic for this column
+a profile of the contract would replace assumptions (bundle.assumptions.profile-request.yml asks a profiler for them):
+  - /tables/orders/columns/amount/metrics/nullCount (nullCount/1): 1 assumed number
+  - /tables/orders/columns/amount/statistics/0 (marginalHistogram/1): 8 assumed numbers
+  - /tables/orders/columns/country/statistics/0 (levelHistogram/1): 1 assumed number
+  - /tables/orders/columns/created_at/metrics/nullCount (nullCount/1): 1 assumed number
+parameters: 33 declared -- 12 from the pinned profile, 0 from the contract, 18 assumed, 3 default
 assumed (the register gives each assumed number its reason; replace what you know better):
   - country: The profile publishes how many distinct values the column holds and neither the values nor their counts: as many opaque levels, named country-<n>, at equal weights.
   - country, amount, created_at: The profile withheld nullCount (status A): a count withheld as small is zero or below the minimum cell, so no nulls are drawn.
@@ -179,11 +202,35 @@ next:
   fluxsim run bundle --profile orders.profile.json
 ```
 
+Both drawn columns say they are allocated exactly: 600 rows is a small table, so `init` wrote `allocation: exact` on them and `sampling: true` on their tolerances (see the list of what `init` writes below).
+
 The directory must not exist yet, or must be empty: nothing is ever overwritten. The
 profile stays outside the bundle, which holds only FLUX and FLUID documents; the
 Simulation pins its digest instead. Before it writes a file, the command checks the
 bundle as `fluxsim validate` does, and as `plan` does from the documents alone before a
 row is drawn, and writes nothing either refuses.
+
+The `profile:` line is the command's ledger ([ADR 0014](../adr/0014-init-reads-every-statistic-a-profile-publishes.md)):
+every statistic and metric of the profile, by its JSON Pointer, is used (a number of the
+bundle rests on it, a rule read it, a property is scored against it, or the bundle was
+checked against it), unused, or withheld (the profile published no value). Each unused
+one is named with the reason no rule reads it, and the Simulation lists them under
+`unused` beside the register: `plan`, `verify` and `ship` count them, and `ship` names
+each one under "What Was Not Proven" in `EVIDENCE.md`.
+
+`--strict` turns the ledger into a gate. It writes nothing, and exits 1, when a statistic
+is unused or an assumption stands in for something the profile
+did not publish; the tolerances and the bounds of a committed state are settings, not
+gaps. Each finding is named, and `--allow POINTER` accepts the ones at or below a profile
+pointer or a Simulation pointer. An `--allow` that accepts nothing is refused too:
+
+```console
+$ fluxsim init strict --contract contract.orders.fluid.yaml --profile orders.profile.json --strict --allow /tables/orders/columns/created_at # exit 1
+init: --strict refuses this bundle (1 statistic of the profile unused, 6 assumptions standing in for what the profile did not publish); nothing was written
+  unused /tables/orders/columns/country/metrics/count (count/1): no rule of fluxsim init reads this statistic for this column
+...
+accept one with --allow POINTER (a profile pointer for a statistic, a Simulation pointer for a gap), or publish what the profile left out
+```
 
 ## 3. What each number rests on
 
@@ -195,11 +242,19 @@ The rules run from the most the profile says to the least:
 | a column's `min` and `max` | its `range`, which the fidelity check holds the run to | profile |
 | `min`, the quartiles and `max` | histogram `bins` and `binWeights`, a quarter of the rows in each | profile |
 | a mean: `sum` and `count`, or a `mean/1` statistic | the histogram shaped to that mean and, for a `mean/1` over a number column with a published range, a `mean` property the run is checked against | profile, with the shape assumed |
+| a binned quantile (`quantile/2`) | two points of the column's distribution for the histogram: where the profile withholds `min` or `max` beyond them, a tail from the published mean or the profile's next bin out, each assumed | profile, with the tail assumed |
 | `nullCount` | `nullFraction` | profile |
 | a histogram, level counts or a list of levels | `bins` and weights, `levels`, and a property the run is scored on | profile |
+| a histogram or level counts grouped by a categorical column | `given` that column, with `binWeightsGiven` or `levelWeightsGiven` from the group counts, and a grouped property | profile |
+| the same, grouped by an INT column the profile lists at most 64 whole numbers of (a `levelHistogram/1` or `support/1`) | that INT column declared as a categorical over those integer levels (canonical decimal text, each inside the contract's range), then `given` it as above | profile |
+| a histogram or level counts `per` the columns a contract `dependency` follows, when those columns are a key of the table or a relationship's foreign key | the dependent column drawn from that statistic in place of the one that counts rows, no histogram or mean property for it (a run's properties count rows, the statistic counts entities), and a choice that says so | profile |
+| children per parent of a relationship the contract declares (`relationships`) | a `counts` entry whose `children` are the histogram's classes, so each class of parents holds its published share of the parents; a relationship the layout cannot place keeps the foreign key's `bins` and `binWeights`, each class a share of the parent's keys | assumption, from the profile's counts |
 | as many distinct values as values | `unique: true`: an identifier the engine derives | no number |
 | an `enum(...)` type | `support: declared`, with `maxCardinality` its number of levels | contract |
 | a key, in its `semantics` | no key of its own: the engine reads keys from the contract | no number |
+| a `derive` in the contract's `invariants`, with no `when` | no draw, and a `range` from the rule's exact bounds over the columns it reads (or its published histogram's edges when they hold them), with its published statistics scored through the rule | contract, or profile for the edges |
+| a `range` rule in the contract's `validationRules` (`between A and B`, or `>=`, `>`, `<=`, `<`) | the bound on the bins, levels and tails of a drawn number column; a column with nothing published draws evenly over it | contract |
+| a `dependency` in the contract | the column keeps its draw and gets no `mean` property, since the run draws it once per value of the columns it follows | contract |
 | nothing, or a withheld value | an assumption, stated with its reason | assumption |
 
 These rules shape the assumptions:
@@ -222,6 +277,58 @@ These rules shape the assumptions:
   the foreign keys that reference it are declared over, or moved inside the key it
   references when that key's span is published, down a chain of keys. A foreign key the
   profile says nothing of is drawn over the span of the key it references.
+- Grouped statistics are read as two-way tables. Each pair of columns is scored by its
+  mutual information, and the tree of the most informative links that makes no cycle
+  decides which column is drawn given which: at most one `given` per column, a number
+  column only at the end of a link, and never given a column that holds nulls. A grouping
+  the tree leaves out is unused, and the output says why. An INT column the profile groups
+  another column by, and lists at most 64 whole numbers of, is a categorical over those
+  levels for this purpose. A statistic grouped by a number column of the profile (format
+  `1-3-0`) is listed as unused: a number column publishes bins, not levels.
+- A table the profile publishes whole under `references` (format `1-3-0`) is written as a
+  reference expose: `reference: true` and nothing else, so its rows are the published ones. A
+  foreign key into it declares the levels the profile counts it over (the child rows of each
+  catalogue row), when they are keys of the catalogue; a foreign key whose statistic is over
+  other values declares none, so it picks a catalogue row uniformly, and its statistic is
+  unused with that reason. A statistic of a column grouped by a column of a linked row
+  (`groupByLink`) is read as a two-way table, and the column is drawn
+  `given: <relationship>.<column>` with the grouped counts as its weights, and scored by a
+  property grouped by the same link. It is unused, with the reason the generator would refuse it
+  for, when the contract declares no one relationship over the grouping's columns, the foreign
+  key may be NULL (a NULL has no level to draw given), a rule sets the column, the column is
+  already drawn given another, the parent column is not text or not a categorical drawn from its
+  own levels, or the rows would read each other in a cycle. See
+  [Publish a catalogue whole](./publish-a-catalogue.md).
+- A trait that is stable per entity, such as a customer's segment on each of that customer's
+  rows, is a contract `dependency` from the entity's key. `fluxsim init` never writes the
+  contract, so declare the `dependency` there. Where it is declared and the profile publishes the
+  column's statistic `per` that key, the column is drawn from it, because the dependency draws
+  once per key. A statistic `per` columns that no dependency of the contract follows is listed as
+  unused, with that reason.
+- Children per parent are laid out exactly where the counted layout can place the relationship
+  (see [Give every parent its children](./give-every-parent-its-children.md)). `init` writes a
+  `counts` entry whose `children` are the histogram's classes, so the run's histogram of children
+  per parent is the published one, class for class, for a key of any type. The class of parents
+  with no child is read as published, a zero included. A relationship the profile marks
+  `structural: [childless]` (the source enforces at least one child per parent) is written as
+  `minChildren: 1` and its class of none takes no weight; `orphan` is listed as checked, since
+  every foreign key finds its parent. A `one_to_one` relationship is laid out the same way, with `levels: ["0", "1"]` weighted by the
+  profile's classes of none and of one; a histogram with parents in a class above one keeps the
+  spread, and `init` says so in a note. A relationship the layout cannot place keeps the
+  approximation: it is a key or part of one, a relationship to its own table, a foreign key with
+  a null share, or one with a draw or a contract rule of its own.
+  Its foreign key spreads each class of parents over the parent's keys, a parent of a class whose
+  mean is `m` receives a Poisson-like number of children, so about `e^-m` of them receive none, and
+  the run's share of parents with no child comes out that much larger than published.
+- Every distance tolerance `init` writes declares `sampling: true`, so the check widens its
+  margin by the sampling error of the run's rows and a small table is not judged by a margin only
+  a large one can meet. A table is small when that widening at its rows, for any property `init`
+  writes for it, exceeds the default tolerance. Every column of a small table that
+  `allocation: exact` can read (a column drawn from `levels`, from `bins` with `binWeights`, or
+  given a column that is itself exact) then declares it, so each class holds exactly its share of
+  the rows; a key, a foreign key and a column a rule sets are left as they are. A bundle that
+  declares either key plans only under kernel 0.2.0, the default, and kernel 0.1.0 refuses it
+  with [FLX-3105](../reference/errors/FLX-3105.md).
 - A column of a key over several columns spans its rows the same way, and a text one
   takes as many opaque levels as rows, so the key can hold one value per row. A key's
   columns declare no `nullFraction`, nor does an `inner` foreign key, and a composite
@@ -236,7 +343,8 @@ These rules shape the assumptions:
 - The World and the Persona are the least a run needs. Their numbers are `default` in
   the register: the generator emits read none of them.
 
-A date or timestamp bound is RFC 3339 text, which the register does not count, so an
+A timestamp bound is RFC 3339 text and a date bound `YYYY-MM-DD`, which the register
+does not count, so an
 assumed time window is in the command's output and nowhere else. Here no time column
 publishes its range, because no single instant is held by ten orders, and `created_at`
 is drawn within the run's `timeBounds`.
@@ -268,7 +376,45 @@ might:
 - name the countries you know in place of `country-1` to `country-5`, with their weights;
 - tighten the property's tolerance to the margin you accept.
 
+Most assumptions are the answer to a question a profiler can measure: how many rows, which
+levels, which histogram, how many nulls. Each assumed number of that kind says which statistic
+would replace it, in `replacedBy` on its register entry (a pointer and a definition into a
+profile of the contract), and the ledger lists the statistics with how many numbers each would
+replace. `init` also writes `bundle.assumptions.profile-request.yml` beside the bundle, a
+[profile request](../spec/PROFILE-REQUEST-SPEC.md) for exactly those statistics, which a
+profiler measures where the data lives. Run `init` again with the profile it writes, and each
+number a statistic answers is cited as the profile's. A tolerance, the bounds of a committed
+state and the other settings have no statistic that replaces them, so they name none. The
+request is never written over a file that exists, and when it is taken `init` writes nothing
+(see [PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md) section 1.3).
+
+## 4a. A profile released under differential privacy
+
+A profile of format 1-2-0 can carry statistics that the profiler released under noise
+([PROFILE-SPEC.md](../spec/PROFILE-SPEC.md) section 3a). `fluxsim init` reads one of them as a
+point estimate with a variance. The noisy counts can be negative or fractional, so they are
+made a distribution by one rule, in exact arithmetic: the counts are projected onto the
+non-negative vectors that add up to their noisy total (a vector that is non-negative already
+is only normalised), the shares are those counts over the total, and the draw takes them as
+whole counts that add up to the estimated number of records. A table with no `rowCount` takes
+its row count from the larger estimate of the records its noisy statistics give. The output
+lists each noisy statistic with its mechanism, scale and the variance of each cell, and the
+ledger in `--json` carries the same, so you can see how much noise stands behind a number. A
+register citation of a noisy cell points at the profile's own `noisyCounts`.
+
+A table whose profile carries noisy cliques (section 5a of the spec) is drawn through a
+junction tree: the cliques are arranged into a tree rooted at the one with the most columns
+(the first by name among equals), and each column is drawn given the columns its clique shares
+with the one before it, so the chain of conditionals reproduces the cliques' joint. Each row of
+weights is the point estimate of the clique's noisy counts for that combination of levels.
+Cliques that cannot form a tree (the running intersection property fails) are refused, naming
+them, and the levels a clique lists for a column must be the ones the contract declares. The
+run is scored on the one- and two-way level histograms the cliques answer.
+
 ## 5. Run it, check it, ship it
+
+`fluxsim run --verify --ship` is the one-pass path: one command plans, applies, checks and
+ships, and the rows are drawn once.
 
 ```console
 $ fluxsim run bundle --profile orders.profile.json --verify --ship -o out
@@ -276,13 +422,12 @@ plan written to ...
 coverage: orders: 1 of 4 columns fell back to a type default
   created_at (TIMESTAMP): uniform within the simulation's time bounds: the column declares no draw of its own
 --strict-coverage refuses the run, and so does strictCoverage in the bundle; fluxsim explain FLX-3304 says how to cover a column
-parameters: 34 declared -- 12 from the pinned profile, 19 assumed, 3 default
+parameters: 33 declared -- 12 from the pinned profile, 0 from the contract, 18 assumed, 3 default; 3 statistics of the profile unused
 applied to ...
 emitted orders: 600 rows (generator)
 reproducible: not checked | validity: not asserted
 ...
   fidelity orders: passed -- 1 of 1 declared property within the margin against the pinned profile
-  parameters: 34 declared -- 12 from the pinned profile, 19 assumed, 3 default
   scorecard: overall ... against profile sha256:...
 ...
 shipped out/bundle.flux.tgz
@@ -300,12 +445,19 @@ declare: it is drawn within the run's time window, and the evidence report names
 A run is checked against the statistics a profile publishes, and this one publishes a mean
 for `amount` alone. Nothing checks the `country` levels, which the profile never names,
 or `created_at`, whose time window is assumed. A profile with no statistic a property can
-be checked against, as `fluid profile` wrote before it wrote `mean/1`, gives a bundle
-whose one property `verify --profile` refuses with
-[FLX-5037](../reference/errors/FLX-5037.md), and the command's output says so. Given more
+be checked against, as `fluid profile` wrote before it wrote `mean/1`, gives a table with
+`properties: []`: `init` writes no property that `verify --profile` would refuse with
+[FLX-5037](../reference/errors/FLX-5037.md), names what it left out in its output (and under
+`leftOut` of the table in `--json`), and says the table has nothing to verify. Given more
 statistics (histograms, level counts), `fluxsim init` declares a property for each one it
 can carry: [Score a run against a profile](./score-a-run-against-a-profile.md) shows the
 check.
+
+A table the profile gives no statistic to score, such as one whose columns have only a
+minimum and a maximum (a date column's usual case), gets `properties: []`: the block keeps each column's range, and the command
+says the table has nothing to verify. `verify --profile` reports it as not scored, and
+never as passed, and adds a note naming any statistic the profile publishes that a
+property could be scored against.
 
 Some columns carry no property at all. A boolean column's counts shape its draw, but
 the check reads a category's values as text. A date column's bounds are declared in
@@ -313,12 +465,86 @@ days, while a profile reads a date as a timestamp in milliseconds. And an intege
 column whose published values pass 2^53 is a placeholder, 0 on every row, because a
 run's rows cannot hold such an integer exactly.
 
+A profile that publishes date pairs, calendars or exposure gives the bundle more than ranges:
+lifetimes, dates that lie within a parent's lifetime, seasonal rates and exposure. `init`
+trials each exposure and each rates entry it writes, and leaves out, with the trial's numbers,
+the ones the run does not reproduce. [Keep dates inside their parent's lifetime](./keep-dates-inside-their-parents-lifetime.md)
+reads what it wrote and what it left out, and how to change a fact.
+
+## 6a. One bundle for each what-if: profile overlays
+
+A team that asks what happens if a table doubles needs a variant of the profile, and a
+register that says which numbers the variant changed. An overlay is a named merge patch
+([RFC 7396](https://www.rfc-editor.org/rfc/rfc7396)) over the profile, in a file of its own:
+
+```bash
+cat > double-orders.yml <<'EOF'
+name: double-orders
+patch:
+  tables:
+    orders: {rowCount: 1200}
+EOF
+cat > flat-orders.yml <<'EOF'
+name: flat-orders
+patch:
+  tables:
+    orders:
+      columns:
+        amount:
+          metrics:
+            max: {definition: max/1, disclosure: acro-default, sampleSize: {min: 598, max: 602}, status: F, value: "100"}
+EOF
+```
+
+```console
+$ fluxsim init bundles --contract contract.orders.fluid.yaml --profile orders.profile.json --overlay double-orders.yml --overlay flat-orders.yml
+created 2 bundles in bundles, one for each overlay:
+
+created bundles/double-orders from contract.orders.fluid.yaml and orders.profile.json with the overlay double-orders (4 files):
+...
+orders: 1200 rows, 4 columns
+...
+parameters: 33 declared -- 11 from the pinned profile, 0 from the contract, 1 from the overlay, 18 assumed, 3 default
+...
+created bundles/flat-orders from contract.orders.fluid.yaml and orders.profile.json with the overlay flat-orders (4 files):
+...
+```
+
+`--overlay` is repeatable and each file writes one bundle, in a directory of the one given
+named after the overlay (`[a-z][a-z0-9-]*`, at most 63 characters). The bundle is written
+from the overlaid profile, so `rows` is 1200 above, and its Simulation declares the overlay
+under `extensions["com.agentics.flux/1"].overlay` beside the pin of the profile as published.
+The register cites the overlay (`source: overlay`) for each number whose statistic the patch
+changed, and the profile for every other number: a number the patch changed cannot be cited
+as the profile's, and `plan` refuses that ([FLX-3113](../reference/errors/FLX-3113.md)).
+
+A patch may touch only numbers a profile publishes: a table's `rowCount`, a column's `metrics`
+and `statistics`, a table's `columnPairs` and `periods`, and the top-level `relationships`
+and `invariants`. A patch replaces a list whole, so it restates a column's `statistics` to
+change one of them, and a statistic it restates carries no `noise`. Anything else is
+refused ([FLX-3105](../reference/errors/FLX-3105.md)), and so are a table or a column the
+profile does not hold, a patch that makes a document the profile reader refuses, and a new
+`rowCount` for a table that publishes a `history`: its rows are the versions of the history's
+entities, which no patch can change, so more rows would only lengthen each chain. A patch
+that restates a column's `mean/1` beyond what the column's published minimum, maximum,
+quantiles and histogram allow, such as a mean of 69 for a column whose quarters sit at
+or below 20, 35, 50 and 100, is refused by `init` and `plan`
+([FLX-3402](../reference/errors/FLX-3402.md)), and the message gives the bound it breaks,
+because no column the profile describes has that mean. Run each
+bundle with the profile as published: `plan` and `verify` read the overlay from the bundle and
+the plan, `verify` scores against the overlaid profile, and the scorecard names the overlay.
+
+An overlay never raises or lowers the privacy grade, which reads the profile as published, and
+its numbers are the maintainers' scenario, not a measurement: `EVIDENCE.md` says so. An overlay
+needs kernel 0.2.0.
+
 ## What the command refuses
 
 Nothing is written when:
 
 - the directory holds anything, or cannot be written;
-- `--contract` comes without `--profile`, or the reverse (exit 2);
+- `--contract` comes without `--profile`, or the reverse, or `--overlay` comes without both (exit 2);
+- an overlay file is refused by the reader, two files name one overlay, an overlay names a table the profile does not hold, or an overlay gives a table with a history another `rowCount`;
 - the profile cannot be read ([FLX-3109](../reference/errors/FLX-3109.md)) or is not a
   profile ([FLX-5036](../reference/errors/FLX-5036.md));
 - the profile describes none of the contract's exposes: the message names the tables on

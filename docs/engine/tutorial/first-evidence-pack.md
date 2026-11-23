@@ -31,7 +31,7 @@ describe](../README.md#which-version-these-pages-describe).
 
 ```console
 $ fluxsim --version
-0.7.0
+0.10.0
 ```
 
 ## 2. Create a project
@@ -59,11 +59,15 @@ already holds files. Together they are a *bundle*, the unit the engine runs:
 
 ## 3. Run it
 
+`run` plans and applies in one command, and `--verify` and `--ship` add the next two
+steps. This is the one-pass path: the rows are drawn once, and `verify` reads each emit
+once.
+
 ```console
 $ fluxsim run . --verify --ship -o out
 plan written to .flux/runs/.../plan.json (runId=..., planDigest=sha256:...)
 applied to .flux/runs/... (runDigest=sha256:...)
-emitted payment_recovery_moment: 154 rows (scenario)
+emitted payment_recovery_moment: 155 rows (scenario)
 reproducible: not checked | validity: not asserted
   golden: not checked (no golden baseline recorded yet -- record one with `--update-golden --reason "<why>"`)
   artifacts: every run-digest component reproduces
@@ -91,7 +95,7 @@ Read it from the top.
   for the same bundle, and so give it another id. That is why this page does not print one.
 - **applied** writes the run to `.flux/runs/<runId>/`. The `runDigest` is a fingerprint
   of everything the run produced.
-- **emitted** is the point of it all: 154 rows in the shape of the FLUID contract.
+- **emitted** is the point of it all: 155 rows in the shape of the FLUID contract.
 - **verify** checks the run on five legs, one line each. Two things are kept apart on
   purpose. `reproducible` compares the run's digest with a baseline you record, and here
   it says `not checked` because none has been recorded yet; step 6 shows the check that
@@ -111,14 +115,14 @@ far, so keep its id in a shell variable for the steps that follow:
 ```console
 $ RUN=$(ls .flux/runs)
 $ head -3 .flux/runs/$RUN/emits/payment_recovery_moment.ndjson
-["sub-e19b5b0ae87789b0","2026-07-01T20:46:18.581Z","40.5500","mkt-b"]
-["sub-e19b5b0ae87789b0","2026-07-01T20:55:26.840Z","30.5500","mkt-b"]
-["sub-3ee1d4f847ee4a44","2026-07-01T23:51:54.082Z","48.4600","mkt-a"]
+["sub-0697f47d0e044cee","2026-07-02T02:02:40.842Z","50.2400","mkt-c"]
+["sub-7d1cb4bfed69136b","2026-07-02T22:12:49.743Z","10.9900","mkt-c"]
+["sub-c4b075dd7bcd0a70","2026-07-03T01:08:09.508Z","35.9500","mkt-b"]
 ```
 
 One row per line, in the contract's column order: `subscriber_id`, `aborted_at`,
-`amount`, `market`. Each row is one firing of the detector. The first two belong to the
-same subscriber, nine minutes apart.
+`amount`, `market`. Each row is one firing of the detector. The first two belong to
+different subscribers, about twenty hours apart.
 
 ## 5. Read what it does not claim
 
@@ -130,6 +134,8 @@ $ grep '^## ' .flux/runs/$RUN/EVIDENCE.md
 ## Conformance
 ## Reproducibility
 ## Fidelity
+## Population
+## Privacy Grade
 ## Column Provenance
 ## What Was Not Proven
 $ sed -n '/^## What Was Not Proven/,$p' .flux/runs/$RUN/EVIDENCE.md
@@ -185,11 +191,11 @@ $ rm simulation.flux.yml.bak
 $ fluxsim run .
 plan written to .flux/runs/.../plan.json (runId=..., ...)
 applied to .flux/runs/... (runDigest=sha256:...)
-emitted payment_recovery_moment: 153 rows (scenario)
+emitted payment_recovery_moment: 157 rows (scenario)
 run ... complete
 ```
 
-Everything moved: a new run id, a new digest, 153 rows. The first run is still on disk,
+Everything moved: a new run id, a new digest, 157 rows. The first run is still on disk,
 and `$RUN` still holds its id, but it no longer belongs to this bundle:
 
 ```console

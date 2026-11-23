@@ -414,7 +414,7 @@ under the night's fresh seeds: kernel draws, generator rows, seed-tree
 entropies, and the run digest of one small end-to-end run. A final job
 requires every manifest to be byte-identical. The cells at the NumPy floor
 also run the pinned digest set. `ci.yml` already runs that set at the
-latest NumPy on every pull request and weekly on all six cells, so it is not
+latest NumPy on every pull request and weekly on all seven cells, so it is not
 repeated there. Linux runs nightly. macOS runs weekly, on Mondays (UTC), and
 on demand: label a pull request `accuracy-weekly`, or dispatch the workflow
 with `weekly` set.

@@ -8,7 +8,9 @@ grammar follows as `flux_stats.fidelity` (see the amendments below).
 **Amended 2026-11-18:** the exact YAML read of a bundle and the canonical form
 move too, as `flux_stats.exact_yaml` and `flux_stats.canonical`, with PyYAML
 as the optional `yaml` extra, and a bundle's files are held to size caps
-before they are read.
+before they are read. **Amended 2026-11-21:** flux-stats is versioned by its own
+format and API, and the engine requires a range of it, not one release. This
+replaces decision 5 (see the last amendment).
 
 ## Context
 
@@ -49,7 +51,8 @@ runs next to the data should carry none of that.
    root `pyproject.toml` declares it as a workspace member and resolves the
    engine's requirement to it, and one `uv.lock` covers both. A change that
    touches both lands in one pull request.
-5. **Versions.** Lockstep. One `vX.Y.Z` tag releases both distributions at
+5. **Versions.** *Replaced on 2026-11-21 by the last amendment below.*
+   Lockstep. One `vX.Y.Z` tag releases both distributions at
    `X.Y.Z`, and the engine depends on exactly that release
    (`flux-stats==X.Y.Z`): its verdicts are computed by these definitions, so a
    range would pair an engine with statistics it was never tested with. The
@@ -321,3 +324,74 @@ Consequences of the amendment:
 - The check and the validator open a file separately, so a file changed
   between the two is read unchecked. A bundle is read from a directory the
   person running the engine controls, which this accepts.
+
+## Amendment of 2026-11-21: flux-stats is versioned by its format
+
+The maintainers decided that flux-stats is versioned by its own format and
+API, and that the engine requires a range of it. This replaces decision 5,
+which held the two distributions in lockstep and had the engine depend on
+exactly one release.
+
+1. **What the number says.** A version of flux-stats names the formats it
+   reads, the statistics it defines and the API it exports. A patch release
+   keeps what every definition returns and every format it reads. A release
+   that adds a statistic, a format or a reader, or that changes what a
+   definition returns for the same input, is a minor release while the version
+   is below 1.0.
+2. **The engine requires a line.** From 0.9.0 the engine requires
+   `flux-stats>=0.9,<0.10`, any release of the line it is built and tested
+   with, in place of `flux-stats==X.Y.Z`. The floor is the first release that
+   has what the engine uses. The ceiling keeps out the next line, which the
+   engine has not been tested with. Decision 5 gave that as its reason for an
+   exact pin; the range keeps the reason across lines and gives it up within
+   one.
+3. **The profiler takes a wider range.** The profiler that runs where the data
+   lives, `fluid profile` in forge-cli, reads the formats and calls the
+   readers, and a later minor release only adds to them. Its range is
+   `flux-stats>=0.9,<1`, which forge-cli declares in its own repository.
+4. **What stays.** One repository, one uv workspace and one lockfile, and a
+   change that touches both distributions lands in one pull request. One
+   `vX.Y.Z` tag still releases both distributions: the release workflow builds,
+   attests and attaches flux-stats's files at the tag's version and uploads
+   them to PyPI before the engine's. At a release the two numbers are therefore
+   equal, as they are at 0.9.0. An engine release that leaves flux-stats at an
+   earlier version needs the workflow to name flux-stats's files by their own
+   version, and that change is not made here.
+5. **The release guard.** `scripts/release_guard.py` no longer asks the
+   engine's version, flux-stats's version and the requirement to be equal. It
+   refuses a requirement on flux-stats that is not a plain version range with a
+   floor and a ceiling, and a range that does not admit the version in
+   `packages/flux-stats/pyproject.toml`. At a tag it still refuses a flux-stats
+   version that is not the tag's, for the workflow's reason in point 4. It
+   stays on the standard library alone, because the release workflow runs it
+   before anything is installed: it reads a version as `N.N.N` with an optional
+   `aN`, `bN` or `rcN` suffix and orders versions as PEP 440 does, including
+   the rule that `<V` keeps out a pre-release of V. A test sets its answer
+   against the `packaging` library's over a grid of ranges and versions.
+
+Prior art checked on 2026-11-21:
+
+- **LangChain** declares `langchain-core>=1.8.0,<2.0.0` in `langchain` 1.5.2
+  (`libs/langchain_v1/pyproject.toml`): a floor and a ceiling on a package it
+  releases from the same repository. This amendment takes that pattern, which
+  the prior art above names as the alternative decision 5 did not take.
+- **`packaging`** (PyPA, Apache-2.0 or BSD-2-Clause), 26.3 in the lockfile, is
+  the reference implementation of the PEP 440 rules and the oracle in the
+  guard's test. It is not a dependency of the guard, which has to run with
+  nothing installed.
+
+Consequences of the amendment:
+
+- An environment can hold the engine and a flux-stats release of the engine's
+  line other than the one in the tree, and the engine and forge-cli's profiler
+  share an environment whenever their two ranges admit one release. An exact
+  pin let an engine release exclude every flux-stats release but its own, so
+  each engine release forced a matching profiler release.
+- Nothing in the engine's own tests pairs it with a flux-stats release
+  published after it: they run against the flux-stats in the tree. What makes a
+  later patch safe is rule 1, that a patch keeps what every definition returns,
+  and that rule is held by review. A change to what a definition returns is a
+  minor release.
+- An engine wheel's metadata names a range, so a consumer who needs one
+  flux-stats release states it themselves, as `flux-stats==X.Y.Z` beside the
+  engine.

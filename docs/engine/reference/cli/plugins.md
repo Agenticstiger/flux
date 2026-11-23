@@ -1,6 +1,6 @@
 ---
 title: "fluxsim plugins"
-description: "list installed vertical packs and sinks"
+description: "list installed vertical packs, sinks and generator plugins"
 editLink: false
 ---
 
@@ -8,7 +8,7 @@ editLink: false
 
 # `fluxsim plugins`
 
-List the vertical packs and the output sinks available in this environment, with the extra each sink needs and whether it is installed. Nothing is imported to find them.
+List the vertical packs, the output sinks and the generator plugins available in this environment, with the extra each sink needs and whether it is installed, and for each generator plugin its distribution and whether it is an editable install or lies outside an installation directory. Nothing is imported to find them. A generator plugin is your own code: it runs with your rights, and FLUX does not sandbox its network or file access, so allow only plugins you trust (docs/explanation/offline.md).
 
 ## Synopsis
 
@@ -19,7 +19,7 @@ fluxsim plugins [options]
 ## Examples
 
 ```bash
-# list the vertical packs and the sinks
+# list the vertical packs, the sinks and the generator plugins
 fluxsim plugins
 
 # the same, as JSON

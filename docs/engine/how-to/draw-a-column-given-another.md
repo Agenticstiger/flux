@@ -236,7 +236,7 @@ withheld: payment_recovery_moment
   - properties.outcomes: 1 of 2 declared properties are outside their margins
   - property 000:marginalHistogram:amount@market (marginalHistogram of amount): outside the declared margin ...
 nothing was written to the output directory
-FLX-8001: withheld payment_recovery_moment
+FLX-8001: withheld payment_recovery_moment: properties.outcomes: ...; to fix: ...
 more: fluxsim explain FLX-8001  https://agenticstiger.github.io/flux/engine/reference/errors/FLX-8001.html
 ```
 
@@ -327,9 +327,56 @@ assert [(edge.parent, edge.child) for edge in plan_edges] == [("market", "plan")
 assert plan_columns["plan"]["levelWeightsGiven"]["IE"] == {"basic": "10", "plus": "30", "pro": "60"}
 ```
 
+## Draw a column given several columns
+
+`given` can list two or more columns: `given: [region, plan]` draws the column given the
+combination of their levels in each row. The weight table nests one mapping per given column, in
+the order the list names them, and ends in the column's own weights, so
+`levelWeightsGiven: { east: { basic: { online: "9", store: "1" } } }` is P(channel | region =
+east, plan = basic). `binWeightsGiven` nests the same way and ends in a `binWeights` list. The
+table names every combination of the given columns' levels, including a combination the data
+never holds, and a list of one name is refused, because one parent is written as its name. Every
+given column is a categorical with no `nullFraction`, and the links may form any graph with no
+cycle. The draw is from the column's own seed path, as for one parent, so no other column of the
+plan moves. `fluxsim init` writes such a table from a profile's noisy clique marginals (see
+[Write a bundle from a profile](./write-a-bundle-from-a-profile.md)).
+
+## Check a column drawn given a linked row's column
+
+A column drawn `given: <relationship>.<column>` (the weight tables are keyed by the levels of a column of the row its
+relationship names) is checked by a grouped property whose `groupBy` is the same `<relationship>.<column>`. Declare the
+levels of that linked column once more under the same name in the emit's `columns`, so the check knows the groups:
+
+```yaml
+columns:
+  i_channel:
+    given: account.a_region
+    levelWeightsGiven:
+      north: { web: "1", shop: "0" }
+      south: { web: "0", shop: "1" }
+    support: { values: [shop, web] }
+    maxCardinality: 2
+  account.a_region:
+    support: { values: [north, south] }
+    maxCardinality: 2
+properties:
+  - property: levelHistogram
+    column: i_channel
+    groupBy: account.a_region
+    tolerance: { type: distance, measure: totalVariation, max: "0.05" }
+```
+
+`verify` joins each invoice to the account row its `i_account` names, reads that row's `a_region` as the group key, and
+compares each group with the profile's statistic of format 1-3-0 that is grouped by the same link. An invoice whose
+account is null or missing belongs to no group. The check reads the account emit of the same run, so it needs a profile,
+and a slice or a `--sample` verify, which hold one emit's rows, refuse it.
+
 ## What the check covers
 
 - A histogram column drawn given a categorical one is checked end to end: a grouped `marginalHistogram` over the same bins compares the generated (market, bin) counts with your slice's.
 - A categorical column drawn given another is checked the same way: a grouped `levelHistogram` compares the generated (market, plan) counts with your slice's. A value outside a column's declared support is refused, not counted.
 - A column drawn given nothing is checked by an ungrouped `levelHistogram` over it. Two columns that no property counts together are not checked.
-- A pass says the generated rows sit inside the declared margins against this slice. It says nothing about rows the slice does not hold.
+- A pass says the generated rows sit inside the declared margins against this slice. It says nothing about rows the slice does not hold.---
+title: "Draw a column given another"
+description: "Declare a histogram column drawn given a categorical one, with weights from a grouped histogram's counts, and see the fidelity gate check the link."
+---

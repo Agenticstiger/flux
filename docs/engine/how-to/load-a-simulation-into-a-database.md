@@ -1,11 +1,11 @@
 ---
 title: "Load a simulation into a database"
-description: "Write a run's rows to Parquet or Arrow IPC files, or load them into SQLite, DuckDB, PostgreSQL, Snowflake or BigQuery, with fluxsim run --sink."
+description: "Write a run's rows to Parquet or Arrow IPC files, locally or in an object store, to Iceberg or Delta Lake tables, or load them into SQLite, DuckDB, PostgreSQL, Snowflake or BigQuery, with fluxsim run --sink."
 ---
 
 # Load a simulation into a database
 
-Every run writes its rows to the run directory as NDJSON. Use this page to write the same rows, as typed columns, to Parquet or Arrow IPC files or into a database table, in the same `fluxsim run`.
+Every run writes its rows to the run directory as NDJSON. Use this page to write the same rows, as typed columns, to Parquet or Arrow IPC files or into a database table, in the same `fluxsim run`. `fluxsim apply` takes the same `--sink` and `--sink-opt`, and with `--run-id` it writes the sink from the run directory's own files after checking each stream against the receipt.
 
 The stream's `outputDigest` does not change when you add a sink. The engine computes it before a sink sees a row, so a sink decides where the rows land and nothing about what they are.
 
@@ -15,6 +15,7 @@ The engine installs without any columnar or database library. Each sink lives be
 
 ```text
 pip install 'flux-sim-engine[arrow]'                        # Parquet and Arrow IPC files
+pip install 'flux-sim-engine[publish]'                      # the same files in an object store, Iceberg and Delta tables
 pip install 'flux-sim-engine[adbc]' duckdb                  # DuckDB
 pip install 'flux-sim-engine[adbc]' adbc-driver-postgresql  # PostgreSQL
 ```
@@ -27,7 +28,7 @@ pip install 'flux-sim-engine[adbc]' adbc-driver-postgresql  # PostgreSQL
 | Snowflake | `adbc-driver-snowflake` |
 | BigQuery | `adbc-driver-bigquery` |
 
-`fluxsim plugins` lists the sinks and says whether what each one needs is installed. It imports none of them to find out.
+`fluxsim plugins` lists the sinks and says whether what each one needs is installed. It imports none of them to find out. It lists the generator plugins the same way, and none are installed here. A generator plugin is your own code: it runs with your privileges and FLUX does not sandbox it, so allow only plugins you trust ([Runs offline](../explanation/offline.md#plugins)).
 
 ```console
 $ fluxsim plugins
@@ -37,7 +38,11 @@ vertical packs:
 sinks (fluxsim run --sink NAME:TARGET):
   adbc       built-in  needs flux-sim-engine[adbc] (installed)
   arrow-ipc  built-in  needs flux-sim-engine[arrow] (installed)
+  delta      built-in  needs flux-sim-engine[publish] (...)
+  iceberg    built-in  needs flux-sim-engine[publish] (...)
   parquet    built-in  needs flux-sim-engine[arrow] (installed)
+generators (entry points of flux_engine.generators, none imported):
+  none installed
 ```
 
 ## Write Parquet files
@@ -50,31 +55,96 @@ created demo with a small FLUX bundle and its FLUID contract (10 files):
 ...
 $ cd demo
 $ fluxsim run . --sink parquet:../parquet
-plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
-applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
-emitted payment_recovery_moment: 154 rows (scenario)
-delivered payment_recovery_moment: 154 rows in 1 parquet file under ../parquet/payment_recovery_moment/
-run 8835218acf7b4f8e complete
+plan written to .flux/runs/205ba6e504c40820/plan.json (runId=205ba6e504c40820, planDigest=sha256:205ba6e504c408208fb15c5da5f96edac2f514606d6024bc19733c6c5cac90cc)
+applied to .flux/runs/205ba6e504c40820 (runDigest=sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06)
+emitted payment_recovery_moment: 155 rows (scenario)
+delivered payment_recovery_moment: 155 rows in 1 parquet file under ../parquet/payment_recovery_moment/
+run 205ba6e504c40820 complete
 $ ls ../parquet/payment_recovery_moment
-_manifest-d9e491cf29bf8c57-parquet.json
-d9e491cf29bf8c57-00000.parquet
+_manifest-db1a89eefb51c42e-parquet.json
+db1a89eefb51c42e-00000.parquet
 ```
 
-The file name starts with the first 16 hex characters of the stream's `outputDigest`. The same bundle and seed always write the same name, so running again replaces the file instead of adding a second copy, and a run with another seed lands beside it. The manifest lists every file of the stream with its SHA-256, size and row count, the stream header, and the writer settings, and its name says which sink wrote it. A stream is published whole or not at all: files are written under hidden names and renamed into place once every row is in, the manifest is written last, and a stream that fails part-way leaves no manifest and no files behind. Names that start with `_` or `.` are skipped by Parquet dataset readers, so the manifest is never read as data.
+The file name starts with the first 16 hex characters of the stream's `outputDigest`. The same bundle and seed always write the same name, so running again replaces the file instead of adding a second copy, and a run with another seed lands beside it. The manifest lists every file of the stream with its SHA-256, size and row count, the stream header, and the writer settings, and its name says which sink wrote it. A stream is published whole or not at all: files are written under hidden names and renamed into place once every row is in, the manifest is written last, and a stream that fails part-way to a local directory leaves no manifest and no files behind. On an object store, objects uploaded before a failure can stay behind without a manifest, and a stream is whole only once its manifest is there. Names that start with `_` or `.` are skipped by Parquet dataset readers, so the manifest is never read as data.
 
 The columns are typed from the FLUID contract, and no value goes through a float:
 
 | Logical type | Parquet / Arrow |
 |---|---|
 | `STRING`, `JSON` | string |
-| `INT` | int64 |
+| `INT` | int64, or the width the contract names: `tinyint` int8, `smallint` int16, `integer` and `mediumint` int32, `bigint` int64 |
 | `DECIMAL(p,s)` | decimal, exactly `p` digits at scale `s` (up to 76 digits) |
 | `BOOL` | boolean |
 | `DATE` | date |
 | `TIMESTAMP` | timestamp in milliseconds, UTC |
 | `BYTES` | binary |
 
-Files are compressed with zstd. Each file's metadata also carries the stream header, the run id, the `outputDigest` and `flux.synthetic = true`.
+Files are compressed with zstd. Each file's metadata also carries the stream header, the run id, the `outputDigest` and `flux.synthetic = true`. The receipt names the Parquet writer and its version (`parquet-cpp-arrow version N`) beside the library's. The width of an integer column changes the file and not the stream: the digest is over the rendered rows.
+
+## Write to an object store
+
+The Parquet and Arrow IPC sinks also take an object store URL as their target, with `s3://`, `gs://`, `az://` or `abfs://` as the scheme. The URL's host is the bucket (or container) and its path is the prefix the files go under. This needs the `[publish]` extra, which installs obstore, and without it the sink refuses with the install line.
+
+```text
+fluxsim run . --sink parquet:s3://my-bucket/simulations/run-a
+fluxsim run . --sink arrow-ipc:gs://my-bucket/simulations/run-a
+```
+
+Each object has the key `<prefix>/<exposeId>/<name>`, where `<name>` is the file name a local target would write, and the manifest is uploaded last, as the commit marker. The bytes are the ones a local target writes, and the receipt records the target without credentials, each object's key, size and SHA-256, and the writer as `obstore` with its version.
+
+A target with no explicit credentials is refused before the run with `FLX-3505`, and nothing is contacted, unless you pass `--sink-opt instance-identity=true`. That option opts in to the credentials of the machine or workload itself (an EC2, ECS or pod role, an Azure managed identity, a GCE service account), which the store asks the cloud's instance metadata service for. Explicit credentials are the variables the store reads from your environment, for example `AWS_ACCESS_KEY_ID` with `AWS_SECRET_ACCESS_KEY`. [Runs offline](../explanation/offline.md) lists them for each cloud.
+
+Credentials and endpoints come only from your own environment or from the platform's credential chain, as obstore reads them: the `AWS_*`, `GOOGLE_*` or `AZURE_*` variables, a profile, an instance or workload identity. No `--sink-opt` reaches the store, a target that carries user information, a query or a fragment (`s3://user:pass@bucket/`) is refused, and an error from the store is reported with URLs' user information and any credential variable's value removed.
+
+The path is split on `/` and each segment must be a plain name. An empty segment, `.`, `..`, a backslash and a percent-encoded `/`, `\` or `.` (`%2F`, `%5C`, `%2E`) are refused with `FLX-3510`, so no spelling of a target can write outside the prefix it shows. A trailing `/` is dropped, and a target must name a prefix.
+
+## Write Iceberg and Delta tables
+
+The `iceberg` and `delta` sinks write each stream as a table, so a query engine reads it as one. Both need the `[publish]` extra, which installs pyiceberg and deltalake, and without it the sink refuses with the install line. Each writes one table per stream, named by the stream's `exposeId`. A table sink holds the stream's rows until the whole stream has arrived, writes them as one table write, and writes nothing for a stream that stopped short.
+
+Both take one option, `mode`, and no other: nothing passes through to pyiceberg or deltalake. A failed write is reported as `FLX-3505` with the writer's error class and message, with URLs' user information and any credential variable's value removed.
+
+### Iceberg
+
+```text
+fluxsim run . --sink iceberg:prod/simulations
+fluxsim run . --sink iceberg:prod/simulations/run-a --sink-opt mode=append
+```
+
+The target is `iceberg:<catalog>/<namespace>[/<level>...]`: the catalogue's name as pyiceberg's configuration knows it, then the levels of the namespace, at least one. The levels are separated by `/`, never by a dot. The catalogue name and each level are checked as a prefix's segments are (`FLX-3510`): no empty segment, `.`, `..`, backslash or percent-encoded separator. The namespace must exist already; the sink does not create one.
+
+The table is named by the tuple `(*levels, exposeId)`, so an `exposeId` that holds a dot stays one table name and never becomes a level.
+
+| `mode` | Writes |
+|---|---|
+| `create` (the default) | Creates the table from the stream's Arrow schema and writes the rows in the same commit. A table that exists is refused. |
+| `append` | Adds the rows to a table that exists. An absent table is refused, since pyiceberg has no append that creates one. |
+| `overwrite` | Replaces the contents of a table that exists. An absent table is refused. |
+
+The catalogue is loaded with `pyiceberg.catalog.load_catalog(<catalog name>)` and no property, so its type, endpoint and credentials come only from your own pyiceberg configuration: a `.pyiceberg.yaml` in your home directory or in the directory `PYICEBERG_HOME` names, and `PYICEBERG_*` environment variables. A bundle cannot choose them.
+
+pyiceberg also reads a `.pyiceberg.yaml` from the current directory, which could point the catalogue, and the storage requests it signs with your credentials, at another endpoint. So the sink refuses to start (`FLX-3511`) when the current directory holds one and is neither your home directory nor `PYICEBERG_HOME`. Run the command from another directory, or move the file to one of those two.
+
+The receipt records the target as `iceberg:<catalog>/<namespace>`, with no URI and no property, the table identifier as a list, the id of the snapshot the write made (as text, since it is a 64-bit integer), and the writer as `pyiceberg` with its version.
+
+### Delta Lake
+
+```text
+fluxsim run . --sink delta:s3://my-bucket/simulations/run-a
+fluxsim run . --sink delta:../tables --sink-opt mode=overwrite
+```
+
+The target is an object store URL (`s3://`, `gs://`, `az://` or `abfs://`), checked as the file sinks' object targets are (`FLX-3510`), or a local directory. A local directory is resolved first, and a directory that is a symbolic link is refused (`FLX-2118`). Each stream's table is at `<target>/<exposeId>`.
+
+| `mode` | Writes |
+|---|---|
+| `error` (the default) | Creates the table. A table that exists is refused. |
+| `append` | Adds the rows to the table, creating it when it is absent. |
+| `overwrite` | Replaces the contents of the table. |
+
+The table is written with `deltalake.write_deltalake` and no `storage_options`, so credentials and endpoints come only from your own environment or the platform's credential chain, as deltalake reads them (an object store target is refused with `FLX-3505` unless it has explicit credentials or you pass `--sink-opt instance-identity=true`, as for the file sinks): the `AWS_*`, `GOOGLE_*` or `AZURE_*` variables, a profile, an instance or workload identity. A target that carries user information, a query or a fragment is refused.
+
+The receipt records the target without credentials, the table's location, the table version the write made, and the writer as `deltalake` with its version.
 
 ## Check that the files hold the run
 
@@ -88,11 +158,11 @@ from flux_engine.sinks.arrow import output_digest_of
 from flux_engine.sinks.parquet import read_stream
 
 work = Path(workdir)
-receipt = json.loads((work / "demo/.flux/runs/8835218acf7b4f8e/receipt.json").read_text())
+receipt = json.loads((work / "demo/.flux/runs/205ba6e504c40820/receipt.json").read_text())
 expected = receipt["emits"]["payment_recovery_moment"]["outputDigest"]
 
-table = read_stream(work / "parquet/payment_recovery_moment/_manifest-d9e491cf29bf8c57-parquet.json")
-assert table.num_rows == 154
+table = read_stream(work / "parquet/payment_recovery_moment/_manifest-db1a89eefb51c42e-parquet.json")
+assert table.num_rows == 155
 assert output_digest_of(table).value == expected
 ```
 
@@ -109,7 +179,7 @@ markets = duckdb.connect().execute(
     f"SELECT market, count(*) FROM '{workdir}/parquet/payment_recovery_moment/*.parquet' "
     "GROUP BY market ORDER BY market"
 ).fetchall()
-assert sum(count for _, count in markets) == 154
+assert sum(count for _, count in markets) == 155
 ```
 
 ## Load into DuckDB or SQLite
@@ -119,26 +189,26 @@ For the database sink the target is the driver, and the connection is a sink opt
 ```console
 $ fluxsim run . --sink adbc:duckdb --sink-opt uri=../sim.duckdb
 ...
-delivered payment_recovery_moment: 154 rows into sim_payment_recovery_moment at duckdb:../sim.duckdb
-run 8835218acf7b4f8e complete
+delivered payment_recovery_moment: 155 rows into sim_payment_recovery_moment at duckdb target sha256:41d91f404486
+run 205ba6e504c40820 complete
 ```
 
 The table is named after the expose with the prefix `sim_`, a namespace of its own so a simulated table cannot be mistaken for a real one. Change the prefix with `--sink-opt prefix=...`, or put the tables in a schema of their own with `--sink-opt schema=sim`, which is created when missing.
 
-Run it again and the table still holds 154 rows. Each load first deletes the rows of its own `outputDigest`, then inserts the stream, in one transaction, so a replay never duplicates rows. A run with another seed has another digest and adds its rows beside the first.
+Run it again and the table still holds 155 rows. Each load first deletes the rows of its own `outputDigest`, then inserts the stream, in one transaction, so a replay never duplicates rows. A run with another seed has another digest and adds its rows beside the first.
 
 ```console
 $ fluxsim run . --sink adbc:duckdb --sink-opt uri=../sim.duckdb --sink-opt verify=true
 ...
-delivered payment_recovery_moment: 154 rows into sim_payment_recovery_moment at duckdb:../sim.duckdb
-run 8835218acf7b4f8e complete
+delivered payment_recovery_moment: 155 rows into sim_payment_recovery_moment at duckdb target sha256:41d91f404486
+run 205ba6e504c40820 complete
 ```
 
 With `verify=true` the sink reads its rows back inside the transaction and commits only when they digest to the stream's `outputDigest`.
 
 ```python
 con = duckdb.connect(f"{workdir}/sim.duckdb", read_only=True)
-assert con.execute("SELECT count(*) FROM sim_payment_recovery_moment").fetchone()[0] == 154
+assert con.execute("SELECT count(*) FROM sim_payment_recovery_moment").fetchone()[0] == 155
 columns = [row[0] for row in con.execute("DESCRIBE sim_payment_recovery_moment").fetchall()]
 assert columns[-4:] == ["_flux_synthetic", "_flux_run_id", "_flux_output_digest", "_flux_row"]
 label = con.execute(
@@ -162,8 +232,8 @@ SQLite has no exact decimal type, and its driver would write a timestamp without
 ```console
 $ fluxsim run . --sink adbc:sqlite --sink-opt uri=../sim.sqlite --sink-opt prefix=twin_
 ...
-delivered payment_recovery_moment: 154 rows into twin_payment_recovery_moment at sqlite:../sim.sqlite
-run 8835218acf7b4f8e complete
+delivered payment_recovery_moment: 155 rows into twin_payment_recovery_moment at sqlite target sha256:ec2cb5e2e8a1
+run 205ba6e504c40820 complete
 ```
 
 ### Modes
@@ -183,7 +253,7 @@ The sink only ever changes tables it created. A table without its four `_flux_` 
 A server database's URI usually holds a password, and a command line is visible to every user of the machine and kept in shell history. Put the URI in an environment variable and pass its name with `uri-env`. A `uri=` with a password or a secret query parameter is refused.
 
 ```text
-export SIM_PG_URI='postgresql://sim:secret@db.example.com:5432/analytics'
+export SIM_PG_URI='postgresql://sim:pa55w0rd@db.example.com:5432/analytics'
 fluxsim run . --sink adbc:postgresql --sink-opt uri-env=SIM_PG_URI --sink-opt schema=sim
 ```
 
@@ -210,6 +280,8 @@ The test suite runs the database sink against SQLite and DuckDB on every change,
 
 Pass each setting as `--sink-opt KEY=VALUE`, as many times as you need. An unknown key, or a value of the wrong type or out of range, stops the command before the simulation runs, and the message lists the keys the sink takes. A run writes to one sink: to deliver it to a second place, run again with the other `--sink`. The run is the same, so nothing is simulated differently, and its receipt is added beside the first.
 
+Credentials come from the environment or the platform's own credential chain, never from a setting. A `--sink-opt` whose name names a credential (a password, a secret, a token, a signature, or a key such as `access-key`) is refused before the simulation runs, and so is a target that carries user information, a query string or a fragment. A setting whose name ends in `-env`, such as `uri-env`, holds only the name of an environment variable, so it is allowed.
+
 | Sink | Setting | Default | Meaning |
 |---|---|---|---|
 | `parquet` | `compression` | `zstd` | `zstd`, `snappy`, `gzip`, `lz4`, `brotli` or `none` |
@@ -232,18 +304,18 @@ Pass each setting as `--sink-opt KEY=VALUE`, as many times as you need. An unkno
 Each sink returns a receipt: the rows, and either the files with their SHA-256 or the table. `fluxsim run` records each one in `sink-receipts.json` in the run directory as soon as its stream is published, so a delivery that fails on a later stream still leaves the earlier ones on record. A receipt is kept per sink, target, table and expose: delivering the run to another place adds one, and delivering it to the same place again replaces that one.
 
 ```console
-$ grep -E '"(sink|table|target)"' .flux/runs/8835218acf7b4f8e/sink-receipts.json
+$ grep -E '"(sink|table|target)"' .flux/runs/205ba6e504c40820/sink-receipts.json
       "sink": "adbc",
       "table": "sim_payment_recovery_moment",
-      "target": "duckdb:../sim.duckdb",
+      "target": "duckdb target sha256:41d91f404486",
       "sink": "adbc",
       "table": "twin_payment_recovery_moment",
-      "target": "sqlite:../sim.sqlite",
+      "target": "sqlite target sha256:ec2cb5e2e8a1",
       "sink": "parquet",
       "target": "../parquet",
 ```
 
-A receipt never holds a user, a password, a query string or a fragment: a target such as `postgresql://sim:secret@db.example.com/analytics?sslmode=require` is recorded as `postgresql://db.example.com/analytics`. With `--ship`, the sink runs after `verify` and before `ship`, so `ship` packs `sink-receipts.json` into the evidence archive with the rest of the run.
+A receipt and every line the command prints hold a label of the target, never the target as typed. A URL keeps its scheme, host, port and path and shows its user, password, query string and fragment as `…`: `postgresql://sim:pa55w0rd@db.example.com/analytics?sslmode=require` is recorded as `postgresql://…@db.example.com/analytics?…`. A `key=value` connection string keeps its `host`, `dbname` and similar pairs. Any other `uri`, a database file among them, is recorded as the driver and a short digest of the text (`duckdb target sha256:41d91f404486`), so two runs against the same file carry the same label and no secret typed in the wrong place is echoed. A directory of a Parquet or Arrow IPC sink is shown as typed. With `--ship`, the sink runs after `verify` and before `ship`, so `ship` packs `sink-receipts.json` into the evidence archive with the rest of the run.
 
 ## When something is wrong
 
@@ -253,7 +325,7 @@ A mistake in the command line stops it before the simulation runs and names what
 $ fluxsim run . --sink parquet  # exit 2
 FLX-3504: a sink was given a target or an option it cannot use -- the parquet sink needs a directory: --sink parquet:DIRECTORY
 ...
-$ fluxsim run . --sink adbc:postgresql --sink-opt uri=postgresql://sim:secret@db.example.com/analytics  # exit 2
+$ fluxsim run . --sink adbc:postgresql --sink-opt uri=postgresql://sim:pa55w0rd@db.example.com/analytics  # exit 2
 FLX-3504: a sink was given a target or an option it cannot use -- the uri carries a password or a secret, and a command line is not the place for one: put the uri in an environment variable and pass --sink-opt uri-env=NAME
 ...
 ```
@@ -281,4 +353,4 @@ mysink = "my_package.sink:target"
 
 These sink types are new and are not yet part of the governed `flux_engine.api` surface, so they may still change before they join it.
 
-Iceberg tables and Kafka topics are not sinks here. Write Parquet and load it with the tools you already use for those.
+Kafka topics are not a sink here. Write Parquet and load it with the tools you already use for that.
