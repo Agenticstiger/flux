@@ -102,9 +102,9 @@ Types come from a small closed set. `float` and `double` columns are refused by 
 ```console
 $ fluxsim run .
 ...
-$ head -n 2 .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson
-["sub-e19b5b0ae87789b0","2026-07-01T20:46:18.581Z","40.5500","mkt-b"]
-["sub-e19b5b0ae87789b0","2026-07-01T20:55:26.840Z","30.5500","mkt-b"]
+$ head -n 2 .flux/runs/205ba6e504c40820/emits/payment_recovery_moment.ndjson
+["sub-0697f47d0e044cee","2026-07-02T02:02:40.842Z","50.2400","mkt-c"]
+["sub-7d1cb4bfed69136b","2026-07-02T22:12:49.743Z","10.9900","mkt-c"]
 ```
 
 ## The attestation
@@ -112,7 +112,7 @@ $ head -n 2 .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson
 For every emit, `apply` writes `seam-attestation-<exposeId>.json` into the run directory. It records which bytes met which bytes. It holds digests and declarations, no verdict.
 
 ```console
-$ head -n 17 .flux/runs/8835218acf7b4f8e/seam-attestation-payment_recovery_moment.json
+$ head -n 17 .flux/runs/205ba6e504c40820/seam-attestation-payment_recovery_moment.json
 {
   "G": "sha256:e0f6c367377aec038ad465b67546e958eafe70d921637f684434725ec3180881",
   "H": "sha256:e0f6c367377aec038ad465b67546e958eafe70d921637f684434725ec3180881",

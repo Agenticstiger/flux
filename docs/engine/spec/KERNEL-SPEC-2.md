@@ -1,10 +1,10 @@
 # FLUX Simulation Engine: kernel v2 normative specification (v0.2)
 
 Status: normative for kernel `0.2.0` and seed tree `flux-seed/2`, decided in
-[ADR 0010](../adr/0010-faster-generation-through-a-second-kernel.md). The engine implements it beside kernel `0.1.0`:
-`fluxsim plan --kernel 0.2.0` plans a run under it.
-Kernel `0.1.0` stays specified by [KERNEL-SPEC.md](./KERNEL-SPEC.md) and stays selectable: a plan or an evidence
-pack that names `0.1.0` runs under it, to the same digests.
+[ADR 0010](../adr/0010-faster-generation-through-a-second-kernel.md). The engine implements it beside kernel `0.1.0`,
+and from 0.9.0 it is the kernel a new plan takes when `fluxsim plan` is given no `--kernel`.
+Kernel `0.1.0` stays specified by [KERNEL-SPEC.md](./KERNEL-SPEC.md) and stays selectable (`fluxsim plan --kernel 0.1.0`):
+a plan or an evidence pack that names `0.1.0` runs under it, to the same digests.
 
 This document states what kernel `0.2.0` changes. Every rule of KERNEL-SPEC.md that it does not replace holds for
 `0.2.0` as written; "KERNEL-SPEC §n" below means that document's section. Two vector files pin every rule here:
@@ -30,7 +30,8 @@ generated identifiers come from Philox instead of a sha256 per value. Integer ru
 | `traceVersion`, `runFormatVersion` | unchanged | unchanged |
 
 `kernelVersion` is in `inputDigest` (KERNEL-SPEC §11), so a plan is bound to its kernel. A new plan picks its kernel
-with `fluxsim plan --kernel`, and every stage runs and stamps the kernel of the plan it reads (KERNEL-SPEC §1).
+with `fluxsim plan --kernel` and takes `0.2.0` when it names none, and every stage runs and stamps the kernel of the
+plan it reads, never the default (KERNEL-SPEC §1).
 
 ## 2. The root, a path's key and a draw's counter (replaces the derivation in KERNEL-SPEC §3)
 
@@ -49,7 +50,7 @@ block         = Philox4x64-10(counter, key) = (w0, w1, w2, w3)
 ```
 
 - **Ordinal parts** are the parts the path's shape marks as ordinals: the subject ordinal, an occurrence, a step, a
-  call ordinal, a run index, a row. `o1` and `o2` are the path's ordinals in order, `0` where it has fewer than two;
+  call ordinal, a run index, a row, an entity index, a version index (section 8.4). `o1` and `o2` are the path's ordinals in order, `0` where it has fewer than two;
   no canonical shape has more. An ordinal, a draw index or an attempt that does not fit in 64 bits is refused
   (`FLX-2202`).
 - **One key per shape and names.** No name part is empty, and an empty part marks an ordinal, so a key label tells
@@ -281,6 +282,23 @@ id = hex(sha256(b"flux-seed/2" + NUL + b"id" + NUL + root + NUL + label(path)))[
 path, `("world", world_id, "subject", ordinal, "id")`, is not). One sha256 per subject or per event is not a cost that
 batching would change.
 
+### 6.3 A generator plugin's seed
+
+An expose the Simulation declares under `generators` (ADR 0032) has the columns the engine does not derive generated
+by a plugin, which is handed a 32-byte seed with its request. The seed is a hash in the form of section 6.2, under its
+own tag:
+
+```text
+seed = sha256(b"flux-seed/2" + NUL + b"plugin" + NUL + root + NUL + label(("sim", sim_id, "gen", exposeId)))
+```
+
+`label(path)` is KERNEL-SPEC §3's full label, so `sim_id` and `exposeId` are NFC-normalised and may hold neither
+separator. The whole digest is the seed; nothing is drawn from it by the engine, and a plugin takes its values from it
+as it likes. It reads the run's `root`, so a sweep moves a plugin's values as it moves every draw of the engine's. The
+path is read only for an expose declared under `generators`, and its tag `plugin` is one no other derivation of
+section 6 uses, so it is an additive path in the sense of section 12: a bundle that declares no plugin draws nothing
+on it and keeps every digest. Kernel `0.1.0` derives no such seed and refuses the declaration (`FLX-3105`).
+
 ## 7. `permute/2` (replaces the round function of KERNEL-SPEC §4.1)
 
 The split, the four alternating Feistel rounds and cycle walking of KERNEL-SPEC §4.1 hold. Only the round function
@@ -295,12 +313,396 @@ A half of a domain of at most `2^256` holds at most 128 bits, so `y` fits the co
 
 ## 8. Related tables under `0.2.0` (KERNEL-SPEC §8.2)
 
-KERNEL-SPEC §8.2 holds, with three substitutions:
+KERNEL-SPEC §8.2 holds, with three substitutions, and a relationship that declares how many children each parent has
+is laid out by section 8.1:
 
 - `k = sha256(b"flux-key/2" + NUL + H_bytes + NUL + label(...))`, the same label, in place of `flux-key/1`;
 - `permute/2` (section 7) in place of `permute`;
 - a `uniform` pick is section 4's `bounded(parentRows)` on the first `fromColumn`'s cell: draw index 1 when that
-  column declares a `nullFraction`, whose null draw is index 0, and index 0 when it declares none.
+  column declares a `nullFraction`, whose null draw is index 0, and index 0 when it declares none;
+- a `weighted` pick (the `links` entry's `weight`) draws one `uniform53` `u` at that same draw index, and the parent
+  row is the first row `i` with `u < T_i`, `T_i = floor(2^53 * (w_0 + ... + w_i) / W)` on exact integers, found by
+  bisection over the thresholds of the parent's final weights in row order.
+
+A conditional link (KERNEL-SPEC §8.2, the Simulation's `links` key) and a bridge table's pair layout (the `bridges` key,
+with `permute/2` and `flux-key/2` as above) are generated under `0.2.0` only; kernel `0.1.0` refuses either key with
+`FLX-3105`, naming the kernel.
+
+### 8.1 Children per parent: the counted layout
+
+A relationship that a `counts` entry of the Simulation names, or that an expected-count hook returns a member for
+(ADR 0016), does not pick a parent per child row. Its child rows take their parents from a layout that gives each
+eligible parent a whole number of children. The layout is a pure function of its inputs and draws no value.
+
+**Inputs.** `N` is the child's rows and `P` the parent's rows, both after `--scale`. `E` is the eligible parents,
+the parent rows on which `parentWhen` is TRUE on the parent's final row, or every parent row when the entry has no
+condition, in row order. The rank `r` of an eligible parent is its position in `E`, and `e = |E|`. `m` is
+`minChildren`, `0` when it is not declared.
+
+**The key.** `K` is the whole sha256 digest whose first 16 bytes are `key(path)` of section 2,
+`K = sha256(b"flux-seed/2" + NUL + root + NUL + key_label(path))`, 32 bytes, for the path
+
+```text
+("sim", sim_id, "gen", exposeId, "count", relationship)
+```
+
+where `exposeId` is the child's. The path has no ordinal part, so its whole path is its key label and both counter
+ordinals are `0`. `K` is the `key` that `permute/2` (section 7) takes, which, like `flux-key/2`'s, is 32 bytes.
+Like the cell path, the path stays out of the seed-path ledger. For `e >= 1`,
+
+```text
+sigma(r) = permute/2(K, e, r)
+```
+
+**The shape** (`children`). Its classes are taken in declared order. Levels must be strictly ascending whole numbers
+of at least `0`, and bin edges strictly ascending whole numbers of at least `0` (`FLX-3403` otherwise). A level class
+is `[v, v]`. Bin `k` is `[edge_k, edge_{k+1} - 1]`, except the last bin, which holds its upper edge too: from the
+second to last edge to the last. The parents
+of each class are `n_k = LRM(e, weights)` (KERNEL-SPEC §5), with class `k` keyed by `k` written in decimal and
+zero-padded to the width of the largest class index, so that NFC order is class order. The slots `0 .. e - 1` are laid
+out class by class, and the `j`-th slot of class `k`, for `j` from `0`, holds
+
+```text
+v = lo_k + floor(j * (hi_k - lo_k + 1) / n_k)
+```
+
+so slot values never decrease with the slot.
+
+**Expected counts.** Rank `r` has an expected count `x_r`, a non-negative rational:
+
+- a shape and no hook: `x_r = v_sigma(r)`, the value of slot `sigma(r)`;
+- a hook and no shape: `x_r = e_r`, the hook's exact rational for that parent;
+- a hook and a shape, the rank coupling: the ranks are ordered by `(e_r, sigma(r))` ascending, and the `i`-th rank in
+  that order takes the value of slot `i`. When every `e_r` is equal this is exactly `v_sigma(r)`;
+- neither: `x_r = 1`.
+
+**The minimum.** `S = N - m * e`, and `S < 0` is `FLX-3403`, as is `e = 0` with `N > 0`. Then `y_r = max(x_r - m, 0)`
+and `Y` is the sum of the `y_r`. If `Y = 0` and `S > 0`, every `y_r` is `1`.
+
+**The allotment**, on exact integers, the rationals scaled to a common denominator. Each rank takes
+`a_r = floor(S * y_r / Y)`. The `S - sum(a)` ranks with the largest remainders `(S * y_r) mod Y`, compared exactly,
+take one more each, a tie going to the lower rank. The count `c` of an eligible parent is `m + a_r`, and of every
+other parent `0`.
+
+**The rows.** `C_p` is the sum of `c` over the parent rows before parent row `p`, in row order. Parent `p` owns the
+child rows `C_p .. C_p + c_p - 1`, and child row `i` takes the parent whose run holds it, found by bisection over
+`C`. The siblings of a parent are consecutive child rows.
+
+**A `one_to_one` relationship** gives no parent more than one child. The allotment above gives each rank
+`c_r = m + a_r`; where some `c_r` exceeds `1`, the layout keeps `min(c_r, 1)` for every rank and moves the children
+above one: with `D = sum(max(c_r - 1, 0))`, the `D` spare children go one each to the ranks whose kept count is `0`,
+those with the largest `y_r` first (the `y_r` of the allotment, after the replacement by `1` when every `y_r` is `0`),
+a tie going to the lower rank. When no `c_r` exceeds `1`, `D = 0` and the layout is the allotment. So with `N <= e`
+the layout never refuses, and the counts still total `N`. `N > e` is `FLX-3403`, as is `m > 1`. The cap is what lets
+the rounding of `N` and of a shape's classes under `--scale` leave one child more than the parents of class `1`
+without refusing.
+
+**The hook draws nothing.** An expected-count hook is a pure function of the parent row, its final row and the
+plan. It consumes no draw index on any path, and the key `K` is the same with or without it.
+
+**Section 12.** The layout is additive. Its address is new, the literal `count` at the position where no other shape
+has one; it is read only for a bundle that declares a `counts` entry or a hook; nothing that exists moves, the
+foreign key column's own stream and every other cell's draws included; and the vector file pins its words: the key
+label, the key, `sigma`, the slots, the counts and the offsets of chosen layouts (section 11).
+
+### 8.2 Parent aggregates over a counted relationship
+
+A contract `derive` with `aggregate` whose `via` relationship is on the counted layout (section 8.1) takes, for parent
+row `p`, the summary of the children `C_p .. C_p + c_p - 1` of the child's rows. The layout is worked out through the
+child plan's own foreign key for `via`, so the summary and the child's own pass see one layout. Each child row is read
+as the child's own pass writes it: its cells, its rules, dependencies and `given` columns, over the run in one call
+(`generate_row_slice`), in chunks for a long run. The semantics are EXPR-SPEC-2 section 5's: `count` is the number of
+children for which `filter` is TRUE, every child when there is none; `sum`, `min` and `max` run over the children whose
+`column` is not NULL and for which `filter` is TRUE, and are NULL when there are none; and `ifNone` replaces a NULL
+summary. The arithmetic is exact, at the column's scale, and a value that does not fit the column is `FLX-6112` when
+the row is made.
+
+A summary draws nothing and takes no path, so no stream and no draw index moves. It is a step of the parent's rules,
+ordered by EXPR-SPEC-2 section 10, and the parent's rows are made a row at a time, like a rule that reads through a
+link. Each process that makes a slice of the parent makes the children of that slice's parents.
+
+The parent's plan document has a `sums` member, a list of `{expose, relationship, generatorDigest}` for each summed
+child plan, present only when the plan has a summary, so a plan with none keeps every byte. The child reads the
+parent's plan as it is before its `sums` are attached, so no plan or digest holds itself. A child that reads a column
+a summary sets, or a column a rule of the parent computes from one, through a path is a cycle, `FLX-6208`, raised at
+plan time; the copy of the parent that a child reads has no sums, and the refusal is what guarantees nothing reads
+them there. An expose other than a child that reads such a column through a link is `FLX-6210`.
+
+**Section 12.** Nothing new is read for a bundle that declares no summary: the plan has no `sums`, and no path or draw
+is added.
+
+### 8.3 Exact allocation
+
+A column whose fidelity declaration holds `allocation: exact` (SEAM-FIDELITY-SPEC section 2) gives each of its classes
+exactly its share of the expose's rows, in place of a share each row draws for itself. The layout is a pure function of
+the rows `N`, the column's declaration and the key, and it draws no value. `N` is the expose's rows after `--scale`.
+
+**The column.** It is drawn from `levels`, with `levelWeights` or, where the column declares none (a categorical column declared by a `support` only), the equal weights of
+its declared support levels; from `bins` with `binWeights`; or from `levelWeightsGiven` or `binWeightsGiven` given a column
+that is itself exact (the last case below). Its classes are its levels in NFC order of their names, the order a
+categorical draw keys them in, or its bins in edge order. When the
+column declares a `nullFraction` above 0, NULL is one more class, the last. The weights are read as exact rationals:
+the declared ones, normalised to sum to 1, and, with a NULL class, scaled by `1 - nullFraction`, the NULL class taking
+`nullFraction`. The class weights then sum to 1 exactly.
+
+**The counts.** `n_k = LRM(N, weights)` (KERNEL-SPEC §5), class `k` keyed by `k` in decimal zero-padded to the width
+of the largest class index, so that NFC order is class order and a tie goes to the lower class, as in section 8.1. A
+class of weight 0 holds no row.
+
+**The key.** `K` is the whole sha256 digest whose first 16 bytes are `key(path)` of section 2,
+`K = sha256(b"flux-seed/2" + NUL + root + NUL + key_label(path))`, 32 bytes, for the path
+
+```text
+("sim", sim_id, "gen", exposeId, "allocate", column)
+```
+
+The path has no ordinal part, so its whole path is its key label and both counter ordinals are `0`. `K` is the `key`
+that `permute/2` (section 7) takes. Like the cell path, the path stays out of the seed-path ledger.
+
+**The slots.** The slots `0 .. N - 1` are laid out class by class: class `k` holds the `n_k` slots from
+`start_k = n_0 + ... + n_(k-1)`. Row `i` takes the class of the slot `s_i = permute/2(K, N, i)`.
+
+**Given an exact column.** Let `g` be the column the column `c` is given, with the key `K_g` of its own path, and let
+`g` be exact with the class counts above. Row `i`'s parent class `l` is the class of its slot
+`s_g = permute/2(K_g, N, i)`. Its index in the group of `l` is `j = s_g - start_l`, where `start_l` is the first
+slot of class `l` in the layout of `g`, and the group's size is `n_l`. The child classes in the group have the counts
+`LRM(n_l, weights given l)`, where `weights given l` is the row of `levelWeightsGiven` (or the list of
+`binWeightsGiven`) for the level `l`, normalised, with the keys and tie rule above. Row `i` takes the child class of
+the slot `permute/2(K_c, n_l, j)`, laid out class by class within the group, `K_c` being the key of the child column's
+own path. A group of one row is `permute/2` over a domain of 1, which is 0, so the row takes the first child class
+that holds a row. A given column is a categorical with no `nullFraction` (SEAM-FIDELITY-SPEC section 2), so a parent
+class is never NULL: an exact column that declares a `nullFraction` and is named by another column's `given` is
+refused as every such given column is (`FLX-3402`). A child that declares its own `nullFraction` has NULL as its last
+class in every group, with its weight scaled as above.
+
+**What a cell draws.** Every draw keeps its index (section 2). A cell makes its null draw when the column declares a
+`nullFraction`, then its `categorical` draw (for a histogram, the bin), and, for a histogram, the `bounded` draw of
+its value inside the bin, exactly as it does without `allocation`. The null draw and the `categorical` draw are made
+and not read: the class comes from the layout. A histogram's value inside its bin is the `bounded` draw it always
+makes, at its own index, so the value draw is the word it would have been. A row of the NULL class is NULL, and the
+value draws of that row are made and not read, as they are for a cell whose null draw fired.
+
+**Refusals.** Kernel `0.1.0` refuses the key, naming the kernel (`FLX-3105`), and so does a value other than `exact`.
+A histogram that declares neither `binWeights` nor `binWeightsGiven` has no weights to allot by and is
+`FLX-3402`. A column that declares `allocation` with a family other than a categorical or a histogram (a mean and a standard
+deviation, a rate, an identifier), a column given a column of a linked row
+(`given: <relationship>.<column>`), a column given a column that is not exact, a column given several columns, and
+a column given an exact column that is itself given another are `FLX-3402`, the code for declared statistics that do
+not parameterise the chosen family: the layout needs the weights it allocates by. A column that is not exact and is
+given an exact column reads the class of that column's slot, the level the exact column holds in the row.
+
+**Properties.** Every class holds exactly `n_k` rows. Under `given`, every pair of a parent class and a child class
+holds exactly its count `LRM(n_l, weights given l)` within the group of the parent class, so each class of the child
+holds the sum of those counts over the groups, and each parent class holds exactly its `n_l` rows.
+
+**Section 12.** The layout is additive. Its address is new, the literal `allocate` at the position where no other
+shape has one; it is read only for a column that declares `allocation`; nothing that exists moves, every other cell's
+draws and the column's own stream included; and the vector file pins its words: the key label, the key, the counts,
+the slots and the class of chosen rows, and for the given case the group sizes and every pair's count (section 11).
+### 8.4 Versions per entity and their instants (ADR 0017)
+
+A Simulation whose namespace carries a `history` entry for an emit (SEAM-FIDELITY-SPEC section 3) lays that emit out
+as a chain of versions per entity. The layout, the chains, the ended entities and the change reasons are a pure
+function of the plan and the seed tree. Every draw is addressed by an entity and a version, and nothing here reads
+`spec.timeBounds.end`.
+
+**The two layouts.** The emit's rows are laid out with section 8.1's counted layout twice, one inside the other, by
+`counted_layout` as it stands:
+
+1. *Entities per parent.* With a `parent`, the entities are the children and the parent's rows the parents:
+   `A = counted_layout(K_A, P, E, shape, minimum, eligible, expected)`. `K_A` is the key, by section 2, of
+   `("sim", sim_id, "gen", exposeId, "entities", relationship)`; `P` is the parent's rows and `E` the scaled
+   `entities`; the shape, the minimum and the eligible parents are the `parent` entry's, read as a `counts`
+   entry's, and an expected-count hook that returns a member for the relationship gives `expected` as it would for
+   a `counts` entry. Without a `parent`, entity `e` has no parent and the entities' order is their index.
+2. *Versions per entity.* The versions are the children and the entities the parents:
+   `V = counted_layout(K_V, E, N, versions, 1, None, expected)`. `K_V` is the key of
+   `("sim", sim_id, "gen", exposeId, "versions")`; `N` is the emit's scaled rows; the minimum is `1`. With a shape,
+   `expected` is each entity's room, `until` less its first start, as an exact whole number of the chain's units,
+   the expected counts of section 8.1, so the slot values go to the entities in the order of their room, the entity
+   with the most room taking the most versions, the rank coupling of section 8.1. Without a shape, `expected` is
+   none, so every entity counts alike and takes `floor(N / E)` or `ceil(N / E)` versions. The room reads drawn
+   first starts and `until`, never the window.
+
+Version row `i` is version `j = i - V.offsets[e]` of entity `e = V.parent_of(i)`, and entity `e` is a child of parent
+row `A.parent_of(e)`. An entity's versions are consecutive rows and so are a parent's entities, so the rows run in
+parent order, then entity order, then version order. More entities than versions is section 8.1's `S < 0`
+(`FLX-3403`). The counts themselves, as a multiset, follow from `N`, `E` and the shape alone, so `c`, the largest
+count an entity takes, is worked out at plan time from declared values. `--scale` keeps at least one entity and one parent row, so a history always has an entity. The natural entity's columns are laid out over the
+entities as KERNEL-SPEC section 8.2 lays a key out over rows, the entity index standing for the row index, and every
+version copies its entity's; so the check that a key's declared range holds its rows counts the entities, `E`, for a
+history's emit. The `parent` relationship's foreign key copies parent row `A.parent_of(e)` whole on every version of
+`e` and draws nothing. The primary entity is either one column, laid out over the rows as before, or the natural
+entity's columns and the start, the natural columns from the entity's key and the start from the chain; any other
+primary key is `FLX-3403` in this version.
+
+**The three keys.** A layout key and a permutation key are the full 32-byte key of a path with no ordinal part,
+as section 8.1's key is: `K_A` and `K_V` above, `K_end` of `("sim", sim_id, "gen", exposeId, "ended")` and
+`K_reason` of `("sim", sim_id, "gen", exposeId, "reason")`.
+
+**The first start and the lengths.** The chain's unit is a whole day for DATE columns and a millisecond for
+TIMESTAMP columns.
+
+- The first start `a` of entity `e` is drawn at position 0 of `("sim", sim_id, "gen", exposeId, "history", e)` at the
+  chain's unit inside `J = [timeBounds.start, until - c')`, where `c'` is `c` (the largest count, above), plus one
+  under `closeLast`, in units: from the part of `start` inside `J` with one `uniform53`, as EXPR-SPEC-2 section 6
+  draws a value inside an interval, or uniformly over `J` with one `bounded` at the same position when `start` is
+  absent or no bin meets `J`. Which of the two an entity takes depends on `J` and the bins, never on a draw. So
+  every entity has at least `c' + 1` units of room. An empty `J` is `FLX-3403` at plan time.
+- The length `d_j` of version `j` is one `uniform53` at position 0 of `("sim", sim_id, "gen", exposeId, "change", e,
+  j)`, drawn from `length` as EXPR-SPEC-2 section 6 draws a value from a histogram, at the chain's unit and in whole
+  units of at least one. Every version draws its length, the last included, and the length of an open version is
+  left unread, so no position depends on the count.
+- The starts are `s_0 = a` and `s_(j+1) = s_j + d_j`.
+
+**The fit.** Every start and every closed end lies before `until`. Let `k` be the entity's closed versions, `D` the
+sum of their lengths and `room` the entity's room in units. When `D > room - 1`, the closed lengths are compressed on
+exact integers: each keeps one unit, and the other `room - 1 - k` units are allotted over the closed versions in
+proportion to `d_j - 1` by the Largest Remainder Method (KERNEL-SPEC section 5), a tie going to the lower version.
+Since `k` is at most `c'` and the room at least `c' + 1`, every chain fits, and no drawn row is ever refused. The fit
+reads `until` and drawn values only and draws nothing.
+
+**The ends.** Under `chain: nextStart`, version `j` ends at `s_(j+1)`, a half-open interval. Under `dayBefore` it ends
+the day before `s_(j+1)`, a closed interval, for DATE columns only, in which a one-day version, or a compressed one,
+starts and ends on the same day. The last version of an entity that has not ended
+is open: its end is NULL, or the entry's `openEnd`, and lies at `until`, inside the window.
+
+**A length is a histogram.** Positions 1 to 255 of the `change` path stay reserved, so that a later record can draw a
+length another way there, given the version's state, without moving any position.
+
+**The ended allocation.** With an `end`, the eligible entities are, under `closeLast`, every entity, or with a
+`column` every entity with at least two versions, and under `finalVersion` the entities with at least two versions.
+Let `E'` be their number and `share` the entry's decimal:
+
+```text
+n = LRM(E', [share, 1 - share])[0]       keyed "0" and "1"
+entity of eligible rank r ends  <=>  permute/2(K_end, E', r) < n
+```
+
+With no eligible entity, none ends. Under `closeLast` an ended entity's last
+version is closed, with its own drawn length inside the fit, at `s_last + d_last` under `nextStart` and at the day
+before, `s_last + d_last - 1` day, under `dayBefore`. Under `finalVersion` its last version
+is a final version that carries the entry's `value` in `column` and stays open. The ending change is forced and draws
+nothing.
+
+**Change reasons.** The ordinary changes are every version after an entity's first except an ending version,
+numbered `t` in row order, `T` of them. With one tracked column it is the reason of every change. Otherwise the
+`reasons` classes take `LRM(T, weights)` changes each, keyed as section 8.1 keys classes, and change `t` takes the
+class of slot `permute/2(K_reason, T, t)`, the slots laid out class by class. The count per reason is known at plan
+time without a draw.
+
+**The value draws.** The reason's column moves from its value on the previous version to a level drawn from that
+level's row of `transitions`, one `categorical` at position `256 + c` of the version's `change` path, `c` the
+column's place in `tracked`. Version 0 draws each tracked column's initial value at its own `256 + c`. The other
+tracked columns carry their previous value. Positions 0 to 255 of the `change` path belong to the length: 0 is the
+one `uniform53`, and 1 to 255 are reserved.
+
+**Carried columns.** Every other column of the emit that the history does not set (not the entity's key, the
+version's key, the parent's key, a validity column, the activation, a tracked column or the end column) and that no
+rule sets takes, on every version, the value its own cell draws on the entity's first version row. The later rows'
+cells are never drawn, which moves no draw, since every cell has its own counter. A foreign key other than the
+parent's is picked on the first version row and carried too. Rules run on each version row after these values.
+
+**The paths.** The counter of the `history` path is `(entity, 0, draw, attempt)` and of the `change` path
+`(entity, version, draw, attempt)`, by section 2's ordinal parts.
+
+| path | kind | positions |
+|---|---|---|
+| `("sim", sim_id, "gen", exposeId, "entities", relationship)` | layout key | entities per parent |
+| `("sim", sim_id, "gen", exposeId, "versions")` | layout key | versions per entity |
+| `("sim", sim_id, "gen", exposeId, "history", entity)` | stream, one ordinal | 0: the first start |
+| `("sim", sim_id, "gen", exposeId, "change", entity, version)` | stream, two ordinals | 0 to 255: the length, 0 for one `uniform53`, 1 to 255 reserved; `256 + c`: tracked column `c`'s value |
+| `("sim", sim_id, "gen", exposeId, "ended")` | permutation key | which entities end |
+| `("sim", sim_id, "gen", exposeId, "reason")` | permutation key | which change moves which tracked column |
+| `("sim", sim_id, "gen", exposeId, "lag", entity, version)` | stream, two ordinals | 0: an event's lag (section 8.5) |
+| `("sim", sim_id, "gen", exposeId, "kind", k, p)` | permutation key | one kind's rows per pair in one period (section 8.5) |
+
+The layout and permutation keys stay out of the seed-path ledger, as section 8.1's does.
+
+**Section 12.** These paths are additive. Each shape has, at the place after `exposeId`, a literal that no other
+shape has there (`entities`, `versions`, `history`, `change`, `ended` and `reason`, beside the existing `row`, `key`,
+`pair`, `count` and `allocate`), so every address is new. They are read only for a bundle that declares `history`.
+Nothing that exists moves: the first version's cells draw on the generator cell path as they always did, the other
+versions' cells are never drawn, and the parent's foreign key draws nothing on its own stream. The vector file
+`tests/vectors/kernel2-history-vectors.json` pins each path's key, counters and blocks, and the layouts, chains, fits,
+ended entities and reasons of chosen entries.
+
+### 8.5 Projected emits: snapshots, events and periodic rows (ADR 0027)
+
+An emit that a `snapshots`, `events` or `periods` entry of the Simulation names (SEAM-FIDELITY-SPEC section 3) is
+projected: its rows follow from the history of its entry's `of`, an emit that a `history` entry declares.
+
+**Rows derived at plan time and recorded.** A projected emit declares no `rows`. At plan time its number of rows is
+worked out from the plan alone, from the history's layouts, chains, ended entities and change reasons, and for
+periods the tracked values and each period's allotments, none of which needs a cell. The plan document records it as
+the emit's `rows`, with `rowsFrom: {of, projection}`, and it enters `planDigest` only, never an entry for `H`. `--scale F`
+scales the history's `entities` and `rows`, and a projection's count follows from the scaled history and is not scaled
+again. `--shard I/N` takes contiguous shares of the derived rows. Another emit may pick its parents in a snapshot
+or an events emit, whose row count is known at plan time and does not change with the window; a relationship whose
+parent is a periodic emit is `FLX-3403` in this version, since that parent's rows grow with the window and every pick
+over them would move.
+
+**A snapshot** has one row per entity of the history, in entity order. Each column holds the entity's last version's
+final value, its rules included. With `ended: drop` the entities the history ended are left out, so the rows are `E`
+less the ended count. A snapshot draws nothing and adds no path.
+
+**Change events.** In entity order, each entity has a `c` event for its first version, a `u` event for each later
+version, and a `d` event when the history ended it: under `finalVersion` the change into its final version is the
+`d`, and under `closeLast` the close of its last version is. `on` keeps the listed ones. An event's instant is the
+version's start, or for a `closeLast` `d` the last version's end. A `when` predicate over the version the event is
+about keeps an event only where it is TRUE and reads nothing a cell draws.
+
+**The lag.** The `date` column holds the instant plus a lag. The lag is one `uniform53` at position 0 of
+`("sim", sim_id, "gen", exposeId, "lag", entity, version)`, drawn at the date column's unit from the entry's `lag`
+histogram, whose edges are whole days, inside the interval from zero to `until` less the change's instant, as
+EXPR-SPEC-2 section 6 draws a value inside an interval, and uniformly over that interval with one `bounded` at the
+same position when no bin meets it. The `d` of a `closeLast` entity takes the version
+ordinal one past its last version. Without `lag` the event is recorded at its change, and no event is dated after
+the history's `until`.
+
+**Before, after and other columns.** `before` holds the previous version's value, NULL on a `c`, and on the `d` of a
+`closeLast` entity the last version's own value, the state that was deleted; `after` holds this version's value, NULL
+on a `d`. A `before` column the event contract requires is `FLX-3403` when `on` keeps `c`, and an `after` column it
+requires is `FLX-3403` when `on` keeps `d`, since those events write NULL there. An event column that names a column of the history's emit and has no mapping holds
+the value of the version the event is about: the new version for a `c` or a `u`, the last version for a `d`. Every
+other column is drawn on the generator cell path at its row.
+
+**The periods.** Period `p` runs from `timeBounds.start`'s day plus `p` grains to the day `p + 1` grains on, for `p`
+from 0 while it starts before `timeBounds.end`, the window's end excluded. Each period's first day is counted from
+the window's start, never from the period before, and a month added to a day the month lacks lands on the month's
+last day, as `ADD_MONTHS` does (EXPR-SPEC-3).
+
+**The pairs.** `match` says which versions a period holds: `overlap`, the default, every version valid at some instant
+of the period; `end`, the version valid at the period's last instant inside the window; `start`, the version valid
+at its first instant. An open version is valid up to the window's end, and an entity holds no period before its first
+start or after a closed end. A held (version, period) is a pair.
+
+**The per-period allotment.** A kind's `count` is a whole number of rows per pair, or `levels` with `levelWeights`.
+Then in each period the `M` pairs the kind holds take `LRM(M, weights)` per level, keyed as section 8.1 keys classes,
+and the pair of rank `r` among them, in row order, takes the level of slot `permute/2(K, M, r)`, the slots laid out
+level by level. `K` is the key of `("sim", sim_id, "gen", exposeId, "kind", k, p)`, with `k` and `p` the kind's and
+the period's positions written in decimal. A period's allotment reads no other period. A kind's `when` predicate over
+the pair's version and the period column holds a pair's rows only where it is TRUE and reads nothing a cell draws.
+
+**Order and count.** Rows run period by period, then entity, then version, then kind, then the kind's rows. The count
+is the sum over periods, kinds and held pairs of the rows each takes, worked out in one pass over the versions, each
+giving its first and last period, and the allotments of each period. A process that writes a slice finds its first
+period by bisection over the periods' counts.
+
+**The key.** A periodic emit's primary key, a whole-number column, is not laid out by section 8.1's key grid: row `i`
+takes `lo + i`, with `lo` the low end of its declared range or first bin, one step per row and never a point spread
+over the row count, so a longer window appends keys and keeps every earlier one. The check that the range holds the
+rows stays. A primary key of another type, and a column under `allocation: exact`, which reads the row count, are
+`FLX-3403` on a periodic emit. Every other emit's key is laid out as before.
+
+**Section 12.** The `lag` and `kind` paths are additive: each is a literal no other shape has at the place after
+`exposeId`, beside section 8.4's, so its address is new. They are read only for a bundle that declares `events` or
+`periods`, and nothing that exists moves. A snapshot draws nothing. A projected emit's own cells draw on the generator
+cell path at its rows, as any emit's do.
+
+A lifetime, a date within a linked row's lifetime, a hidden column and a hidden table (the `lifetimes` and `within` keys,
+an emit's `hiddenColumns` and `hidden`; SEAM-FIDELITY-SPEC §2) are generated under `0.2.0` only; kernel `0.1.0` refuses
+each key with `FLX-3105`, naming the kernel.
 
 ## 9. What stays as KERNEL-SPEC states it
 
@@ -320,11 +722,64 @@ of a column a key of its own.
 
 | File | What it pins |
 |---|---|
-| `tests/vectors/kernel2-streams-vectors.json` | Philox4x64-10 blocks, Random123's three among them; the run root; the key label, ordinals, key, counters and blocks of a path of every canonical shape and of a generator cell; `bounded` with every attempt's word, rejections included; `bernoulli`, `categorical` and `permutation`; `poisson` at thresholds spread over each table; `permute/2` images with the `flux-key/2` label parts of their key; generated and seed-tree identifiers; `uniform` foreign-key picks at draw index 0 and 1. |
+| `tests/vectors/kernel2-streams-vectors.json` | Philox4x64-10 blocks, Random123's three among them; the run root; the key label, ordinals, key, counters and blocks of a path of every canonical shape and of a generator cell; `bounded` with every attempt's word, rejections included; `bernoulli`, `categorical` and `permutation`; `poisson` at thresholds spread over each table; `permute/2` images with the `flux-key/2` label parts of their key; generated and seed-tree identifiers; a generator plugin's seed (section 6.3); `uniform` foreign-key picks at draw index 0 and 1. |
+| `tests/vectors/kernel2-streams-vectors.json`, `countedLayouts` | Section 8.1's counted layouts: the path's key label and key, `e`, `sigma` for every rank, the slot values, the expected counts as exact fractions and the counts per parent row with their offsets, and the parent of the first, the last and a run boundary child row; with no shape, with bins and a minimum, with levels whose slot values total the child rows, with a parent condition, with a hook alone, with a hook and tied expected counts under a shape, with a constant hook, whose counts equal the shape's alone, and with three `one_to_one` layouts, one whose allotment the cap moves from a parent of class `1` to one of class `0`, one the cap leaves as the allotment, and one under a hook that moves two spare children by `y`. |
+| `tests/vectors/kernel2-streams-vectors.json`, `exactAllocations` | Section 8.3's exact allocations: the path's key label and key, the class weights as exact fractions, the counts and first slots per class, and the slot and class of rows; four levels over 26 rows, the same with a `nullFraction` (a NULL class), four bins over 1000 rows (chosen rows only), and a column given the first one, with the parent class and child class of every row, the group sizes and the count of every pair of a parent class and a child class. |
+| `tests/vectors/kernel2-history-vectors.json` | Section 8.4's and 8.5's paths: each path's key label, key, counters and blocks; the layouts, chains, fits, ended entities and reasons of chosen entries, and the derived counts and allotments of chosen projections. |
 | `tests/vectors/kernel2-transforms-vectors.json` | The logarithm's and AS241's constants by bit pattern; `log` and Φ⁻¹ at their region edges; per declaration, the binary64 constants of section 5.3 and the `z` bits and units of each probed `uniform53`, a declaration whose tails are taken as zero among them; the exponential's units. |
+| `tests/vectors/kernel2-dates-vectors.json` | The dates stream of EXPR-SPEC-2 section 7: its key label, key, counters and blocks at positions 0, 1 and 257 for a DATE column and for a TIMESTAMP column, and the cell path of a hidden column; the thinning positions 2, 3 and 256 and a thinning run over a fixed intensity. |
 
 Words, keys and binary64 values are written as hex digits. Integers that can exceed `2^53` (uniforms, bounds,
 domains, images, thresholds) are decimal strings; small ones (ordinals inside a path, draw indices, attempts, lengths,
 scales, permutation items, a table's length) are JSON numbers. The vectors pin each rule at chosen points, edges
 first. A change to any rule here moves a vector, and a moved vector is a `kernelVersion` change with a
 `GOLDEN-CHANGELOG.md` row, as KERNEL-SPEC says of its own rules.
+
+## 12. A path that only an opt-in declaration reads is additive
+
+A feature that adds a seed-tree path (a stream for a value the generator did not draw before) does not change
+`kernelVersion` when every one of these holds:
+
+1. **A new declaration reads it, and only that declaration.** The path is drawn only for a bundle that
+   declares the feature, in a key of the Simulation or the contract that the engine did not read before. A bundle
+   without the key draws nothing on the path.
+2. **Its address is new.** The path has a label no existing path has, built by section 2's derivation, so its key
+   is not the key of any path a bundle already draws on.
+3. **Nothing that exists moves.** No existing path changes its address, its derivation, the number or order of its
+   draws, or what a draw's word is read as. The streams of every other cell, column and table of the run, and so
+   every digest of a bundle that does not declare the feature, are the bytes they were.
+4. **Its words are pinned.** The vector files hold the new path's key, counters and blocks, so an implementation is
+   held to them as it is held to section 11's.
+
+Such a feature is additive: a kernel `0.2.0` plan written before it replays to the digests it had, and a plan
+written after it that does not declare it has the same digests as one written before. The declaration is in the
+bundle, so it is part of `inputDigest` and the run seeds from `H` as before.
+
+A change that breaks any of the four is not additive and is a `kernelVersion` change with a `GOLDEN-CHANGELOG.md`
+row: a draw that an existing declaration starts to make, a path whose address is another path's, a rule that
+changes what a recorded draw means, or a default that a bundle which declares nothing would now take. The
+same holds for kernel `0.1.0` and KERNEL-SPEC.md, whose seed-tree paths are in its section 3.
+
+The dates stream (EXPR-SPEC-2 section 7, `R` the canonical JSON of `["dates", <column>]`) and the cell path of a hidden
+column are additive under conditions 1 to 4. (1) Only `lifetimes`, `within`, `rates` and `hiddenColumns` read them: a bundle that
+declares none of the four draws nothing on either path, and a column with no `rates` entry draws position 1 of its dates
+stream alone, while one with an entry takes proposal `k` at position `1 + 2k` and its test at `2 + 2k` for `k` below 128. (2) The label's first `R` element, `"dates"`, is no element any
+contract or bundle rule's `R` holds, and a hidden name is one no contract column has (a hidden name that is a contract
+column's is refused), so each address is new. (3) Nothing that exists moves: no existing path changes its address,
+derivation, draws or reading, and every other cell, column and table keeps the bytes it had. (4) `tests/vectors/kernel2-dates-vectors.json`
+holds the key, counters and blocks of the dates stream and of a hidden column's cell path.
+
+The paths of section 8.4 meet all four. Each has at the place after `exposeId` a literal no other shape has there, a
+bundle without a `history` entry never reads them, nothing that exists moves, and
+`tests/vectors/kernel2-history-vectors.json` pins their keys, counters and blocks. No plan document enters an entry
+for `H`: a plan document holds the window, and the seed tree's root folds in every `H`, so the root and every stream
+are the same under a window that grows, and a history's emit is the same byte for byte under two windows with the
+same `until`. The `lag` and `kind` paths of section 8.5 meet them the same way. So a history and its projections are additive: a kernel `0.2.0` plan written before them replays to the digests it had.
+
+An example of a declaration that adds no path at all: a column drawn given several columns (`given` a list,
+SEAM-FIDELITY-SPEC section 2). It draws on its own column's path at the index every categorical column draws at,
+and the combination of its parents' levels only chooses the table of weights the uniform is searched in. It
+satisfies 1 to 4 trivially, so a kernel `0.2.0` plan that declares it replays on any engine that reads the list. So does a column drawn given
+a column of a linked row (`given: <relationship>.<column>`): the level of the parent's final value picks the same
+kind of table, the cell is drawn on its own path at the same index, and the draws of every other cell are the bytes
+they were.

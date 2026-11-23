@@ -6,9 +6,14 @@ import { sitemapPlugin } from '@vuepress/plugin-sitemap'
 import { markdownChartPlugin } from '@vuepress/plugin-markdown-chart'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
+import { createRequire } from 'node:module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SITE = 'https://agenticstiger.github.io/flux/'
+
+// The YAML reader gray-matter (VuePress's front matter parser) uses, found from
+// gray-matter itself so this file names no package of its own.
+const yaml = createRequire(createRequire(import.meta.url).resolve('gray-matter'))('js-yaml')
 
 export default defineUserConfig({
   lang: 'en-US',
@@ -38,6 +43,24 @@ export default defineUserConfig({
 
     ['meta', { name: 'keywords', content: 'flux, fluid, digital twin, synthetic data, simulation, data products, data contract, deterministic, governance, json schema' }],
   ],
+
+  // Front matter is read the way JSON.parse reads an object: a key written twice
+  // keeps its last value, where the strict reader refuses the page and stops the
+  // build. The engine's how-to index at v0.10.0 writes `description` twice, and
+  // the page cannot be changed here (see the note on /engine/ below). Drop this
+  // when a release of the engine has one description.
+  markdown: {
+    frontmatter: {
+      grayMatterOptions: {
+        engines: {
+          yaml: {
+            parse: (text: string) => yaml.safeLoad(text, { json: true }),
+            stringify: (data: object) => yaml.safeDump(data),
+          },
+        },
+      },
+    },
+  },
 
   // The pages under /engine/ are written in the engine's own repository and
   // copied here unchanged. An "Edit this page" link from this repository would
@@ -167,6 +190,15 @@ export default defineUserConfig({
             '/engine/how-to/write-a-bundle-from-a-profile.md',
             '/engine/how-to/score-a-run-against-a-profile.md',
             '/engine/how-to/seal-and-score-a-prediction.md',
+            '/engine/how-to/forecast-the-next-state.md',
+            '/engine/how-to/size-and-split-a-run.md',
+            '/engine/how-to/publish-a-catalogue.md',
+            '/engine/how-to/give-every-parent-its-children.md',
+            '/engine/how-to/check-consumer-queries.md',
+            '/engine/how-to/fix-values-and-seed-rows.md',
+            '/engine/how-to/give-an-entity-a-history.md',
+            '/engine/how-to/project-a-history.md',
+            '/engine/how-to/keep-dates-inside-their-parents-lifetime.md',
             '/engine/how-to/load-a-simulation-into-a-database.md',
           ],
         },
@@ -187,8 +219,10 @@ export default defineUserConfig({
                 '/engine/reference/cli/verify.md',
                 '/engine/reference/cli/ship.md',
                 '/engine/reference/cli/replay.md',
+                '/engine/reference/cli/story.md',
                 '/engine/reference/cli/calibrate.md',
                 '/engine/reference/cli/accuracy.md',
+                '/engine/reference/cli/forecast.md',
                 '/engine/reference/cli/gate.md',
                 '/engine/reference/cli/expr.md',
                 '/engine/reference/cli/describe.md',
@@ -210,7 +244,9 @@ export default defineUserConfig({
                 '/engine/spec/KERNEL-SPEC-2.md',
                 '/engine/spec/SEAM-FIDELITY-SPEC.md',
                 '/engine/spec/PROFILE-SPEC.md',
+                '/engine/spec/PROFILE-REQUEST-SPEC.md',
                 '/engine/spec/SCORECARD-SPEC.md',
+                '/engine/spec/CONSUMER-QUERIES-SPEC.md',
                 '/engine/spec/SAMPLE-SPEC.md',
                 '/engine/spec/PARAMETER-REGISTER-SPEC.md',
                 '/engine/spec/EXPR-SPEC.md',
@@ -229,6 +265,7 @@ export default defineUserConfig({
             '/engine/explanation/determinism-and-the-seed-tree.md',
             '/engine/explanation/the-seam.md',
             '/engine/explanation/the-evidence-pack.md',
+            '/engine/explanation/offline.md',
           ],
         },
         {

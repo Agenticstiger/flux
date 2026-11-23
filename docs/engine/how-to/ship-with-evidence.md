@@ -17,16 +17,16 @@ created demo with a small FLUX bundle and its FLUID contract (10 files):
 ...
 $ cd demo
 $ fluxsim run .
-plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
-applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
-emitted payment_recovery_moment: 154 rows (scenario)
-run 8835218acf7b4f8e complete
+plan written to .flux/runs/205ba6e504c40820/plan.json (runId=205ba6e504c40820, planDigest=sha256:205ba6e504c408208fb15c5da5f96edac2f514606d6024bc19733c6c5cac90cc)
+applied to .flux/runs/205ba6e504c40820 (runDigest=sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06)
+emitted payment_recovery_moment: 155 rows (scenario)
+run 205ba6e504c40820 complete
 ```
 
 These examples write the pack beside the bundle directory, so that directory keeps only its documents. Writing it inside, as the tutorial does with `-o out`, also works: `ship` leaves that output folder out of the archive.
 
 ```console
-$ fluxsim ship . --run-id 8835218acf7b4f8e -o ../out
+$ fluxsim ship . --run-id 205ba6e504c40820 -o ../out
 [ok] packed ../out/demo.flux.tgz
      profile=core documents=9 files=38
      merkleRoot=sha256:...
@@ -47,7 +47,7 @@ demo.flux-manifest.json
 demo.flux.tgz
 demo.runtime-evidence.json
 $ tar tzf ../out/demo.flux.tgz | grep -E 'EVIDENCE|manifest'
-demo/.flux/runs/8835218acf7b4f8e/EVIDENCE.md
+demo/.flux/runs/205ba6e504c40820/EVIDENCE.md
 demo/flux-manifest.json
 demo/run/EVIDENCE.md
 ```
@@ -71,6 +71,25 @@ reproducibility: not-checked
 - `payment_recovery_moment`: no fidelity block declared
 - Signature: ...
 
+## Population
+
+There is no target to draw: this run was shipped without a profile.
+
+## Privacy Grade
+
+Run grade: **P0 (assumed)**.
+
+Patterns: **P0 assumed**, no profile was pinned and every parameter is declared by hand; **P1 checked**, a profile of aggregates under the profiler's output checks, with no formal guarantee; **P3 differentially private marginals**, a profile that states one release under differential privacy and holds only noisy statistics; **P4 differentially private model**, a model from a generator plugin whose bundle declares the account of its training; **P5 learned model, no privacy account**, a model from a generator plugin with no such account, the weakest pattern. P2 is not assigned, and the numbers are stable. The grade is the weakest of the pinned profile's and every declared generator plugin's, and is one grade for the run; a grade for each column is a later refinement.
+
+Declared hand-written: no profile was pinned, so the engine read no data; it cannot confirm that no data shaped the numbers a person typed. No privacy guarantee is stated.
+
+| Expose | Column | Sensitivity | Minimum | Met |
+|---|---|---|---|---|
+| `payment_recovery_moment` | `subscriber_id` | none | any pattern | yes |
+| `payment_recovery_moment` | `aborted_at` | none | any pattern | yes |
+| `payment_recovery_moment` | `amount` | none | any pattern | yes |
+| `payment_recovery_moment` | `market` | none | any pattern | yes |
+
 ## Column Provenance
 
 This is what `apply` recorded for the run. The run's plan holds a digest of it, and `ship` checked the record against that digest; it does not work out again how each column was produced.
@@ -93,7 +112,7 @@ No validity claim is made (validity: not asserted): this run's predicted outcome
 No column fell back to a type default: every column was produced by a declaration, a copy or a derivation.
 ```
 
-The report records what was run and what was checked. It does not say the simulated customers match real ones. Its last section says so itself. The section before it, Column Provenance, says how each column was made; the archive also holds the same record as `run/column-provenance.json`, for a tool to read.
+The report records what was run and what was checked. It does not say the simulated customers match real ones. Its last section says so itself. The section before it, Column Provenance, says how each column was made, and Privacy Grade, before that, says which pattern the run's numbers rest on and what guarantee that carries; the archive also holds the same record as `run/column-provenance.json`, for a tool to read.
 
 ## Declare a fidelity block
 
@@ -164,7 +183,7 @@ emitted payment_recovery_moment: 64 rows (generator)
 run ... complete
 ```
 
-Read that line twice. A fidelity block makes the emit generator-driven: its rows are drawn from the declared encoding and ranges, not from the World, the Persona and the Journey that produced the 154 rows of the first run, and the label says `generator` where it said `scenario`. The amounts here come from the range `1` to `10000`, which is why the slice below has such large ones. What the gate checks is therefore the generator's rows against your slice, and a pass says nothing about the simulated customers.
+Read that line twice. A fidelity block makes the emit generator-driven: its rows are drawn from the declared encoding and ranges, not from the World, the Persona and the Journey that produced the 155 rows of the first run, and the label says `generator` where it said `scenario`. The amounts here come from the range `1` to `10000`, which is why the slice below has such large ones. What the gate checks is therefore the generator's rows against your slice, and a pass says nothing about the simulated customers.
 
 ## See the gate refuse
 
@@ -175,7 +194,7 @@ $ fluxsim ship . --run-id $(ls -t .flux/runs | head -1) -o ../out-a   # exit 1
 withheld: payment_recovery_moment
   - committed-slice.present: payment_recovery_moment declares a fidelity block; ship needs --committed-slice for it
 nothing was written to the output directory
-FLX-8001: withheld payment_recovery_moment
+FLX-8001: withheld payment_recovery_moment: committed-slice.present: ...; to fix: pass --committed-slice, ...
 more: fluxsim explain FLX-8001  https://agenticstiger.github.io/flux/engine/reference/errors/FLX-8001.html
 ```
 
@@ -197,7 +216,7 @@ withheld: payment_recovery_moment
   - properties.outcomes: 1 of 2 declared properties are outside their margins
   - property 000:mean:amount (mean of amount): outside the declared margin ...
 nothing was written to the output directory
-FLX-8001: withheld payment_recovery_moment
+FLX-8001: withheld payment_recovery_moment: properties.outcomes: ...; to fix: change the numbers the bundle declares, ...
 more: fluxsim explain FLX-8001  https://agenticstiger.github.io/flux/engine/reference/errors/FLX-8001.html
 ```
 
@@ -209,10 +228,10 @@ In real use the slice is data you hold, and you never change it to make the gate
 
 ```console
 $ cat > ../slice.ndjson <<'EOF'
-{"subscriber_id": "s-0001", "aborted_at": "2026-07-04T09:12:00Z", "amount": "5100.0000", "market": "IE"}
-{"subscriber_id": "s-0002", "aborted_at": "2026-07-04T11:40:00Z", "amount": "5200.0000", "market": "GB"}
-{"subscriber_id": "s-0003", "aborted_at": "2026-08-05T08:03:00Z", "amount": "5150.0000", "market": "FR"}
-{"subscriber_id": "s-0004", "aborted_at": "2026-09-05T16:55:00Z", "amount": "5220.0000", "market": "DE"}
+{"subscriber_id": "s-0001", "aborted_at": "2026-07-04T09:12:00Z", "amount": "5150.0000", "market": "IE"}
+{"subscriber_id": "s-0002", "aborted_at": "2026-07-04T11:40:00Z", "amount": "5250.0000", "market": "GB"}
+{"subscriber_id": "s-0003", "aborted_at": "2026-08-05T08:03:00Z", "amount": "5200.0000", "market": "FR"}
+{"subscriber_id": "s-0004", "aborted_at": "2026-09-05T16:55:00Z", "amount": "5270.0000", "market": "DE"}
 EOF
 $ fluxsim ship . --run-id $(ls -t .flux/runs | head -1) -o ../out-a --committed-slice payment_recovery_moment=file://$(dirname "$PWD")/slice.ndjson
 [ok] packed ../out-a/demo.flux.tgz
@@ -256,7 +275,7 @@ $ fluxsim ship . --run-id $(ls -t .flux/runs | head -1) -o ../out-d --signing-ke
 withheld: payment_recovery_moment
   - record.signature: the record's signature does not verify against any trusted key
 nothing was written to the output directory
-FLX-8001: withheld payment_recovery_moment
+FLX-8001: withheld payment_recovery_moment: record.signature: ...; to fix: ship with the signing key that --trust-key names, ...
 more: fluxsim explain FLX-8001  https://agenticstiger.github.io/flux/engine/reference/errors/FLX-8001.html
 ```
 
@@ -268,18 +287,18 @@ A Simulation can pin a profile, a document of aggregate statistics computed wher
 fluxsim run . --profile ../source.profile.json --verify --ship -o ../out
 ```
 
-[Score a run against a profile](./score-a-run-against-a-profile.md) writes such a profile, pins it and runs this end to end.
+[Score a run against a profile](./score-a-run-against-a-profile.md) writes such a profile, pins it and runs this end to end. `run --verify --ship` is the one-pass path from a bundle to a pack: the rows are drawn once.
 
 `verify` and `ship` then compare each emit's declared properties with the profile and score the run, per property, per table, per dimension and overall ([SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md)). `verify` prints the scores under its legs:
 
 ```text
-  scorecard: overall 0.9871 against profile sha256:...
+  scorecard: overall 0.9871 against profile sha256:... (covers 3 of 5 columns, 0 of 1 relationship)
     dimensions: structure 1, marginals 0.9744; not measured: joint, crossTable, temporal, invariants, queries, defects
-    table payment_recovery_moment: 0.9871 (2 of 2 properties scored)
+    table payment_recovery_moment: 0.9871 (2 of 2 properties scored); covers 3 of 5 columns, 0 of 1 relationship
     shape: no flags in 3 profiled columns (no count table to test)
 ```
 
-Under the scores come the shape flags ([SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md) §6). Every column the profile describes is checked, declared or not, for cells the run leaves empty, one value holding an unlikely share of the rows, a constant column, and a distinct count far from the one the profile predicts. They are in `run/scorecard.json` and `EVIDENCE.md` too, and they withhold nothing.
+Under the scores come the shape flags ([SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md) §6). Every column the profile describes is checked, declared or not, for cells the run leaves empty, one value holding an unlikely share of the rows, a constant column, and a distinct count far from the one the profile predicts. They are in `run/scorecard.json` and `EVIDENCE.md` too. They withhold nothing unless the Simulation's `scorecard` block declares `shape: { maxFlags: n }`, which withholds a run with more than `n` flags.
 
 A property outside its margin withholds the ship, and so does a missed threshold. The Simulation declares thresholds beside the pin:
 
@@ -291,6 +310,8 @@ extensions:
     scorecard:
       thresholds:
         overall: { mustBeGreaterOrEqualTo: "0.95" }
+      coverage:   # a floor on how much of the contract the score speaks for
+        columns: "0.8"
 ```
 
 A shipped pack carries the scores as `run/scorecard.json`, and `EVIDENCE.md` summarises them. A run whose Simulation pins a profile is refused by `ship` without it (`FLX-3109`), and with another profile (`FLX-3110`).

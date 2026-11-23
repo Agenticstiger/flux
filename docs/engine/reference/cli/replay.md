@@ -38,6 +38,7 @@ fluxsim replay ./bundle --run-id de72fa4b22711c52 \
 | `--assert-digest` | `sha256:HEX` | the runDigest this replay must reproduce, as sha256:&lt;64 hex chars&gt;; the bare hex is accepted and the prefix put back **(required)** |
 | `--simulation-id` | `SIMULATION_ID` | which Simulation document to resolve (default: the bundle's only one) |
 | `--zone` | `ZONE` | declared run zone, for sovereignty checks |
+| `--allow-generator` | `NAME` | allow the generator plugin of that entry-point name to be imported and run, while the replay generates the rows again; repeat it for each plugin the bundle declares under generators (without it the command is refused, FLX-3119, before anything is imported); a plugin is trusted code that runs with your rights, so name only plugins you have reviewed; no environment variable and no bundle key allows one |
 | `--jobs` | `N` | the most processes that may generate the rows of an emit declared by statistics: a number (never more than one per CPU) or auto for one per CPU; the run summary says how many it used, and the rows and every digest are the same whatever the number (default: FLUX_JOBS, else 1) |
 | `--state-dir` | `STATE_DIR` | run-state directory (default: ./.flux) |
 | `-j, --json` |  | emit machine-readable JSON |

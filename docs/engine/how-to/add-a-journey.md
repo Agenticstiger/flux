@@ -102,13 +102,13 @@ A state that exists but has no edge from where the customer is does not stop the
 ```console
 $ fluxsim run .
 ...
-emitted payment_recovery_moment: 154 rows (scenario)
+emitted payment_recovery_moment: 155 rows (scenario)
 run ... complete
 $ grep -c jr-support-callback .flux/runs/*/events.ndjson   # exit 1
 0
 ```
 
-The bundle is valid and the new documents are in it, but the Module does not list them. The run ignores them: still 154 rows, and no event mentions the new journey. Listing a detector under `signalRefs` fails instead, with `resolves to kind Detector, expected Signal`. The route is the Module; the engine's error for a Journey or Detector reached any other way is [FLX-2301](../reference/errors/FLX-2301.md).
+The bundle is valid and the new documents are in it, but the Module does not list them. The run ignores them: still 155 rows, and no event mentions the new journey. Listing a detector under `signalRefs` fails instead, with `resolves to kind Detector, expected Signal`. The route is the Module; the engine's error for a Journey or Detector reached any other way is [FLX-2301](../reference/errors/FLX-2301.md).
 
 ## 5. Wire the Module
 
@@ -131,10 +131,10 @@ The Simulation already lists this Module, so it needs no edit. The signal comes 
 $ rm -rf .flux
 $ fluxsim run .
 ...
-emitted payment_recovery_moment: 335 rows (scenario)
+emitted payment_recovery_moment: 320 rows (scenario)
 run ... complete
 $ grep -c jr-support-callback .flux/runs/*/events.ndjson
-120
+103
 ```
 
-Rows went from 154 to 335: the new detector's firings are rows too. The journey produced 120 transition events.
+Rows went from 155 to 320: the new detector's firings are rows too. The journey produced 103 transition events.

@@ -70,31 +70,31 @@ created demo with a small FLUX bundle and its FLUID contract (10 files):
 ...
 $ cd demo
 $ fluxsim run .
-plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
-applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
-emitted payment_recovery_moment: 154 rows (scenario)
-run 8835218acf7b4f8e complete
-$ head -2 .flux/runs/8835218acf7b4f8e/seed-paths.ndjson
+plan written to .flux/runs/205ba6e504c40820/plan.json (runId=205ba6e504c40820, planDigest=sha256:205ba6e504c408208fb15c5da5f96edac2f514606d6024bc19733c6c5cac90cc)
+applied to .flux/runs/205ba6e504c40820 (runDigest=sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06)
+emitted payment_recovery_moment: 155 rows (scenario)
+run 205ba6e504c40820 complete
+$ head -2 .flux/runs/205ba6e504c40820/seed-paths.ndjson
 ["sim","sim-payment-recovery","signal","sig-payment-aborted","subject",0,0]
 ["sim","sim-payment-recovery","signal","sig-payment-aborted","subject",0,1]
-$ grep -c . .flux/runs/8835218acf7b4f8e/seed-paths.ndjson
-2795
-$ grep -o '"seedTreeDigest": "[^"]*"' .flux/runs/8835218acf7b4f8e/plan.json
-"seedTreeDigest": "sha256:92c35178b00fd7c4f034b1546dcbad41a1f238c6b64251e63ae5fc1c2741291b"
+$ grep -c . .flux/runs/205ba6e504c40820/seed-paths.ndjson
+2810
+$ grep -o '"seedTreeDigest": "[^"]*"' .flux/runs/205ba6e504c40820/plan.json
+"seedTreeDigest": "sha256:8cde99ffbe5c843a8692175e89a1f00c1134e5e3b6083468cfcb4aba35f1ebb1"
 ```
 
 The direct check is `fluxsim replay`. It re-executes the recorded plan and refuses unless the run digest it produces is the one you assert.
 
 ```console
-$ fluxsim replay . --run-id 8835218acf7b4f8e --assert-digest sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
-replay of 8835218acf7b4f8e matches asserted digest sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
+$ fluxsim replay . --run-id 205ba6e504c40820 --assert-digest sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06
+replay of 205ba6e504c40820 matches asserted digest sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06
 ```
 
 A wrong digest is refused with `FLX-2106`, and the message shows both digests.
 
 ```console
-$ fluxsim replay . --run-id 8835218acf7b4f8e --assert-digest sha256:0000000000000000000000000000000000000000000000000000000000000000   # exit 1
-FLX-2106: a replay produced a different run digest than the one asserted -- asserted sha256:0000000000000000000000000000000000000000000000000000000000000000, replay produced sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e
+$ fluxsim replay . --run-id 205ba6e504c40820 --assert-digest sha256:0000000000000000000000000000000000000000000000000000000000000000   # exit 1
+FLX-2106: a replay produced a different run digest than the one asserted -- asserted sha256:0000000000000000000000000000000000000000000000000000000000000000, replay produced sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06
 more: fluxsim explain FLX-2106  https://agenticstiger.github.io/flux/engine/reference/errors/FLX-2106.html
 ```
 
@@ -102,11 +102,11 @@ Run the same bundle into a second, separate state directory. The run id, the run
 
 ```console
 $ fluxsim run . --state-dir ../other-state
-plan written to ../other-state/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
-applied to ../other-state/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
-emitted payment_recovery_moment: 154 rows (scenario)
-run 8835218acf7b4f8e complete
-$ cmp .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson ../other-state/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson
+plan written to ../other-state/runs/205ba6e504c40820/plan.json (runId=205ba6e504c40820, planDigest=sha256:205ba6e504c408208fb15c5da5f96edac2f514606d6024bc19733c6c5cac90cc)
+applied to ../other-state/runs/205ba6e504c40820 (runDigest=sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06)
+emitted payment_recovery_moment: 155 rows (scenario)
+run 205ba6e504c40820 complete
+$ cmp .flux/runs/205ba6e504c40820/emits/payment_recovery_moment.ndjson ../other-state/runs/205ba6e504c40820/emits/payment_recovery_moment.ndjson
 ```
 
 ## What legitimately differs between runs
@@ -114,9 +114,9 @@ $ cmp .flux/runs/8835218acf7b4f8e/emits/payment_recovery_moment.ndjson ../other-
 Two runs of one bundle are not byte-identical in every file. The digests cover the behaviour, and the files below carry the clock or a key.
 
 ```console
-$ diff -rq .flux/runs/8835218acf7b4f8e ../other-state/runs/8835218acf7b4f8e   # exit 1
-Files .flux/runs/8835218acf7b4f8e/lineage.ndjson and ../other-state/runs/8835218acf7b4f8e/lineage.ndjson differ
-Files .flux/runs/8835218acf7b4f8e/plan.json and ../other-state/runs/8835218acf7b4f8e/plan.json differ
+$ diff -rq .flux/runs/205ba6e504c40820 ../other-state/runs/205ba6e504c40820   # exit 1
+Files .flux/runs/205ba6e504c40820/lineage.ndjson and ../other-state/runs/205ba6e504c40820/lineage.ndjson differ
+Files .flux/runs/205ba6e504c40820/plan.json and ../other-state/runs/205ba6e504c40820/plan.json differ
 ```
 
 - The `generated_at` field in `plan.json`. The plan digest masks it.
@@ -127,6 +127,6 @@ Files .flux/runs/8835218acf7b4f8e/plan.json and ../other-state/runs/8835218acf7b
 
 ## What CI checks across systems
 
-The workflow in `.github/workflows/ci.yml` runs the pinned-digest tests on every cell of its test matrix. They compare the plan, the run digest, the component digests and one-byte differentials against stored values. On a pull request or a push to main the cells are Ubuntu with Python 3.11, 3.12 and 3.13, plus one macOS cell on 3.12 that runs only the determinism set. On the weekly schedule and on release tags, all six combinations of Ubuntu and macOS with those three Python versions run the fast and the slow suites.
+The workflow in `.github/workflows/ci.yml` runs the pinned-digest tests on every cell of its test matrix. They compare the plan, the run digest, the component digests and one-byte differentials against stored values. On a pull request or a push to main the cells are Ubuntu with Python 3.11, 3.12, 3.13 and 3.14, plus one macOS cell on 3.12 that runs only the determinism set. On the weekly schedule and on release tags, all seven combinations run the fast and the slow suites: Ubuntu with those four Python versions, and macOS with 3.11, 3.12 and 3.13.
 
 That is what is checked. It is stored digests on two operating systems and three Python versions, each cell with the one numpy that its install resolved within the range the project allows. No other operating system and no Windows runner are tested. Passing those tests shows the digests did not move on those machines. It does not show the engine is correct, and it does not show a run matches the real world. Whether the samplers draw from the distributions they declare, and whether the fidelity check accepts and withholds when it should, is measured separately by [the accuracy program](../accuracy/DESIGN.md). For what the evidence pack records, see [the evidence pack](./the-evidence-pack.md) and [the six-step loop](./the-six-step-loop.md).

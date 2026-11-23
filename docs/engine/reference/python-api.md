@@ -183,8 +183,9 @@ forge-cli's engine documents.
 
 **More than one job.** `plan`, `apply`, `run` and `replay` take `jobs`
 (default 1): how many processes may generate an emit's rows from declared
-statistics. The rows and every digest are the ones one job gives. The
-worker processes are started with spawn, so each one imports the host's
+statistics. The rows and every digest are the ones one job gives. A run starts one
+pool of worker processes for all its emits and gives each worker the plans once. They
+are started from a forkserver (with spawn where there is none), so each one imports the host's
 main module again: a script that passes `jobs` above 1 keeps its work
 under `if __name__ == "__main__":`, and whatever it does at the top level,
 outside that block, happens again in every worker. Runs in one process
@@ -204,7 +205,9 @@ path either.
 **Strict coverage**. `plan`, `apply` and `run` take `strict_coverage`
 (default `False`). A column that falls back to a type default is named by the
 plan either way; with `strict_coverage=True` it is refused instead, with
-`FLX-3304` and a table of every such column, before any row is drawn. The
+`FLX-3304` and a table of every such column, before any row is drawn. So is
+a declaration the contract makes and the run does not generate, with
+`FLX-3305`. The
 setting changes whether a run is accepted and never what an accepted run
 produces. A Simulation that declares `strictCoverage: true` in its extensions
 asks for the same refusal, and `strict_coverage=False` does not turn that off.

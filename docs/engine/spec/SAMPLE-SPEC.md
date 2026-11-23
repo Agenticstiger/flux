@@ -11,9 +11,9 @@ read every record as before, the artifacts' digests and the rows'
 conformance among them, so a sample saves the comparison's decoding and
 statistics, not the read of the emit.
 
-This release estimates means. The other property kinds are named as not
-estimated (§4), and `fluxsim verify` without `--sample` checks them as
-before. `fluxsim ship` always reads every record.
+This release estimates means, marginal histograms and quantiles with bins.
+The other property kinds are named as not estimated (§4), and `fluxsim verify`
+without `--sample` checks them as before. `fluxsim ship` always reads every record.
 
 ## 1. The request
 
@@ -108,9 +108,19 @@ sides must group into the same set. On a partial sample, a group whose
 chosen blocks hold fewer records than its floor is undecided: the blocks not
 read may hold the rest.
 
+A `marginalHistogram/1` group is estimated bin by bin: bin `j`'s share of
+the group's records is the ratio `sum(y) / sum(m)` with `y` the block's
+records in bin `j` and `m` its records in the group, with the same variance
+and interval as a mean. A `quantile/2` group (a quantile that declares
+`bins`) is estimated by two ratios over the same blocks: the share of its
+records below `e - t`, and the share at or below `h + t`, where `e` is the
+lower edge and `h` the largest grid value of the bin the profile holds the
+quantile in, and `t` the compiled margin in grid steps. Both are shares of
+the group's records, so each is a ratio and takes the estimator of §3.
+
 ## 4. The decision
 
-A group's band is the profile's mean, `Sx / k` in grid units, plus or minus
+A mean group's band is the profile's mean, `Sx / k` in grid units, plus or minus
 the property's compiled margin: the margin in grid steps for an `absolute`
 tolerance, and the margin times the profile mean's magnitude for a
 `relative` one (a zero profile sum refuses the property, `FLX-5005`). The
@@ -121,10 +131,40 @@ group is
 - `undecided` when its interval crosses an edge of the band. Only a larger
   sample, or the whole emit, can settle it.
 
-A property is `outside` when any of its groups is, else `undecided` when
-any is, else `within`; it is `censored` when the profile withheld every
-group. The properties of another kind are not estimated: they are named, and
-nothing is compared for them.
+A histogram group is decided against the compiled margin `m` of its total
+variation distance. With `p_j` the sampled share of bin `j` and `[l_j, h_j]`
+its interval (clipped to `[0, 1]`), and `q_j` the profile's share, the distance
+between the run and the profile is at least `lower = 1/2 * sum of max(0, l_j -
+q_j, q_j - h_j)` and at most `upper = 1/2 * sum of max(|l_j - q_j|, |h_j -
+q_j|)`. The group is
+
+- `within` when `upper` is at most `m`;
+- `outside` when `lower` is above `m`;
+- `undecided` otherwise.
+
+Each bin's interval is a 95 % interval of its own, not a joint region for all
+the bins, so the decision reads each bin's interval as the estimator gives it;
+`distance` in the report shows both bounds, and a larger sample or the whole
+emit settles an `undecided` group.
+
+A quantile-with-bins group is decided by its two shares against the level `L`.
+The quantile lies within the margin of the profile's bin exactly when the
+records below `e - t` are fewer than the order statistic `ceil(L * n)` asks
+for, which is the share below `e - t` being below `L`, and the records at or
+below `h + t` reach it, the share being at least `L`. The group is
+
+- `within` when the first share's interval lies below `L` and the second's
+  lies at or above it;
+- `outside` when the first share's interval lies at or above `L`, or the
+  second's lies below it;
+- `undecided` otherwise.
+
+A sample of every block gives, for every kind, the answer of the full
+comparison. A property is `outside` when any of its groups is, else
+`undecided` when any is, else `within`; it is `censored` when the profile
+withheld every group. The properties of another kind (a quantile without bins,
+a level histogram, a support, a correlation) are not estimated: they are
+named, and nothing is compared for them.
 
 An emit's sampled check is `failed` when a property is `outside` or
 `undecided` or a fail-closed condition is met, `passed` when at least one
@@ -140,7 +180,11 @@ estimates found. `artifacts["sample"]` holds the request
 `blocks: {read, of}`, `records: {read, of}`, `properties` (each with
 `propertyId`, `columns`, `outcome` and, per group by ordinal, `outcome`,
 `estimate`, `interval`, `level`, `blocks` and `records`), `notEstimated` and
-`refusals`. An estimate and its interval are exact rationals in the column's
+`refusals`. A property that is not a mean also names its `kind` (`histogram` or
+`quantile`). A histogram group reports `shares`, one `estimate` and `interval`
+per bin in bin order, and `distance`, the `[lower, upper]` bounds of §4, in place
+of a single estimate; a quantile group reports `ranks`, the `estimate` and
+`interval` of the share `below` and of the share `through`. An estimate and its interval are exact rationals in the column's
 own units (the encoded mean divided by `2^fractionalBits`), spelled as
 strings as the engine's documents spell exact numbers: in decimal when the
 decimal ends, else as `numerator/denominator`. The level is `0.95`. A
@@ -170,8 +214,8 @@ blocks (4,000 samples of each of three such populations).
 
 ## 7. Later additions
 
-- Proportions: the shares of level and bin tables and a support's
-  non-members are ratios too, and take the same estimator.
+- Proportions of the other tables: the shares of a level histogram and a
+  support's non-members are ratios too, and take the same estimator.
 - Partitions in place of blocks, once emits are written in partitions with
   a map of them, so a sample is read without scanning a file.
 - A sampled `ship`, whose scorecard would carry the intervals.

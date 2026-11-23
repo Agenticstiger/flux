@@ -7,7 +7,7 @@ description: "Change the population in the World, add a second Persona, and add 
 
 Goal: change who your simulated customers are and see what changes in a run. The World sets the population, a Persona sets traits, and a Segment names a group with a `flux-expr/1` query.
 
-## 1. Run the starter project (500 customers, 154 rows)
+## 1. Run the starter project (500 customers, 155 rows)
 
 ```console
 $ fluxsim init demo
@@ -15,10 +15,10 @@ created demo with a small FLUX bundle and its FLUID contract (10 files):
 ...
 $ cd demo
 $ fluxsim run .
-plan written to .flux/runs/8835218acf7b4f8e/plan.json (runId=8835218acf7b4f8e, planDigest=sha256:8835218acf7b4f8e28b738c7d7e9e8d6b5c5e8bca59e47533fdda09eb90cf501)
-applied to .flux/runs/8835218acf7b4f8e (runDigest=sha256:eb54ef239a1004cb7f3b31a7df97560d766eeb562c2f86147308aa6b1739cf8e)
-emitted payment_recovery_moment: 154 rows (scenario)
-run 8835218acf7b4f8e complete
+plan written to .flux/runs/205ba6e504c40820/plan.json (runId=205ba6e504c40820, planDigest=sha256:205ba6e504c408208fb15c5da5f96edac2f514606d6024bc19733c6c5cac90cc)
+applied to .flux/runs/205ba6e504c40820 (runDigest=sha256:6c9de0409b3c2e98c435c3141f1728ff17511087cd3b39f1e87625fa5d238f06)
+emitted payment_recovery_moment: 155 rows (scenario)
+run 205ba6e504c40820 complete
 ```
 
 ## 2. Change the population
@@ -119,18 +119,18 @@ spec:
 $ fluxsim run .
 plan written to ...
 applied to ... (runDigest=sha256:...)
-emitted payment_recovery_moment: 278 rows (scenario)
+emitted payment_recovery_moment: 277 rows (scenario)
 run ... complete
 ```
 
-The rows went from 154 to 278 and the digest changed. A bigger population means more aborted payments and more detector firings.
+The rows went from 155 to 277 and the digest changed. A bigger population means more aborted payments and more detector firings.
 
 ## What a Persona and a Segment change
 
 In the starter project, adding the second Persona with the World left at 500 customers did this:
 
 - It changed the drawn traits, so `population.ndjson` and the run digest changed. The mean `monthlySpend` fell from about 42 to about 30.
-- It left the emitted rows unchanged: still 154, byte for byte.
+- It left the emitted rows unchanged: still 155, byte for byte.
 - It changed journey outcomes slightly (66 transition events became 64).
 
 Adding a valid Segment on top of that changed no row, event or journey. It did change the run id and the run digest, because a Segment is part of the bundle's input. The engine does not check the query when it validates, plans or runs, so test it with `fluxsim expr eval`, as in step 4, before you rely on it.

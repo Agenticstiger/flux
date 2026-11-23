@@ -9,7 +9,11 @@ prototypes under `tests/bench` measure the parts the choice rests on.
 **Amended again 2026-11-18:** step 4 is built and measured, about ten times
 faster end to end on one job, step 5 is decided on its profile, no compiled
 accelerator, and kernel `0.1.0` stays the default until a minor release of its
-own switches it (see the last amendment).
+own switches it (see the last amendment). **Amended 2026-11-21:** that release
+is 0.9.0, and kernel `0.2.0` is the default for new plans from it (see the
+amendment at the end). **Amended again 2026-11-21:** step 5 is judged on the
+profile taken after column-at-a-time rendering, and the engine does not adopt a
+Rust line renderer (see the last amendment).
 
 ## Context
 
@@ -590,3 +594,85 @@ release of its own for the switch keeps one change of default per release,
 gives `--kernel 0.2.0` a release to be tried first, and lets its notes say
 plainly that every new plan's digests change. Either way an existing plan, pack
 or bundle replays on the kernel it names, to the same digests.
+
+## Amendment of 2026-11-21: kernel 0.2.0 is the default from 0.9.0
+
+The maintainers decided that kernel `0.2.0` is the default for new plans in 0.9.0, the minor release after
+the one that shipped it (0.8.0), as "The default kernel, decided by the maintainers, 2026-11-18" above
+asked for. A plan made with no `--kernel` now names `0.2.0`, and `fluxsim plan --kernel 0.1.0` plans on the
+first kernel as before.
+
+### What moves
+
+Every new plan's digests. `kernelVersion` and `seedTreeVersion` are inside `inputDigest`
+(KERNEL-SPEC §11), so a new plan's `inputDigest`, `planDigest`, run id and `runDigest` differ from what the
+same bundle gave under `0.1.0`, and so does every stream, because the seed tree is different. The goldens
+of the sets that plan with the default move to kernel `0.2.0`, each with its GOLDEN-CHANGELOG row. A set
+that exists to hold kernel `0.1.0`'s digests (the related-tables set, the determinism manifest's first run,
+and the sets of the public examples) plans with `--kernel 0.1.0` explicitly, so it holds the digests it held
+and keeps proving that an old plan replays to them.
+
+### What does not move
+
+- **A recorded plan** keeps its kernel. `apply`, `replay`, `verify` and `ship` read the kernel from the
+  plan they are given (`kernel_named`), never from the default, so a plan, a run directory or an evidence
+  pack that names `0.1.0` replays on kernel `0.1.0` to the same digests. A plan written by 0.8.0 replays
+  to the digests 0.8.0 gave it.
+- **Kernel `0.1.0`** stays implemented, specified by KERNEL-SPEC.md, and selectable. It gets no new
+  behaviour, as Migration above says.
+- **A bundle that declares no module** keeps its bytes under a given kernel. The default is the only thing
+  that changed, and the change is in the plan, not in the bundle.
+
+### Why in this release, and the one change of default
+
+The release that shipped kernel `0.2.0` kept `0.1.0` as the default, so `--kernel 0.2.0` had a release to be
+tried first. 0.9.0 is the release of its own for the switch: it holds no other change of default, and its
+notes say that every new plan's digests change. A seed path that only a new opt-in declaration reads is
+additive and needs no kernel bump (KERNEL-SPEC-2 section 12), so features that arrive after this one do not
+move the default again.
+
+## Amendment of 2026-11-21: step 5, judged on the 1,000,000-row profile
+
+The amendment of 2026-11-18 left a compiled accelerator open on one condition:
+a profile taken after column-at-a-time rendering that still showed rendering or
+derived columns above half of a run. Column-at-a-time rendering is in the engine
+(`flux_engine.seam.emit.frame_rows`), a spike has built the line renderer an
+accelerator would have started with, and the profile has been taken. The
+maintainers judged it: the engine does not adopt the Rust line renderer.
+
+### What was measured
+
+The related-star fixture scaled 200 times (1,000,365 rows), on kernel `0.2.0`,
+in one process, on macOS on arm64 with Python 3.13.14 and numpy 2.4.6, at a load
+average of 7 to 30.
+
+- **Rendering is 12.4 % of a run.** It takes 1.17 µs of the 9.42 µs a row of a
+  whole run, and between 11.6 and 13.7 % from run to run. The condition was half.
+- **The Rust renderer is slower than the engine's once it is handed the
+  engine's rows.** The spike is an extension module of its own (PyO3, built with
+  maturin, in a repository of its own) that renders a slice's lines from
+  columns. On the five emits of this world it took 0.118 µs a row. The engine
+  holds a slice as row tuples, so the spike needs an adapter that turns them
+  into the columns it reads. With the adapter it took 1.788 µs a row, against
+  1.218 µs a row for the engine's renderer, which includes the sha256 of each
+  line: 1.5 times slower.
+- **Its bytes are the engine's.** Its lines and their digests were identical to
+  the engine's on all five emits, so the judgement is about cost and not about
+  correctness.
+
+### Judgement
+
+1. **The condition is not met.** Rendering is 12.4 % of a run, about a quarter
+   of the half that the amendment of 2026-11-18 asked for. A renderer that cost
+   nothing would take 12.4 % off a run.
+2. **Fed the engine's rows, the Rust renderer costs more than the one it would
+   replace.** The renderer itself is fast. What costs is the hand-over from row
+   tuples to columns, and the engine has no columns to hand over: it holds rows.
+3. **It is revisited only if the engine comes to hold columns as arrays.** Then
+   nothing has to turn rows into columns, and the question is put again against
+   the profile of that engine.
+
+What this does not change: the engine renders as it did, its bytes and every
+digest are as they were, and the rest of step 5 stands. An accelerator, if one
+is ever adopted, lives in a repository and a distribution of its own and is
+checked byte for byte against the Python kernel on every change.

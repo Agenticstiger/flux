@@ -32,12 +32,14 @@ fluxsim explain FLX-3105
 | [`fluxsim verify`](./verify.md) | golden regression + row conformance + RFC-04 + fidelity |
 | [`fluxsim ship`](./ship.md) | the fidelity gate, then the evidence pack |
 | [`fluxsim replay`](./replay.md) | re-execute a recorded plan; assert its digest |
+| [`fluxsim story`](./story.md) | one entity's history, read from a committed run |
 | [`fluxsim calibrate`](./calibrate.md) | declared-scorecard calibration for a Playback |
 | [`fluxsim accuracy`](./accuracy.md) | outcome-accuracy gate: register, score, record |
+| [`fluxsim forecast`](./forecast.md) | forecast the next state and seal the forecasts |
 | [`fluxsim gate`](./gate.md) | RFC-04 enforcement gate: decide, conform |
 | [`fluxsim expr`](./expr.md) | flux-expr/1: evaluate an expression, print an attribute model |
 | [`fluxsim describe`](./describe.md) | self-describe this installation |
-| [`fluxsim plugins`](./plugins.md) | list installed vertical packs and sinks |
+| [`fluxsim plugins`](./plugins.md) | list installed vertical packs, sinks and generator plugins |
 | [`fluxsim explain`](./explain.md) | print the catalog entry for one FLX-nnnn code, or list them all |
 
 ## Options every command accepts
@@ -64,6 +66,8 @@ With `--json` every command prints one document of the same shape, so a caller n
 ```
 
 `artifacts` is the command's own output. `error` is `null` on success, otherwise `{"code": "FLX-nnnn", "message": "..."}`, where `code` is `null` for a failure with no catalogued code. A usage error is an envelope too, with `exitCode` 2.
+
+One command tells its output differently. `fluxsim story --json` prints a story it tells as JSON lines, one object per row, and no envelope, because the rows are the output; a story it refuses is the envelope above, with `exitCode` 1.
 
 ## Exit codes
 

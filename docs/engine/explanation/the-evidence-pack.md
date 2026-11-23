@@ -17,7 +17,7 @@ $ cd demo
 $ fluxsim run . --verify --ship -o out
 ...
 shipped out/demo.flux.tgz
-run 8835218acf7b4f8e complete; shipped to out
+run 205ba6e504c40820 complete; shipped to out
 ```
 
 ## What is in it
@@ -38,8 +38,8 @@ plan, the receipt, the seam attestation, the lineage), a manifest, and the repor
 
 ```console
 $ tar tzf out/demo.flux.tgz | grep -E 'EVIDENCE|manifest|seam-attestation'
-demo/.flux/runs/8835218acf7b4f8e/EVIDENCE.md
-demo/.flux/runs/8835218acf7b4f8e/seam-attestation-payment_recovery_moment.json
+demo/.flux/runs/205ba6e504c40820/EVIDENCE.md
+demo/.flux/runs/205ba6e504c40820/seam-attestation-payment_recovery_moment.json
 demo/flux-manifest.json
 demo/run/EVIDENCE.md
 demo/run/seam-attestation-payment_recovery_moment.json
@@ -51,12 +51,12 @@ packed with the bundle; pass `--state-dir` outside the bundle if you want it lef
 
 A run whose Simulation pins a profile, shipped with `--profile`, also carries
 `run/scorecard.json`: the run's scores against that profile, per property, per table, per
-dimension and overall, with any declared thresholds and the shape flags of every profiled
-column ([SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md)). The pack holds the bytes `ship`
+dimension and overall, how much of the contract those scores cover, any declared
+thresholds, and the shape flags of every profiled column ([SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md)). The pack holds the bytes `ship`
 computed: the scores the gate decided on, and beside them the shape flags, which gate nothing.
 
 A run whose Simulation declares a parameter register also carries
-`run/parameter-register.json`: every number the run reads, each with what it rests on, a
+`run/parameter-register.json`: every number the register counts, each with what it rests on, a
 statistic of the pinned profile, a place in the contract, an assumption and its reason, or
 a default ([PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md)). The plan holds its digest,
 `parameterRegisterDigest`, so `ship` and `verify` read it the way they read the column record
@@ -111,7 +111,7 @@ that backs a fidelity check is signed, and without a key of yours the engine sig
 one it generates for that single run. The report says so in its own words:
 
 ```console
-$ grep 'Signature:' .flux/runs/8835218acf7b4f8e/EVIDENCE.md
+$ grep 'Signature:' .flux/runs/205ba6e504c40820/EVIDENCE.md
 - Signature: this run's fidelity records were signed with a key generated in memory for this invocation and checked against that same key. It attributes the records to no operator; pass `--signing-key` to sign with one that does, and `--trust-key` with the public half the gate should check against.
 ```
 
@@ -120,6 +120,42 @@ To attach the pack to a person or a team, sign with a key that people know: pass
 manifest and the two in-toto statements are not signed by the engine either; `ship` prints
 how to sign them separately (`ssh-keygen` or `cosign`). [Ship with evidence](../how-to/ship-with-evidence.md)
 walks through both.
+
+## Which privacy pattern the run rests on
+
+The report's **Privacy Grade** section gives the run one grade, read from the profile the
+Simulation pins and from the generator plugins it declares, and from nothing else the bundle says
+about itself ([ADR 0020](../adr/0020-privacy-grades.md), [ADR 0032](../adr/0032-a-generator-plugin-is-declared-graded-and-stored.md)). The bundle's register labels a number "profile" or
+"assumption", and a bundle can write either, so a grade read from them would be a grade the
+bundle chooses. The pinned profile is bound by its digest. There are five patterns:
+
+- **P0, assumed.** No profile was pinned and every parameter is declared by hand. The engine read
+  no data, and it cannot confirm that no data shaped the numbers a person typed.
+- **P1, checked.** A profile of aggregates under the profiler's output checks (small cells
+  suppressed, counts rounded). The checks carry no formal guarantee.
+- **P3, differentially private marginals.** The profile states one release under differential
+  privacy, declares that its levels, bin edges and sample-size bands were chosen without the data,
+  and holds only noisy statistics: no row count, no column metric, nothing without noise. The
+  report states the guarantee as the profile's own statement, in the terms NIST SP 800-226 asks for
+  (the unit of privacy, the privacy loss, and the accounting). The engine checks that the stated
+  shares add up and that the cliques agree, not that noise was applied.
+- **P4, differentially private model.** A learned model from a generator plugin, whose bundle
+  declares the account of its training: the unit of privacy, the privacy loss and the accounting.
+  The report states the account as the bundle declares it. The engine checks the account's form,
+  not how the model was trained.
+- **P5, learned model, no privacy account.** A learned model from a generator plugin whose privacy
+  rests on empirical checks alone. It is the weakest pattern, below every built-in minimum.
+  P2 is not assigned, and the numbers are stable.
+
+The run's grade is the weakest of its profile's and every declared plugin's, in the order P5, P1, P3,
+P4, P0. A run that pins no profile and declares one P4 plugin is P4.
+
+A profile that is not P3 is P1, and the section says why. A grade for each column, following the
+statistics that inform it, is a later refinement. A column's sensitivity label sets a minimum grade
+(`pii`, `phi`, `restricted`, `pseudonymized` and `tokenized` need P3 or stronger, `confidential` and
+`internal` need P1 or stronger), the section lists every column with its minimum and whether the run
+meets it, and a run below a minimum is refused by `plan`, `apply` and `ship`
+([FLX-4005](../reference/errors/FLX-4005.md)).
 
 ## How each column was made
 
@@ -136,13 +172,14 @@ how it was produced and from what. A column is one of five things:
   fills it. For an optional column nothing maps onto that is `null`; for a date or
   timestamp column that declares no draw of its own it is uniform within the simulation's
   time bounds.
-- `profile`: reserved for a column generated from a statistic profile. Nothing produces
-  it yet. A bundle that `fluxsim init --profile` wrote declares its columns from the
-  profile, so they read `declared`, and its parameter register says which numbers rest on
-  the profile.
+- `profile`: a column of a reference expose, whose value the pinned profile publishes for
+  its row in a table released whole (`references`, ADR 0023), decided by `reference`. A
+  bundle that `fluxsim init --profile` wrote declares its other columns from the profile,
+  so they read `declared`, and its parameter register says which numbers rest on the
+  profile.
 
 ```console
-$ sed -n '/^## Column Provenance/,/^## What Was Not Proven/p' .flux/runs/8835218acf7b4f8e/EVIDENCE.md
+$ sed -n '/^## Column Provenance/,/^## What Was Not Proven/p' .flux/runs/205ba6e504c40820/EVIDENCE.md
 ## Column Provenance
 
 This is what `apply` recorded for the run. The run's plan holds a digest of it, and `ship` checked the record against that digest; it does not work out again how each column was produced.
@@ -163,7 +200,8 @@ Only `default` is a gap, and it is the one the report names again under "What Wa
 Proven". `fluxsim plan` also names those columns, and `--strict-coverage`, or `strictCoverage: true` in
 the bundle, refuses the run instead ([FLX-3304](../reference/errors/FLX-3304.md)). The same record is in the archive as
 `run/column-provenance.json`, shaped as an OpenLineage column-lineage facet for the columns
-that were copied, so a tool that reads lineage can read it.
+that were copied, so a tool that reads lineage can read it. A column that a rule copies from a linked
+row lists no input field, because the record does not name the parent expose.
 
 The plan holds a digest of the record, `columnProvenanceDigest`, the way it holds the digest of
 `seed-paths.ndjson`, so the plan digest, the run id and the run digest cover the record. `ship` and
@@ -191,7 +229,7 @@ fixed template, never edited by hand, and always present, so a reader who has se
 pack knows where to look in the next.
 
 ```console
-$ sed -n '/^## What Was Not Proven/,$p' .flux/runs/8835218acf7b4f8e/EVIDENCE.md
+$ sed -n '/^## What Was Not Proven/,$p' .flux/runs/205ba6e504c40820/EVIDENCE.md
 ## What Was Not Proven
 
 This bundle asserts no privacy or re-identification claim about any source data, no fairness claim about any source system, and no claim about any system trained or tested using its output.

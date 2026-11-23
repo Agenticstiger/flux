@@ -1,6 +1,6 @@
 ---
 title: "Score a run against a profile, in full or sampled"
-description: "Pin a data owner's profile in the Simulation, score a run against it with verify --profile, and check its means on a sample of blocks with verify --sample."
+description: "Pin a data owner's profile in the Simulation, score a run against it with verify --profile, and check its means, histograms and quantile bins on a sample of blocks with verify --sample."
 ---
 
 # Score a run against a profile, in full or sampled
@@ -169,6 +169,9 @@ spec:
 
 ## 4. Run it and score it in full
 
+`fluxsim run --verify` is the one-pass path: it plans, applies and scores the run in one
+command, and the rows are drawn once.
+
 Hand the profile to the run with `--profile`. `plan` pairs the file with the pin, and
 `verify` and `ship` compare the run with it:
 
@@ -180,22 +183,31 @@ emitted payment_recovery_moment: 4000 rows (generator)
 reproducible: not checked | validity: not asserted
 ...
   fidelity payment_recovery_moment: passed -- 1 of 1 declared property within the margin against the pinned profile
-  scorecard: overall 0.9846 against profile sha256:...
-    dimensions: marginals 0.9846; not measured: structure, joint, crossTable, temporal, invariants, queries, defects
-    table payment_recovery_moment: 0.9846 (1 of 1 property scored)
+  scorecard: overall 0.9880 against profile sha256:... (covers 1 of 4 columns, 0 of 0 relationships)
+    dimensions: marginals 0.9880; not measured: structure, joint, crossTable, temporal, invariants, queries, defects
+    table payment_recovery_moment: 0.9880 (1 of 1 property scored); covers 1 of 4 columns, 0 of 0 relationships
     shape: no flags in 1 profiled column (no count table to test)
 run ... complete
 ```
 
-The fidelity line is the check: the run's mean `amount`, 50.25, is within 2 of the
+The fidelity line is the check: the run's mean `amount`, 50.04, is within 2 of the
 profile's 49.33, so the property passes. The scorecard says how close the two are, on a
 scale where 1 is the same value. For a mean it is one less the gap between the means over
-the width of the column's declared range: 1 - 0.92 / 60 = 0.9846. The table and overall
+the width of the column's declared range: 1 - 0.72 / 60 = 0.9880. The table and overall
 scores gather the properties' scores, and the dimensions say which kinds of check were
 measured ([SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md)). The shape flags check every
 column the profile describes for cells the run leaves empty, one value holding an unlikely
 share of the rows, a constant column, and a distinct count far from the one the profile
-predicts. They withhold nothing.
+predicts. They withhold nothing unless the Simulation's `scorecard` block declares `shape: { maxFlags: n }`; then `verify` fails, and `ship` withholds, a run with more than `n` flags (SCORECARD-SPEC.md §4 and §6).
+
+The overall score speaks only for what was scored. The parenthesis after it says how much
+of the contract that is: the run scored one property, over one of the contract's four
+columns, and the contract declares no relationship. A column counts when a scored
+property covers it, and a declared relationship counts when the profile constrains it
+(the number of child rows per parent). Coverage is a count, not a score; a relationship whose children per parent the profile describes is also scored, as its own `childrenPerParent` row. A high score
+over a low coverage is a high score about little, so declare a property for each column
+that matters, and see [SCORECARD-SPEC.md](../spec/SCORECARD-SPEC.md) §4 to floor the
+coverage.
 
 `ship` needs the profile too, and packs the scores as `run/scorecard.json`. A property
 outside its margin withholds the ship ([Ship with
@@ -230,14 +242,14 @@ the mean of every record. `--json` shows both:
 ```console
 $ fluxsim --json verify . --run-id $RUN --profile ../source.profile.json --sample 0.5 --sample-block 500 > ../sampled.json
 $ grep -m 1 -A 4 '"estimate"' ../sampled.json
-                "estimate": "50.14358521270751953125",
+                "estimate": "50.2320060882568359375",
                 "group": 0,
                 "interval": [
-                  "49.5011875364...",
-                  "50.7859828889..."
+                  "49.9722851302...",
+                  "50.4917270462..."
 ```
 
-The estimate is 50.14, and the interval runs from 49.50 to 50.79. The property allows 2 either side of the profile's
+The estimate is 50.23, and the interval runs from 49.97 to 50.49. The property allows 2 either side of the profile's
 mean, so its band runs from 47.33 to 51.33. The interval decides, not the estimate:
 
 - **within**: the interval lies inside the band, as here.
@@ -245,11 +257,11 @@ mean, so its band runs from 47.33 to 51.33. The interval decides, not the estima
 - **undecided**: the interval crosses an edge of the band. Only more records can settle
   it, so it fails the check as outside does.
 
-Fewer blocks give a wider interval. With a quarter of the blocks, two are read, the
-interval runs from 46.79 to 52.94, and it crosses both edges:
+Fewer blocks give a wider interval. With a quarter of the blocks, two are read (here
+those that seed 1 picks), the interval runs from 46.09 to 54.10, and it crosses both edges:
 
 ```console
-$ fluxsim verify . --run-id $RUN --profile ../source.profile.json --sample 0.25 --sample-block 500   # exit 1
+$ fluxsim verify . --run-id $RUN --profile ../source.profile.json --sample 0.25 --sample-block 500 --sample-seed 1   # exit 1
 reproducible: not checked | validity: not asserted
 ...
   fidelity payment_recovery_moment: failed -- sampled 2 of 8 blocks (1000 of 4000 records): means 0 within, 0 outside, 1 undecided by the 95 % interval
@@ -257,10 +269,62 @@ reproducible: not checked | validity: not asserted
 ...
 ```
 
-Read more blocks, or verify without `--sample`. This release estimates means only: a
-property of another kind is named as not estimated under `--sample`, and is checked by a
-`verify` without it. A sampled verify forms no scorecard either; `verify` without
+Read more blocks, or verify without `--sample`. This release estimates means, marginal histograms
+and quantiles with bins (a histogram from each bin's share, a quantile from the two shares its
+rank test reads, each with its interval): a property of another kind is named as not
+estimated under `--sample`, and is checked by a `verify` without it. A sampled verify forms no scorecard either; `verify` without
 `--sample`, and `ship`, do.
+
+A property can also be grouped by a column of a linked row, `groupBy: <relationship>.<column>`. `verify` then joins each
+child row to the row of the parent's emit that its link names, and compares each group with the profile's statistic
+grouped by the same link. A child whose link reaches no row belongs to no group. See
+[Draw a column given another](./draw-a-column-given-another.md).
+
+## 6. Rules and relationships on the rows
+
+`verify` also reads the run's rows back and checks every rule of the contract, and every
+relationship it declares, as the share of rows that holds. A rule is `derive`, `check` or
+`dependency`; a relationship is checked for four things: each child key is found in its parent,
+parent keys are unique, nulls appear only where `joinType: left` allows them, and a
+`one_to_one` parent has at most one child. Each is `satisfied` of `total`, so one broken key
+reads as a share under 100 %:
+
+```text
+  rules date_dim: date_of_key 365 of 365 (100.00%); year_of_date 365 of 365 (100.00%)
+  integrity store_sales.item -> item: found 4000 of 4000 (100.00%); unique 200 of 200 (100.00%)
+```
+
+A column a relationship's `sharedColumns` or a `sharedAttribute` copies, in a Simulation that
+declares `copies: true` under its `com.agentics.flux/1` namespace (kernel 0.2.0), is scored as a rule of
+origin `shared`, named `<relationship>.<column>` or by its attribute: its covered rows are those whose
+link reaches a row (a row with no link holds NULL or its sentinel and is not the copy's to decide), and
+each holds when the column equals the source. A run that made the copy
+enforces it; a copy the run did not make (a key column) is reported with
+`(not enforced)` and fails nothing. A Simulation that does not declare `copies: true` has no copy
+to score or to report: its `sharedColumns` and `sharedAttribute` are listed as declared and not generated.
+
+A Simulation's `counts` entries are scored the same way: `counts:<relationship>.minChildren` is the share of eligible parents with at least the minimum number of children, and `counts:<relationship>.parentWhen` the share of parents outside the condition with no child. Both are enforced. A relationship the profile describes with a histogram of children per parent also gets a `childrenPerParent` row under `crossTable`, within when the total variation distance is at most the entry's `tolerance`. See [Give every parent its children](./give-every-parent-its-children.md).
+
+A Simulation's `links` entries are scored the same way, with the origin `bundle`. A conditional link is the
+line `link:<relationship>`: of the rows whose link reaches a row, the share on which its condition holds. A
+sentinel is `sentinel:<relationship>.<column>`: of the rows whose path reaches no row, the share whose column is
+the sentinel. Both are enforced, so one violating row fails the run.
+A bridge is the line `bridge:<a>,<b>`: of every row, the share whose pair of parent keys occurs once. It is
+enforced too.
+
+A rule with a band fails the run outside it, and so does a rule the engine enforces. With a
+pinned profile of format 1-2-0 that holds an `invariants` section, each rule is also scored
+against the share the profile measured, under the `invariants` dimension, and every
+relationship under `crossTable` ([SCORECARD-SPEC](../spec/SCORECARD-SPEC.md) section 3). A
+Simulation can allow a gap with a tolerance, which is bound into the run's digest before any
+row is drawn:
+
+```text
+extensions:
+  com.agentics.flux/1:
+    facts:
+      - { emit: orders, rule: paid_after_placed, tolerance: "0.02" }
+```
 
 ## Troubleshooting
 

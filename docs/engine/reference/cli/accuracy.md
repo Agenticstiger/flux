@@ -39,7 +39,7 @@ fluxsim accuracy register --file prediction.json
 
 | Option | Value | Description |
 |---|---|---|
-| `--file` | `FILE` | a PredictionRecord as JSON -- fields: prediction_id (string), run_digest (string), metric_id (string), statement (string), predicted (decimal), horizon_end (string), registered_at (string), interval_low (decimal) [optional], interval_high (decimal) [optional] **(required)** |
+| `--file` | `FILE` | a PredictionRecord as JSON -- fields: prediction_id (string), run_digest (string), metric_id (string), statement (string), predicted (decimal), horizon_end (string), registered_at (string), interval_low (decimal) [optional], interval_high (decimal) [optional], stateDigest (string) [optional], inputDigest (string) [optional] **(required)** |
 | `--state-dir` | `STATE_DIR` | run-state directory (default: ./.flux) |
 | `-j, --json` |  | emit machine-readable JSON |
 

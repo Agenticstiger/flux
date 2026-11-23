@@ -1,4 +1,4 @@
-# Parameter register: normative specification (format 1-1-0)
+# Parameter register: normative specification (format 1-3-0)
 
 A parameter register says what each number a run reads rests on. A number
 comes from a statistic of the profile the Simulation pins (PROFILE-SPEC.md),
@@ -6,10 +6,20 @@ from a place in the FLUID contract the run emits from, from an assumption the
 author states with its reason, or it is a default. A Simulation declares its
 register in the engine's extension namespace, `apply` writes the record of it
 as `run/parameter-register.json`, and `plan`, `verify` and `ship` report the
-shares. Format 1-1-0 adds the contract source to format 1-0-0 (section 7).
+shares. Format 1-1-0 adds the contract source to format 1-0-0, format
+1-2-0 adds the statistics of the pinned profile that no number rests on
+(sections 1.1 and 7). Format 1-3-0 adds the overlay source and the statistic
+that would replace an assumption (sections 1.2 and 1.3), calibrated values and
+the response estimates the engine derives at plan time (section 8).
 
 Normative files beside this page:
 
+- [`parameter-register-1-3.schema.json`](parameter-register-1-3.schema.json):
+  the JSON Schema of a format 1-3-0 record, whose `$id` is
+  `https://agenticstiger.github.io/flux/engine/spec/parameter-register/1-3-0/FluxParameterRegister.json`.
+- [`parameter-register-1-2.schema.json`](parameter-register-1-2.schema.json):
+  the JSON Schema of a format 1-2-0 record, whose `$id` is
+  `https://agenticstiger.github.io/flux/engine/spec/parameter-register/1-2-0/FluxParameterRegister.json`.
 - [`parameter-register-1-1.schema.json`](parameter-register-1-1.schema.json):
   the JSON Schema of a format 1-1-0 record, whose `$id` is
   `https://agenticstiger.github.io/flux/engine/spec/parameter-register/1-1-0/FluxParameterRegister.json`.
@@ -62,10 +72,13 @@ extensions:
 |---|---|
 | `document` | The id of a document the run reads (section 2). |
 | `pointer` | An RFC 6901 JSON Pointer into that document. It names one number, or every number under a mapping or a list. |
-| `source` | `profile`, `contract`, `assumption` or `default`. |
-| `statistic` | For `profile` only, and required there: the citation (section 3). |
+| `source` | `profile`, `contract`, `overlay`, `assumption`, `default` or `calibrated`. |
+| `statistic` | For `profile` and `overlay` only, and required there: the citation (section 3). |
+| `overlay` | For `overlay` only, and required there: the name of the overlay the Simulation declares (section 1.2). |
+| `replacedBy` | For `assumption` and `default` only, optional: the statistic a profile of the contract would publish for the number (section 1.3). |
 | `contract` | For `contract` only, and required there: the citation (section 3). |
-| `reason` | Required for `assumption`, optional for `default`, refused for `profile` and `contract`: one line of text, at most 1000 characters. |
+| `calibration` | For `calibrated` only, and required there: the record of the fit (section 8.1). |
+| `reason` | Required for `assumption`, optional for `default`, refused for `profile`, `contract` and `calibrated`: one line of text, at most 1000 characters. |
 
 A pointer is read as RFC 6901 reads it: tokens after each `/`, with `~1`
 standing for `/` and `~0` for `~`. The engine's own namespace key contains a
@@ -90,7 +103,10 @@ anything is written:
 
 - a block that is not a list, an entry that is not a mapping, a key an entry
   does not carry, and a missing `document`, `pointer` or `source`;
-- a pointer that is not RFC 6901, and a `source` outside the four;
+- a pointer that is not RFC 6901, and a `source` outside the six;
+- an `overlay` entry without `statistic` or `overlay`, or with `reason`, `contract` or `calibration`, an `overlay`
+  entry in a Simulation that pins no profile or declares no overlay, and an `overlay` that is not
+  the name of the Simulation's overlay;
 - a `profile` entry without `statistic` or with `reason`, a `profile` entry in
   a Simulation that pins no profile, and a citation that is not a mapping of
   `pointer` and `definition`, whose pointer is empty, or whose `definition` is
@@ -99,9 +115,16 @@ anything is written:
   is not a mapping of `productRef` and `pointer`, whose `productRef` is not a
   contract the run's emits name, or whose pointer is empty or reaches nothing
   in that contract;
+- a `replacedBy` on a source other than `assumption` and `default`, and one that is not a citation
+  (a mapping of `pointer` and, but for a table's `rowCount`, a registered `definition`);
 - an `assumption` without `reason`, a `statistic` on any source but
-  `profile`, a `contract` on any source but `contract`, and a reason that is
+  `profile` and `overlay`, a `contract` on any source but `contract`, an `overlay` on any source
+  but `overlay`, and a reason that is
   empty, longer than 1000 characters or holds a control character;
+- a `calibrated` entry without `calibration` or with `reason`, a
+  `calibration` on any source but `calibrated`, a `calibration` that is
+  malformed, and one whose `after` is not the value the document holds at the
+  pointer (section 8.1);
 - two entries with the same document and pointer;
 - an entry whose document the run does not read, whose pointer reaches
   nothing in it, or whose pointer reaches no number the register counts (a
@@ -110,9 +133,91 @@ anything is written:
 An empty list declares a register with no entry: every number is a default.
 A YAML null declares none, as a null namespace does.
 
+### 1.1 The statistics no number rests on
+
+Beside `parameters`, the namespace may list the statistics of the pinned
+profile that no number of the run rests on, each with its reason. `fluxsim
+init` writes the list from its ledger (ADR 0014), so a reader of the evidence
+sees what the profile said that the run does not show:
+
+```yaml
+extensions:
+  com.agentics.flux/1:
+    profile:
+      digest: sha256:a1b2...
+    parameters: [...]
+    unused:
+      - statistic: { pointer: /tables/orders/columns/tier/statistics/0, definition: levelHistogram/1 }
+        reason: tier is drawn given segment, whose mutual information with it is higher
+```
+
+An item holds `statistic`, a citation as a `profile` entry gives one
+(section 3), and `reason`, one line of text of at most 1000 characters, and
+nothing else. The list belongs to the register: it is refused with
+`FLX-3105` in a Simulation that declares no `parameters` or pins no profile,
+as are an item that is not a mapping, a key an item does not carry, a missing
+`statistic` or `reason`, and two items naming one statistic. `plan` reads each
+citation in the profile it is handed, as it reads an entry's: a pointer that
+reaches nothing, names another definition, or reaches a statistic the profile
+withheld is `FLX-3113`. An empty list says that every statistic of the
+profile is used. A YAML null lists none.
+
+### 1.2 Numbers the overlay changed
+
+A Simulation may declare a profile overlay (SEAM-FIDELITY-SPEC.md, ADR 0030 section 7): a named
+RFC 7396 merge patch over the profile it pins. A number whose value the overlay sets is cited
+with `source: overlay`, the overlay's `overlay` name, and a `statistic` that is a citation (section
+3) into the overlaid profile, `MergePatch(profile, patch)`:
+
+```yaml
+parameters:
+  - document: sim-subscribers
+    pointer: /extensions/com.agentics.flux~11/emits/subscriber/rows
+    source: overlay
+    overlay: double-churn
+    statistic: { pointer: /tables/subscriber/rowCount }
+```
+
+`plan` reads a `profile` citation in the pinned profile and an `overlay` citation in the overlaid
+one, and refuses a `profile` citation of a number the patch changed, a pointer whose value, or any
+value under it, differs between the two profiles, so every number the overlay changed names it. A
+number the patch does not change may be cited either way. The statistics the register lists as unused (section 1.1) are read in the overlaid profile
+when the Simulation declares an overlay, which is the profile the run is scored against. The overlay's numbers are the
+maintainers' scenario, not a measurement: the privacy grade reads the pinned profile, `verify`
+scores against the overlaid one, and the report says so.
+
+### 1.3 What would replace an assumption
+
+An `assumption` or a `default` may say which statistic would replace it:
+
+```yaml
+parameters:
+  - document: sim-orders
+    pointer: /extensions/com.agentics.flux~11/emits/orders/fidelity/columns/country/levels
+    source: assumption
+    reason: The profile publishes how many distinct values the column holds and not the values.
+    replacedBy: { pointer: /tables/orders/columns/country/statistics/0, definition: levelHistogram/1 }
+```
+
+`replacedBy` is a citation (section 3) into a profile of the contract, the profile a profiler
+would write if it measured the number. It is a request for a measurement and not a citation of
+the pinned profile: `plan` reads it for its form and never in the pinned profile, and the
+register's shares are the same whether it is there or not. `fluxsim init` writes it for each
+number it assumes that a statistic would answer: a table's row count (`/tables/<t>/rowCount`),
+a column's metric (`/tables/<t>/columns/<c>/metrics/<name>`, such as `nullCount`) or a
+statistic (`/tables/<t>/columns/<c>/statistics/<i>`, such as a level or marginal histogram).
+A number that is a setting and not a statistic has none: a tolerance, the bounds of a
+committed state, a check's budget and a template default. The index `<i>` of a statistic is its
+place in the request `init` writes for the same assumptions, whose statistics are in identifier
+order, so a profiler that writes the profile from the request lists them there. `init` writes the
+request beside the bundle as `<name>.assumptions.profile-request.yml`, a profile request
+(PROFILE-REQUEST-SPEC.md, format 1-0-0) for exactly the statistics the entries name. Running `init`
+again with a profile that publishes them turns each of those assumptions into a `profile` citation.
+
 ## 2. The numbers a register counts
 
-The register counts every number the run reads, in these documents:
+The register counts the numbers the run reads at the positions this section names, in these
+documents:
 
 - the run's cast: the Simulation and every document it reaches;
 - every Playback whose `worldRef` names the cast's World. A Playback's
@@ -144,7 +249,7 @@ refused with `FLX-5030`, the block's own rule:
 | `fidelity.columns.<c>.range.min`, `.max` | a column's declared range (a timestamp bound is text and not counted) |
 | `fidelity.columns.<c>.maxCardinality` | a support column's cardinality bound |
 | `fidelity.columns.<c>.bins[]`, `.binWeights[]`, `.binWeightsGiven.<level>[]` | a histogram's edges and weights |
-| `fidelity.columns.<c>.levels.<level>`, `.levelWeightsGiven.<level>.<level>` | a categorical column's weights |
+| `fidelity.columns.<c>.levels.<level>`, `.levelWeightsGiven.<level>.<level>` | a categorical column's weights; a column drawn given several columns nests one more `<level>` for each, up to 8 |
 | `fidelity.columns.<c>.mean`, `.stddev`, `.rate`, `.nullFraction`, `.identifierLength` | the generator's draw parameters |
 | `fidelity.properties[].tolerance.value`, `.max` | a property's tolerance |
 | `fidelity.properties[].bins[]`, `.level`, `.minVariance` | a property's bins, quantile level and variance floor |
@@ -159,6 +264,15 @@ and `budget` (when the check runs), the namespace's `profile`,
 `strictCoverage` and `parameters`, other namespaces, and anything outside
 `spec` and this namespace, such as `metadata`, `agentPolicy` and `skills`.
 
+Also not counted are the numbers of the namespace's own declarations of how rows relate and
+fall in time, and of what a patch or a consumer asks for: `facts`, `links`, `bridges`,
+`counts`, `history`, `asOf`, `snapshots`, `events`, `periods`, `copies`, `generators`,
+`lifetimes`, `within`, `rates`, `conditions`, `overlay`, `consumers`, `responses`,
+`forecasts` and `privacy`. A number there is read by the run but has no entry and no share in
+the record, so a calibration cannot name it (`FLX-3706`). Counting one would change the record, and with it the plan's
+`parameterRegisterDigest`, of every run whose Simulation declares the key, so a position
+joins the table above only in a new format.
+
 The record lists the numbers by document, documents in NFC order of their ids,
 and within a document in key order (Unicode code points, mapping by mapping;
 lists by index), `spec` first and then the namespace.
@@ -166,19 +280,20 @@ lists by index), `spec` first and then the namespace.
 ## 3. Citing a profile statistic or the contract
 
 A `profile` entry's `statistic` names where in the pinned profile its numbers
-come from:
+come from, and an `overlay` entry's where in the overlaid profile:
 
 | Key | Holds |
 |---|---|
 | `pointer` | An RFC 6901 JSON Pointer into the pinned profile. |
-| `definition` | The registered definition the pointer lands in: a statistic (`mean/1`, `marginalHistogram/1`, `levelHistogram/1`, `support/1`, `correlation/1`, `quantile/1`, `quantile/2`) or a column metric (`count/1`, `nullCount/1`, `distinctCount/1`, `sum/1`, `min/1`, `max/1`, `quantiles/1`). A table's `rowCount` has none. |
+| `definition` | The registered definition the pointer lands in: a statistic (`mean/1`, `marginalHistogram/1`, `levelHistogram/1`, `support/1`, `correlation/1`, `quantile/1`, `quantile/2`) or a column metric (`count/1`, `nullCount/1`, `distinctCount/1`, `sum/1`, `min/1`, `max/1`, `quantiles/1`). A table's `rowCount` has none, and neither has an entry of `references` (`/references/<expose>`, a table published whole), which an `unused` item may name. |
 
 `plan` is always handed the profile a Simulation pins (PROFILE-SPEC.md
-section 6), and it reads every citation in it before anything is written. A
-citation holds when:
+section 6), and it reads every citation in it, or in the overlaid profile for an
+`overlay` entry, before anything is written. A citation holds when:
 
 - the pointer reaches a value in the profile;
-- the pointer is a table's `rowCount`, and the entry names no `definition`;
+- the pointer is a table's `rowCount` or a table published whole under `references`, and the
+  entry names no `definition`;
   or the nearest object on the way that carries a registered `definition`
   carries the one the entry names. The pointer may stop at the statistic or
   metric, or go into it: a group, a cell, a quantile level;
@@ -224,12 +339,13 @@ handed the profile, write the same bytes.
 | Key | Holds |
 |---|---|
 | `_producer` | A URI naming the tool that wrote the record. |
-| `_schemaURL` | The schema's `$id`. The format version is part of it: format 1-1-0 when an entry names the contract, and format 1-0-0 otherwise, so a register with no contract entry is recorded as it was before. |
+| `_schemaURL` | The schema's `$id`. The format version is part of it: format 1-3-0 when an entry cites an overlay, names a replacement or is a calibrated value, or the register holds a response estimate (sections 1.2, 1.3 and 8), format 1-2-0 when the Simulation lists unused statistics, format 1-1-0 when an entry names the contract, and format 1-0-0 otherwise, so a register that uses none of a later format's additions is recorded as it was before, with its bytes. |
 | `simulationId` | The Simulation. |
 | `profile` | `{"digest": ...}`, the pinned profile's digest, or `null`. |
 | `declared` | How many numbers the register counts. |
-| `counts` | `profile`, `assumption` and `default`, and `contract` in format 1-1-0: how many numbers rest on each. They add up to `declared`. |
-| `entries` | The entries as declared, each with its `index` in the list, its `document`, `pointer` and `source`, and its `statistic`, `contract` or `reason`. |
+| `counts` | `profile`, `assumption` and `default`, `contract` in formats 1-1-0 and later, and `overlay` and `calibrated` in format 1-3-0: how many numbers rest on each. They add up to `declared`. |
+| `entries` | The entries as declared, each with its `index` in the list, its `document`, `pointer` and `source`, and its `statistic`, `contract`, `overlay`, `calibration`, `reason` or `replacedBy`. Format 1-3-0 lists the response estimates after them (section 8.2). |
+| `unused` | Formats 1-2-0 and 1-3-0, when the Simulation lists them: the statistics of the pinned profile no number rests on, as the Simulation lists them, each `{"statistic": {"pointer", "definition"}, "reason"}` (section 1.1). |
 | `parameters` | Every counted number: `document`, `kind`, `pointer`, `value` (the number as declared, in the canonical decimal spelling of KERNEL-SPEC section 2.1: no exponent, the declared scale kept, so `1e4` is `10000` and `.50` is `0.50`), `source` and `entry`, the index of the entry that decided it, or `null` for a default no entry names. |
 
 A profile statistic is cited by a pointer and a definition, beside the pinned
@@ -265,30 +381,38 @@ the run as `column-provenance.json` is by `columnProvenanceDigest`.
 parameters: 35 declared -- 3 from the pinned profile, 2 assumed, 30 default
 ```
 
-A register with a contract entry gives the contract's share after the
+A register of format 1-3-0 gives the overlay's share after the contract's:
+`parameters: 35 declared -- 3 from the pinned profile, 1 from the contract, 4 from the
+overlay, 2 assumed, 25 default`. A register with a contract entry gives the contract's share after the
 profile's: `parameters: 35 declared -- 3 from the pinned profile, 1 from the
-contract, 2 assumed, 29 default`.
+contract, 2 assumed, 29 default`. A register of format 1-2-0 also gives the
+contract's share, and adds how many statistics of the profile are unused:
+`...; 2 statistics of the profile unused`.
 
 Their `--json` envelopes carry the same numbers: `parameter_register` in
 `plan`'s artifacts and `parameterRegister` in `verify`'s and `ship`'s, each
 `{"declared": n, "counts": {...}}`, the counts naming the sources of the
-register's format. `validate` reports the counts under each Simulation as
+register's format, and `"unused": n` for a register of format 1-2-0. `validate` reports the counts under each Simulation as
 `parameters`.
 
 `EVIDENCE.md`'s "What Was Not Proven" section gains one paragraph: the shares
-(the contract's among them when the register has a contract entry), each a
+(the contract's among them when the register has a contract entry, and the overlay's, named, with
+the words that it is the maintainers' scenario and not a measurement, and the calibrated values, in format 1-3-0), each a
 count and a percentage, how many defaults an entry states and how many
 no entry names, and what the register does not show. A percentage is exact when
 it is whole, and otherwise rounded to one decimal place, half to even; a share
 that rounds to 0 or to 100 is written "below 0.1 %" or "above 99.9 %", so a
 share is never shown as none or all when it is not. When there are assumptions,
 a list follows the paragraph, as the What Was Not Proven list calls for: every assumption with what it
-names, how many numbers it decided and its reason. A reason is printed as a
+names, how many numbers it decided and its reason, and the statistic that would replace it when
+the entry names one (format 1-3-0). A reason is printed as a
 code span, so a renderer reads none of it as markup or a link. A reason that
 holds a reserved word, a character that is not plain text or a backtick is left
 out of the prose and kept in the record. A run that reads no number the register
 counts says so in one sentence, and its line reads `parameters: the run reads
-no number the register counts`.
+no number the register counts`. A register of format 1-2-0 then lists every
+statistic of the profile no number rests on, with its definition and its
+reason, or says in one sentence that it lists none.
 
 ## 7. Compatibility and later additions
 
@@ -301,12 +425,82 @@ predates it refuses the record rather than reads it as something else.
   names 1-1-0 only when an entry names the contract, so every register that
   names none keeps its 1-0-0 record, bytes and digest. A reader of 1-1-0 reads
   1-0-0 records too.
-- A source added later, such as a fitted-parameters document (fitting), follows
-  the same rule. Moving the block from the
+- **Format 1-2-0** adds `unused` (section 1.1), and its counts name all four
+  sources. A record names 1-2-0 only when the Simulation lists unused
+  statistics, so every other register keeps its 1-0-0 or 1-1-0 record, bytes
+  and digest. A reader of 1-2-0 reads both earlier formats.
+- **Format 1-3-0** adds `source: overlay`, with `overlay` and `statistic` (section 1.2), and
+  `replacedBy` on an assumption or a default (section 1.3), the source `calibrated` with its
+  `calibration` member, and the response estimates (section 8), and its counts name all six
+  sources. A record names 1-3-0 only when the register holds one of these additions, so every
+  other register keeps the format and the bytes it had, and a Simulation that declares an overlay
+  and cites none stays at its earlier format. This format is shared within one release: a later
+  addition to 1-3-0 extends the sources and members here. A reader of 1-3-0 reads the earlier
+  formats too.
+- A source added later follows the same rule. Moving the block from the
 extension namespace into the FLUX specification is a change of where it is
 declared, not of what it means.
 
-## 8. Prior art
+## 8. Format 1-3-0
+
+Format 1-3-0 carries four additions: the source `overlay` and the member
+`replacedBy` (sections 1.2 and 1.3), and, in the two subsections below, calibrated
+values and response estimates. A record names 1-3-0 when it holds any addition of
+the format, and its `counts` then name every source the format has.
+
+### 8.1 Calibrated values
+
+An entry whose `source` is `calibrated` names a number a calibration moved. Its
+`calibration` member is a mapping of exactly these keys:
+
+| Key | Holds |
+|---|---|
+| `queries` | The ids of the queries the value was fitted to: a list of distinct strings, at least one. |
+| `before` | The value before the fit, as exact decimal text. |
+| `after` | The value after the fit, as exact decimal text. |
+| `patch` | The calibration patch's digest, `sha256:` and 64 lowercase hex digits. |
+| `targets` | The digest of the profile that held the targets, spelled the same way. |
+| `heldOut` | `{ "profile", "largestGap", "tolerance" }`: the held-out profile's digest, the largest gap among its queries and the tolerance it was set against, the last two as exact decimal texts. |
+| `versions` | `{ "cma", "sqlglot", "duckdb" }`: the version of each tool the fit ran with, non-empty strings. |
+
+An exact decimal text has no exponent and no plus sign, no leading zero, and
+no sign on zero: `"0.25"`, `"-3"`. The entry's pointer has to reach one number,
+and `after` has to equal the number the document holds there, so a record
+cannot say a value was fitted to something the bundle does not hold. Each
+refusal below is `FLX-3105`: a `calibrated` entry without `calibration`, a
+`calibration` under another source, an unknown or missing key, a digest or a
+decimal that is malformed, and an `after` that is not the value at the
+pointer. The record carries the member through to the entry unchanged, and the
+numbers under the pointer count as `calibrated`.
+
+A value is calibrated only when it passed its held-out check, so an entry whose
+`heldOut.largestGap` is larger than its `heldOut.tolerance` (compared as the
+decimals they are) is refused with `FLX-3716`. The engine does not re-run the
+fit and does not read the profiles or the patch the digests name: the bundle
+declares the record, and the evidence record's note says so, in these words for
+every run that holds a calibrated value. The note of a run with none is as it
+was.
+
+### 8.2 Response estimates
+
+The response runtime derives estimates at plan time and adds them to the
+register. They are not declared and they are no counted number: each is an
+entry listed after the declared ones, numbered on from them, with these keys:
+
+| Key | Holds |
+|---|---|
+| `index` | The entry's place in the list. |
+| `kind` | `responseControl`, a control rate, or `responseEffect`, an effect. |
+| `document` | The Simulation. |
+| `pointer` | `/extensions/com.agentics.flux~11/responses/<index>/segments/<key>`: the response's place in the Simulation's `responses` list and the segment's key. |
+| `value` | The estimate, as exact decimal text. |
+| `source` | `profile`: the estimate is read from the pinned profile. |
+| `cells` | The query cells it was read from, each `queries/<query id>/<group key>`: the control cell for a rate, the control cell and then the treated cell for an effect. |
+| `interval` | For an effect only: `{ "low", "high", "confidence" }`, exact decimal texts, `low` at most `high`, the confidence between 0 and 1. |
+
+Two estimates of the same kind for one response and segment are refused.
+
+## 9. Prior art
 
 - **The ODD protocol** (Grimm et al. 2020, JASSS 23(2) 7): describe the basis
   of every parameter value. The register makes that a field per number.
@@ -322,3 +516,5 @@ declared, not of what it means.
 - Configuration tools that record where each value came from, among them
   Spring Boot's `env` endpoint (a value and its origin per property), for the
   shape of a value with its source beside it.
+- mypy's `--warn-unused-configs` and dbt's `--warn-error-options`, which name
+  every input that has no effect, for the `unused` list (ADR 0014).

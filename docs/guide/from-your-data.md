@@ -31,9 +31,9 @@ a slice of your records instead.
 | Package | Latest on PyPI | Used here for | Status |
 |---|---|---|---|
 | `flux-spec` | 0.5.4 | validating the bundle (the engine installs it) | released |
-| `flux-sim-engine` | 0.7.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
-| `data-product-forge` | 0.33.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
-| `flux-stats` | 0.7.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
+| `flux-sim-engine` | 0.10.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
+| `data-product-forge` | 0.39.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
+| `flux-stats` | 0.10.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
 
 The engine needs Python 3.11 or newer. One environment holds both tools:
 
@@ -47,11 +47,11 @@ The `[profile]` extra brings DuckDB, which `fluid init --discover` and
 the profile holds; the engine uses the same flux-stats. Every command below,
 the Python snippets included, runs in this environment.
 
-For now this environment gets flux-sim-engine 0.6.2 and flux-stats 0.6.2.
-flux-sim-engine 0.7.0 needs flux-stats 0.7.0, and data-product-forge 0.33.0
-and earlier take a flux-stats below 0.7, so pip settles on the 0.6.2 pair
-until a data-product-forge release takes flux-stats 0.7. Every step of this
-guide runs on them.
+This environment gets the latest of each: flux-sim-engine 0.10.0,
+data-product-forge 0.39.0 and flux-stats 0.10.0. flux-sim-engine 0.10.0 needs
+flux-stats 0.10, which the `[profile]` extra of data-product-forge accepts from
+0.9 up to 1.0, so the engine and `fluid profile` use the same flux-stats. Every
+step of this guide runs on them.
 
 ## 2. Get a FLUID contract from your data
 
@@ -134,15 +134,17 @@ fluid profile contract.orders.fluid.yaml --expose orders \
 ```
 
 ```text
-Profiled exposes[orders]: 4 columns, 14 values published, 7 withheld.
-Withheld, by CL_CONF_STATUS code: A (small count) 7.
-Fidelity statistics: mean/1 of 'amount', on fractionalBits 16 (the fidelity block must declare the same).
+Profiled exposes[orders]: 4 columns, 17 values published, 10 withheld.
+Withheld, by the check (CL_CONF_STATUS code): A (small count) 10.
+The document writes C for every withheld group and cell of a histogram or a quantile, whatever withheld it, so its code says nothing of its size.
+Fidelity statistics: mean/1 of 'amount'; quantile/2 of 'amount' at level 0.25 over 70 bins; quantile/2 of 'amount' at level 0.5 over 70 bins; quantile/2 of 'amount' at level 0.75 over 70 bins, on fractionalBits 16 (the fidelity block must declare the same).
+Withheld whole, so a run that checks them scores them censored: quantile/2 of 'created_at' at level 0.25 over 202 bins; quantile/2 of 'created_at' at level 0.5 over 202 bins; quantile/2 of 'created_at' at level 0.75 over 202 bins.
 Wrote /work/orders.profile.json (readable by you alone; read it before you share it).
 Pin it in the FLUX Simulation:
-  profile: {digest: sha256:bd2f9a689d119e6a489f1878891c695c3f6c7dd602c365a92fff491905b416a5}
+  profile: {digest: sha256:0370f0ad5869dade208f2e97c11dd1988ba75a78f7ec1e6952b2bb4e480d2158}
 ```
 
-On data-product-forge 0.31.0 the sample data gives this digest. Other data, or
+On data-product-forge 0.39.0 the sample data gives this digest. Other data, or
 another release, writes another, because the profile names the build that wrote
 it. For the sample data, the profile holds these values:
 
@@ -151,8 +153,8 @@ it. For the sample data, the profile holds these values:
 | the table | `rowCount` 600 | |
 | `order_id` | `count` 600, `distinctCount` 600 | `nullCount` |
 | `country` | `count` 600, `distinctCount` 5 | `nullCount` |
-| `amount` | `count` 600, `distinctCount` 10, `min` 10, `max` 100, quartiles 20, 35 and 50, `sum` 27750, and the statistic `mean/1` | `nullCount` |
-| `created_at` | `count` 600, `distinctCount` 310 | `nullCount`, `min`, `max`, quartiles |
+| `amount` | `count` 600, `distinctCount` 10, `min` 10, `max` 100, quartiles 20, 35 and 50, `sum` 27750, and the statistics `mean/1` and `quantile/2` at the quartiles | `nullCount` |
+| `created_at` | `count` 600, `distinctCount` 310 | `nullCount`, `min`, `max`, quartiles, and its `quantile/2` statistics |
 
 Some of that is the output checks at work. Every published count is rounded to
 a multiple of 5, so the 4 countries read as 5 and the 12 distinct amounts as
@@ -165,7 +167,11 @@ rounded to 5 like every count, and its sum on a grid of 2^-16 steps. The grid
 is `--fractional-bits`, 16 unless you give another, and the Simulation's
 `encoding.fractionalBits` must be the same (step 4 uses 16). `fluid profile`
 writes one, ungrouped, for each number column it profiles, and publishes it
-only when the column's count and sum are published.
+only when the column's count and sum are published. For the same columns it
+writes `quantile/2` at the quartiles, which a FLUX `quantile` property is
+compared with: it publishes the bin that holds the quantile, not the value
+([ADR 0012](../engine/adr/0012-a-quantile-is-published-as-the-bin-that-holds-it.md)),
+and withholds it, as here for `created_at`, when the checks do.
 
 ::: warning Aggregates only, and no privacy guarantee
 The profile holds aggregates and nothing else: no record, no sample of records,
@@ -394,7 +400,7 @@ Copy the line `fluid profile` printed into the Simulation's
 ```yaml
 extensions:
   com.agentics.flux/1:
-    profile: {digest: sha256:bd2f9a689d119e6a489f1878891c695c3f6c7dd602c365a92fff491905b416a5}
+    profile: {digest: sha256:0370f0ad5869dade208f2e97c11dd1988ba75a78f7ec1e6952b2bb4e480d2158}
     emits:
       orders:
         rows: 600
@@ -418,10 +424,10 @@ fluxsim run bundle --profile orders.profile.json
 ```
 
 ```text
-plan written to .flux/runs/8cea311995bc57d7/plan.json (runId=8cea311995bc57d7, planDigest=sha256:...)
-applied to .flux/runs/8cea311995bc57d7 (runDigest=sha256:...)
+plan written to .flux/runs/86ef556c067d3a22/plan.json (runId=86ef556c067d3a22, planDigest=sha256:...)
+applied to .flux/runs/86ef556c067d3a22 (runDigest=sha256:...)
 emitted orders: 600 rows (generator)
-run 8cea311995bc57d7 complete
+run 86ef556c067d3a22 complete
 ```
 
 The run writes under `.flux/runs/` in the current folder. Each row is a JSON
@@ -429,9 +435,9 @@ array in the contract's column order:
 
 ```console
 $ head -n 3 .flux/runs/*/emits/orders.ndjson
-["272157ce5c149cdd5ace2757785abe75","FR","42.04","2026-08-30T12:12:57.137Z"]
-["4ae72e773938fce246a9787cd019b3cb","IE","22.63","2026-09-04T02:59:36.782Z"]
-["48a86b2e4b5bbe236997e76dea39cadc","IE","13.15","2026-08-19T15:24:18.484Z"]
+["b6c0f40d5e8728f0344b787a9862436d","FR","97.75","2026-08-07T14:48:13.259Z"]
+["fdeed30a5cd97e57affbedb59e991946","FR","48.02","2026-09-20T12:36:08.548Z"]
+["0c14a0db78037457eab4a67ef2f7ec54","DE","98.97","2026-07-31T20:29:54.010Z"]
 ```
 
 The same bundle gives the same bytes on any machine. Your run id, rows and
@@ -451,9 +457,9 @@ reproducible: not checked | validity: not asserted
   rows: ok
   ...
   fidelity orders: passed -- 1 of 1 declared property within the margin against the pinned profile
-  scorecard: overall 0.9827 against profile sha256:bd2f9a68...
-    dimensions: marginals 0.9827; not measured: structure, joint, crossTable, temporal, invariants, queries, defects
-    table orders: 0.9827 (1 of 1 property scored)
+  scorecard: overall 0.9916 against profile sha256:0370f0ad... (covers 1 of 4 columns, 0 of 0 relationships)
+    dimensions: marginals 0.9916; not measured: structure, joint, crossTable, temporal, invariants, queries, defects
+    table orders: 0.9916 (1 of 1 property scored); covers 1 of 4 columns, 0 of 0 relationships
     shape: no flags in 4 profiled columns (3 tests at 1/1000 per run)
 ```
 
@@ -486,8 +492,8 @@ The pack holds the rows and the evidence for them, the scorecard included;
 ### When the profile cannot answer a property
 
 `fluid profile` writes one ungrouped `mean/1` for each number column it
-profiles, and nothing else the fidelity check compares. A property that needs
-another statistic, such as a `support` property over `country` or a `mean` over
+profiles, and `quantile/2` at the quartiles, and nothing else the fidelity check
+compares. A property that needs another statistic, such as a `support` property over `country` or a `mean` over
 `created_at`, is refused against that profile with
 [FLX-5037](../engine/reference/errors/FLX-5037.md), which names the statistic the
 profile lacks, and `ship` withholds the run.

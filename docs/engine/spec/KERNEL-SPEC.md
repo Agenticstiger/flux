@@ -247,6 +247,11 @@ slice of rows is the same in any process, and `--jobs` gives the bytes one job g
   shape of children per parent is kept.
 - `uniform`: any other, `p = bounded_uint(stream, parentRows)` on the stream of the relationship's first
   `fromColumn`, after that column's null draw.
+- A foreign key into a **reference expose** (SEAM-FIDELITY-SPEC section 2, `reference: true`) picks a row as any
+  foreign key does: `distinct` and `uniform` as above. A `declared` pick is taken when the relationship has one
+  column, the column declares levels or a support, and the parent column is a reference column: `p` is the row whose
+  key equals the drawn level, and a declared level that is no key is `FLX-3403` at plan time. A reference expose's
+  value at row `i` is its published cell, and it draws nothing.
 - A foreign key's columns are null together, by the first column's declared `nullFraction` on its own path; another
   column of it declares none. The `nullFraction` is kept when the relationship's `joinType` is `left` (FLUID's
   default): a null references no row, and a `distinct` relationship's other rows still reach distinct parents.
@@ -259,6 +264,53 @@ slice of rows is the same in any process, and `--jobs` gives the bytes one job g
   `inner` one is kept only when the target's is `inner` too and the first cannot be null, so the value it copies is
   never null.
 
+**A conditional link (kernel 0.2.0 only).** The Simulation's top-level `links` key (ADR 0022 section 5) may give a
+relationship a `when`, a FLUID SQL/1 predicate over the emit's own columns. The foreign key is drawn on every row as
+above, so no draw moves. A step ordered with the expression rules then sets every `fromColumn` of the relationship to
+NULL on a row where the predicate is not TRUE: the link reaches no row there, and every copy or path through it reads
+NULL. The step comes after the rules that set the columns its predicate reads, and before every rule that reads one of
+the relationship's columns. A bundle that declares no `links` entry has no such step, and its plan document and
+digests are those it had. Kernel 0.1.0 refuses the key (`FLX-3105`).
+
+**A weighted pick (kernel 0.2.0 only).** A `links` entry's `weight` names a number column (INT or DECIMAL) of the
+relationship's target. The pick is `weighted` in place of `uniform`: after the first column's null draw, when it
+declares a `nullFraction`, one `uniform53` `u` is drawn at the draw index the `uniform` pick takes, and the parent row is
+the first row `i` with `u < T_i`, `T_i = floor(2^53 * (w_0 + ... + w_i) / W)` on exact rationals over the parent's
+final weights in row order (a NULL weighs zero; `W` is their total). The thresholds are worked out once per process for
+the parent plan and the column over every parent row, through the row the parent's own pass writes, or, for a reference
+parent, from the published values. A weight on a `distinct` relationship, on a `declared` pick, on a side of a bridge,
+on a relationship another one implies or that a dependency sets, or on a reference expose's relationship, a weight
+column that is no number column of the target, a negative weight and weights that total zero are `FLX-3403` (the last
+two when the thresholds are first worked out, or at plan time for a reference parent). Kernel 0.1.0 refuses the entry
+(`FLX-3105`). A plan with such a pick is generated on the per-row path.
+
+**A sentinel (kernel 0.2.0 only).** A `links` entry's `sentinels` maps a column to the text of its sentinel. Each
+column must be copied through the entry's relationship: a `sharedColumns` column of it, a copy of a `sharedAttribute`
+whose path starts with it, or a `derive` whose whole value is a path whose first relationship it is. The text is read as
+the column's type (a string as written, a bool as `true` or `false`, a number at the column's scale and within its range,
+a date as `YYYY-MM-DD`), and a text that does not read or fit is `FLX-3105`. On a row whose path reaches no row, at its
+first missing hop (a NULL key, a key that matches nothing, a condition that cleared the link), the copy writes the
+sentinel in place of NULL. A row whose path reaches a row whose value is NULL keeps NULL, and so does a row whose own
+value is NULL, which NULLs first keeps (EXPR-SPEC-2 section 6). A rule's document records its sentinel only when it
+declares one.
+
+**A bridge table's pairs (kernel 0.2.0 only).** The Simulation's top-level `bridges` key (ADR 0022 section 8) lists
+`{emit, relationships: [a, b]}`: two distinct many-to-one relationships of one emitted expose whose pairs never
+repeat. The two are laid out together as one key of two parts, `a` first, through the several-column key above with two
+parts that each take the rows of their parent: the point `permute/2(k, rows_a * rows_b, rowIndex)` decoded in mixed
+radix, the last part varying fastest, so row `i` takes the parent row `point div rows_b` through `a` and `point mod
+rows_b` through `b`, and every `fromColumn` of both relationships is a member of the key. `k` is the layout key of the
+label `("sim", sim_id, "gen", exposeId, "pair", a, b)`, as the key above is of its label with `"key"` and the key
+columns. So no pair repeats and each side names a row its parent holds. A bundle that declares no bridge has no such
+key, and its plan document and digests are those it had. Kernel 0.1.0 refuses the key (`FLX-3105`).
+
+**A counted relationship (kernel 0.2.0 only).** The Simulation's top-level `counts` key (ADR 0016 section 1) puts a
+many-to-one relationship of an emitted expose on the counted layout: its parent rows are not picked one child at a time but laid
+out so that each parent has a whole number of children, in a run of consecutive child rows, and the relationship's first
+column draws nothing. `minChildren` gives every parent at least that many children: the child rows beyond the minimum are allotted over the parents by their expected counts above it. `parentWhen` leaves every parent whose final row does not make the predicate TRUE with no children. The layout is a pure function of the child's rows, the parent's rows and the declared shape, worked out
+once per process; KERNEL-SPEC-2 section 8.1 states it. A bundle that declares no `counts` entry has no such layout, and its
+plan document and digests are those it had. Kernel 0.1.0 refuses the key (`FLX-3105`).
+
 **Refusals** (`FLX-3403`, before any row): a relationship whose target the Simulation does not generate from
 statistics, or that declares no rows; a foreign key whose type differs from its target's (for a DECIMAL, its precision
 or scale); a key whose range, bins, identifier length or parts hold fewer values than its rows, or that declares a
@@ -266,7 +318,10 @@ draw that repeats values (levels, support, a mean, a rate, `given`), or levels t
 of a key that a smaller key keeps unique and that declares no draw of its own; a `one_to_one` child with more rows
 than its parent; a `nullFraction` where the rules above allow none; two relationships that set one column otherwise
 than above; a key that holds part of a relationship; keys that take their values from one another round a cycle; a
-column drawn `given` a column whose value is not drawn.
+column drawn `given` a column whose value is not drawn; a `links` condition on an `inner` relationship, on one whose
+columns are a key of the expose or part of one, and on one another relationship implies; a bridge with more rows than pairs, a `nullFraction` on either side's first
+column, a side that is `one_to_one`, whose columns are a key, that is already part of a key or that another relationship
+implies, a side a `links` condition configures, and one relationship in two bridges.
 
 The document `generatorDigest` covers carries a `relations` entry for each related column, with what it reads of
 its parent (the parent's `H`, rows, column plans and layouts), so a moved parent moves its children's digests. An
