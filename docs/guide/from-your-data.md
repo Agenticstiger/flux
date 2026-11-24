@@ -36,7 +36,7 @@ a slice of your records instead.
 |---|---|---|---|
 | `flux-spec` | 0.5.4 | validating the bundle (the engine installs it) | released |
 | `flux-sim-engine` | 0.11.1 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
-| `data-product-forge` | 0.40.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0, profile format 1-4-0 from 0.40.0 |
+| `data-product-forge` | 0.40.1 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0, profile format 1-4-0 from 0.40.0 |
 | `flux-stats` | 0.11.1 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
 
 The engine needs Python 3.11 or newer. One environment holds both tools:
@@ -52,8 +52,8 @@ the profile holds; the engine uses the same flux-stats. Every command below,
 the Python snippets included, runs in this environment.
 
 This environment gets the latest of each: flux-sim-engine 0.11.1,
-data-product-forge 0.40.0 and flux-stats 0.11.1. flux-sim-engine 0.11.1 needs
-flux-stats 0.11, which the `[profile]` extra of data-product-forge 0.40.0 accepts
+data-product-forge 0.40.1 and flux-stats 0.11.1. flux-sim-engine 0.11.1 needs
+flux-stats 0.11, which the `[profile]` extra of data-product-forge 0.40.1 accepts
 from 0.11 up to 1.0, so the engine and `fluid profile` use the same flux-stats. Every
 step of this guide runs on them.
 
