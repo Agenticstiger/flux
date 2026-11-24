@@ -2,23 +2,77 @@ import { defineUserConfig } from 'vuepress'
 import { defaultTheme } from '@vuepress/theme-default'
 import { viteBundler } from '@vuepress/bundler-vite'
 import { searchPlugin } from '@vuepress/plugin-search'
+import { seoPlugin } from '@vuepress/plugin-seo'
 import { sitemapPlugin } from '@vuepress/plugin-sitemap'
 import { markdownChartPlugin } from '@vuepress/plugin-markdown-chart'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const SITE = 'https://agenticstiger.github.io/flux/'
+// The origin and the base are kept apart on purpose. The sitemap and SEO
+// plugins build every address as `hostname + base + path`, so a hostname that
+// already ends in the base doubles it (/flux/flux/sitemap.xml in robots.txt).
+const ORIGIN = 'https://agenticstiger.github.io'
+const BASE = '/flux/'
+const SITE = `${ORIGIN}${BASE}`
+const SITE_DESCRIPTION =
+  'The open, declarative standard for governed synthetic customer universes, and the discovery-side sibling of FLUID.'
+const HOME_TITLE = 'FLUX: Governed Synthetic Universes, Declared'
+
+// Wraps every Markdown table in a focusable, labelled scroll region, so a table
+// wider than the column can be scrolled from the keyboard. The label is the text
+// of the nearest heading above the table, or "Table" when there is none.
+const headingText = (inline: any): string =>
+  (inline?.children ?? [])
+    .map((t: any) =>
+      t.type === 'text' || t.type === 'code_inline' || t.type === 'image'
+        ? t.content
+        : t.type === 'softbreak' || t.type === 'hardbreak'
+          ? ' '
+          : '',
+    )
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const wrapTables = (md: any): void => {
+  md.core.ruler.push('flux_table_region', (state: any) => {
+    let heading = ''
+    let seen = 0
+    state.tokens.forEach((token: any, i: number) => {
+      if (token.type === 'heading_open') {
+        heading = headingText(state.tokens[i + 1])
+        seen = 0
+      } else if (token.type === 'table_open') {
+        seen += 1
+        const base = heading || 'Table'
+        token.meta = { ...token.meta, label: seen > 1 ? `${base}, table ${seen}` : base }
+      }
+    })
+  })
+
+  const open = md.renderer.rules.table_open
+  const close = md.renderer.rules.table_close
+  md.renderer.rules.table_open = (tokens: any[], idx: number, options: any, env: any, self: any) => {
+    const label = md.utils.escapeHtml(tokens[idx].meta?.label || 'Table')
+    const table = open ? open(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options)
+    return `<div class="table-wrapper" role="region" tabindex="0" aria-label="${label}">\n${table}`
+  }
+  md.renderer.rules.table_close = (tokens: any[], idx: number, options: any, env: any, self: any) => {
+    const table = close ? close(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options)
+    return `${table}</div>\n`
+  }
+}
 
 export default defineUserConfig({
   lang: 'en-US',
   title: 'FLUX',
-  description: 'The open, declarative standard for governed synthetic customer universes — the discovery-side sibling of FLUID.',
+  description: SITE_DESCRIPTION,
 
   // LOCKED: matches the GitHub Pages project path. Every published schema
   // `$id` (https://agenticstiger.github.io/flux/schema/...) depends on this
-  // base — do not change without rewriting the schema $id URLs.
-  base: '/flux/',
+  // base. Do not change it without rewriting the schema $id URLs.
+  base: BASE,
 
   clientConfigFile: resolve(__dirname, './client.ts'),
   bundler: viteBundler(),
@@ -30,12 +84,8 @@ export default defineUserConfig({
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/flux/favicon.svg' }],
     ['meta', { name: 'theme-color', content: '#050813' }],
 
-    ['meta', { property: 'og:title', content: 'FLUX — Governed Synthetic Universes, Declared' }],
-    ['meta', { property: 'og:description', content: 'Declare the universe. Prove the rule. Ship the FLUID contract that was proven.' }],
-    ['meta', { property: 'og:type', content: 'website' }],
-    ['meta', { property: 'og:url', content: SITE }],
-    ['meta', { property: 'og:site_name', content: 'FLUX' }],
-
+    // og:title, og:description, og:type, og:url, og:site_name, og:image and the
+    // twitter tags are written per page by the SEO plugin below.
     ['meta', { name: 'keywords', content: 'flux, fluid, digital twin, synthetic data, simulation, data products, data contract, deterministic, governance, json schema' }],
   ],
 
@@ -43,6 +93,8 @@ export default defineUserConfig({
   // copied here unchanged. An "Edit this page" link from this repository would
   // edit a copy that the next copy overwrites, and the error and command
   // pages are generated from the code, so those links are switched off.
+  extendsMarkdown: wrapTables,
+
   extendsPage: (page) => {
     if (page.path.startsWith('/engine/')) {
       page.frontmatter.editLink = false
@@ -299,8 +351,47 @@ export default defineUserConfig({
       maxSuggestions: 12,
       hotKeys: ['s', '/'],
     }),
+    // Hostname is the origin only: the plugins add the base themselves.
     sitemapPlugin({
-      hostname: SITE,
+      hostname: ORIGIN,
+    }),
+    seoPlugin({
+      hostname: ORIGIN,
+      // Self-referencing canonical: origin + base + the path the site serves.
+      // The 404 page is not a page to index, so it gets none.
+      canonical: (page) => (page.path === '/404.html' ? null : `${ORIGIN}${BASE.replace(/\/$/, '')}${page.path}`),
+      // Pages without a cover image share one card. Absolute, because the
+      // plugin copies this value into og:image as it is.
+      fallBackImage: `${SITE}og-image.png`,
+      // A page without a description keeps the site description. The plugin's
+      // own fallback cuts the first 180 characters of the page, which reads
+      // badly on pages generated from code, and those pages cannot be edited
+      // here.
+      autoDescription: false,
+      // The pages document a standard, so none of them is an article.
+      isArticle: () => false,
+      ogp: (ogp, page) => {
+        const image = ogp['og:image']
+        const title = page.frontmatter.home ? HOME_TITLE : ogp['og:title']
+        const description = ogp['og:description'] || SITE_DESCRIPTION
+        return {
+          ...ogp,
+          'og:title': title,
+          'og:description': description,
+          ...(image
+            ? {
+                'og:image:width': '1200',
+                'og:image:height': '630',
+                'og:image:alt': 'FLUX: declare the universe, prove the rule, ship the contract that was proven.',
+                'twitter:card': 'summary_large_image',
+                'twitter:title': title,
+                'twitter:description': description,
+                'twitter:image': image,
+              }
+            : {}),
+        }
+      },
+      jsonLd: (jsonLd, page) => (page.frontmatter.home ? { ...jsonLd, name: HOME_TITLE } : jsonLd),
     }),
     markdownChartPlugin({ mermaid: true }),
   ],

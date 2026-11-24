@@ -1,3 +1,7 @@
+---
+description: "Turn a table of real records into synthetic rows that follow the same contract and aggregates, in six steps, without the engine ever reading a record."
+---
+
 # From your data to a synthetic copy
 
 You have a table of real records and want synthetic rows that follow the same

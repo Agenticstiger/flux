@@ -1,3 +1,7 @@
+---
+description: "The three FLUX conformance levels, Core, Enterprise and Runtime, so a validator, a governed deployment and a live engine can each claim FLUX truthfully."
+---
+
 # Conformance Profiles
 
 One schema, three honest bars (roadmap principle P3). A lightweight

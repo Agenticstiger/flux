@@ -1,3 +1,7 @@
+---
+description: "A human-written diff for each released pair of FLUX schema versions, with the validator and regression behavior each one changed."
+---
+
 # Changelog
 
 One human-written diff per released version pair. The regression suite pins every behavioral change.

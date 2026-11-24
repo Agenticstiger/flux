@@ -1,3 +1,7 @@
+---
+description: "The nineteen FLUX document kinds grouped into six families by responsibility: Population, Commerce, Behaviour, Activation, Calibration and Composition."
+---
+
 # The Six Families
 
 A FLUX universe is assembled from **nineteen document kinds**, clustered into

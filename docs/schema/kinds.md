@@ -1,3 +1,7 @@
+---
+description: "A field-by-field reference for each of the nineteen FLUX kinds, generated from the JSON Schema."
+---
+
 # The Nineteen Kinds
 
 > Generated from

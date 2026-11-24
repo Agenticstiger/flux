@@ -1,3 +1,7 @@
+---
+description: "A ledger of where the position paper and the FLUX schema differ: what the paper promised, what 0.3.0 delivered, and what remains on the roadmap."
+---
+
 # Paper ↔ Schema Reconciliation
 
 The position paper *"FLUX and FLUID: A Declarative Substrate for Core-to-Customer

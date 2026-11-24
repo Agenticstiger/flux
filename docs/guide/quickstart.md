@@ -1,3 +1,7 @@
+---
+description: "Install the validator, check the shipped telco example offline, then author a minimal universe and cross the FLUID seam in about five minutes."
+---
+
 # Quickstart
 
 Author a minimal universe, validate it offline, and cross the FLUID seam — in

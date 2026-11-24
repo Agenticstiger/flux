@@ -1,3 +1,7 @@
+---
+description: "Two CI-validated example bundles, a telco payment-recovery universe covering all nineteen kinds and a tower tenant renewal scenario, with the command to validate them."
+---
+
 # FLUX by Example
 
 The repository ships two CI-validated bundles. The first is a complete universe:

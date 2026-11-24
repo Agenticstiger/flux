@@ -1,3 +1,7 @@
+---
+description: "The vNext plan: nine RFCs that make the open standard a strict superset of the most advanced implementations, and the principles that govern them."
+---
+
 # The vNext Roadmap
 
 The nine RFCs shipped by FLUX 0.5.0, apart from RFC-08's LSP specification,

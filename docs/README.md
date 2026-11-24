@@ -1,4 +1,5 @@
 ---
+description: "FLUX is the open, declarative standard for governed synthetic customer universes: nineteen small YAML documents, one JSON Schema, and runs that replay byte for byte from a seed."
 home: true
 title: Home
 heroText: FLUX

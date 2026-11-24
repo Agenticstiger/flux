@@ -1,3 +1,7 @@
+---
+description: "How the FLUX specification is governed and changed: spec changes are code changes, released schemas are immutable, and CI enforces both."
+---
+
 # Contributing & Governance
 
 FLUX is an Apache-2.0 open specification stewarded under the Agenticstiger
