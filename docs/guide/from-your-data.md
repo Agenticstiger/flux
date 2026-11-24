@@ -31,9 +31,9 @@ a slice of your records instead.
 | Package | Latest on PyPI | Used here for | Status |
 |---|---|---|---|
 | `flux-spec` | 0.5.4 | validating the bundle (the engine installs it) | released |
-| `flux-sim-engine` | 0.10.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
+| `flux-sim-engine` | 0.11.0 | `fluxsim validate`, `run`, `verify` and `ship` | released; reads a profile from 0.6.0 |
 | `data-product-forge` | 0.39.0 | `fluid init --discover` and `fluid profile` | released; `fluid profile` from 0.31.0 |
-| `flux-stats` | 0.10.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
+| `flux-stats` | 0.11.0 | the statistics behind the engine and `fluid profile` | released with the engine, at its version; the `[profile]` extra installs it |
 
 The engine needs Python 3.11 or newer. One environment holds both tools:
 
@@ -47,9 +47,9 @@ The `[profile]` extra brings DuckDB, which `fluid init --discover` and
 the profile holds; the engine uses the same flux-stats. Every command below,
 the Python snippets included, runs in this environment.
 
-This environment gets the latest of each: flux-sim-engine 0.10.0,
-data-product-forge 0.39.0 and flux-stats 0.10.0. flux-sim-engine 0.10.0 needs
-flux-stats 0.10, which the `[profile]` extra of data-product-forge accepts from
+This environment gets the latest of each: flux-sim-engine 0.11.0,
+data-product-forge 0.39.0 and flux-stats 0.11.0. flux-sim-engine 0.11.0 needs
+flux-stats 0.11, which the `[profile]` extra of data-product-forge accepts from
 0.9 up to 1.0, so the engine and `fluid profile` use the same flux-stats. Every
 step of this guide runs on them.
 
@@ -424,10 +424,10 @@ fluxsim run bundle --profile orders.profile.json
 ```
 
 ```text
-plan written to .flux/runs/86ef556c067d3a22/plan.json (runId=86ef556c067d3a22, planDigest=sha256:...)
-applied to .flux/runs/86ef556c067d3a22 (runDigest=sha256:...)
+plan written to .flux/runs/1f638f6d3e0b1251/plan.json (runId=1f638f6d3e0b1251, planDigest=sha256:...)
+applied to .flux/runs/1f638f6d3e0b1251 (runDigest=sha256:...)
 emitted orders: 600 rows (generator)
-run 86ef556c067d3a22 complete
+run 1f638f6d3e0b1251 complete
 ```
 
 The run writes under `.flux/runs/` in the current folder. Each row is a JSON
@@ -435,9 +435,9 @@ array in the contract's column order:
 
 ```console
 $ head -n 3 .flux/runs/*/emits/orders.ndjson
-["b6c0f40d5e8728f0344b787a9862436d","FR","97.75","2026-08-07T14:48:13.259Z"]
-["fdeed30a5cd97e57affbedb59e991946","FR","48.02","2026-09-20T12:36:08.548Z"]
-["0c14a0db78037457eab4a67ef2f7ec54","DE","98.97","2026-07-31T20:29:54.010Z"]
+["18404d71bb24bf88891370ac719cfbe7","GB","18.75","2026-07-28T19:27:44.402Z"]
+["81d5b20f3249ed05df13997f6629b141","FR","40.63","2026-07-27T11:44:52.264Z"]
+["752de568a871e672b29fb81f780c9c4a","IE","46.33","2026-07-14T10:46:46.408Z"]
 ```
 
 The same bundle gives the same bytes on any machine. Your run id, rows and
@@ -457,9 +457,9 @@ reproducible: not checked | validity: not asserted
   rows: ok
   ...
   fidelity orders: passed -- 1 of 1 declared property within the margin against the pinned profile
-  scorecard: overall 0.9916 against profile sha256:0370f0ad... (covers 1 of 4 columns, 0 of 0 relationships)
-    dimensions: marginals 0.9916; not measured: structure, joint, crossTable, temporal, invariants, queries, defects
-    table orders: 0.9916 (1 of 1 property scored); covers 1 of 4 columns, 0 of 0 relationships
+  scorecard: overall 0.9843 against profile sha256:0370f0ad... (covers 1 of 4 columns, 0 of 0 relationships)
+    dimensions: marginals 0.9843; not measured: structure, joint, crossTable, temporal, invariants, queries, defects
+    table orders: 0.9843 (1 of 1 property scored); covers 1 of 4 columns, 0 of 0 relationships
     shape: no flags in 4 profiled columns (3 tests at 1/1000 per run)
 ```
 
