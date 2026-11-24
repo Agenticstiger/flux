@@ -6,14 +6,9 @@ import { sitemapPlugin } from '@vuepress/plugin-sitemap'
 import { markdownChartPlugin } from '@vuepress/plugin-markdown-chart'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
-import { createRequire } from 'node:module'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SITE = 'https://agenticstiger.github.io/flux/'
-
-// The YAML reader gray-matter (VuePress's front matter parser) uses, found from
-// gray-matter itself so this file names no package of its own.
-const yaml = createRequire(createRequire(import.meta.url).resolve('gray-matter'))('js-yaml')
 
 export default defineUserConfig({
   lang: 'en-US',
@@ -43,24 +38,6 @@ export default defineUserConfig({
 
     ['meta', { name: 'keywords', content: 'flux, fluid, digital twin, synthetic data, simulation, data products, data contract, deterministic, governance, json schema' }],
   ],
-
-  // Front matter is read the way JSON.parse reads an object: a key written twice
-  // keeps its last value, where the strict reader refuses the page and stops the
-  // build. The engine's how-to index at v0.10.0 writes `description` twice, and
-  // the page cannot be changed here (see the note on /engine/ below). Drop this
-  // when a release of the engine has one description.
-  markdown: {
-    frontmatter: {
-      grayMatterOptions: {
-        engines: {
-          yaml: {
-            parse: (text: string) => yaml.safeLoad(text, { json: true }),
-            stringify: (data: object) => yaml.safeDump(data),
-          },
-        },
-      },
-    },
-  },
 
   // The pages under /engine/ are written in the engine's own repository and
   // copied here unchanged. An "Edit this page" link from this repository would
