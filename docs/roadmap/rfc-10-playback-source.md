@@ -1,3 +1,7 @@
+---
+description: "Proposed RFC-10: Playback reads a FLUID data profile as its source, replacing sourceStream and adding a fifth calibration target, response."
+---
+
 # RFC-10: Playback reads a FLUID data profile
 
 *Calibration · Playback · the FLUID seam*

@@ -33,6 +33,7 @@
     "@vuepress/plugin-copy-code": "2.0.0-rc.137",
     "@vuepress/plugin-markdown-chart": "2.0.0-rc.137",
     "@vuepress/plugin-search": "2.0.0-rc.137",
+    "@vuepress/plugin-seo": "2.0.0-rc.137",
     "@vuepress/plugin-sitemap": "2.0.0-rc.137",
     "@vuepress/theme-default": "2.0.0-rc.137",
     "mermaid": "^12.3.0",

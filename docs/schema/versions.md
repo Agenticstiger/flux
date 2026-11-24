@@ -1,3 +1,7 @@
+---
+description: "Every released FLUX schema version with its compatibility window, schema URLs and accepted FLUID versions, plus the versioning policy."
+---
+
 # Versions
 
 One schema file per released version, immutable once published, each with a

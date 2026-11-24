@@ -1,3 +1,7 @@
+---
+description: "The enforcement decision contract for agentPolicy and the evidence bundles that let a FLUX run be proven, both introduced in 0.5.0."
+---
+
 # Runtime & Evidence
 
 Through 0.4.1, FLUX was something you could *check*. From 0.5.0 it is also

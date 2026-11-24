@@ -1,3 +1,7 @@
+---
+description: "The structure of a FLUX JSON Schema file: the common envelope, per-kind dispatch, the shared definitions, and what the offline validator adds."
+---
+
 # Anatomy
 
 `flux-schema-<version>.json` is a JSON Schema **2020-12** document with a

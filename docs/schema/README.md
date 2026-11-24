@@ -1,3 +1,7 @@
+---
+description: "How the FLUX schema is published, one immutable JSON Schema per version at a stable URL, and the two layers of validation the offline validator applies."
+---
+
 # Schema Reference
 
 The FLUX schema is **one JSON Schema file per released version** — normative,

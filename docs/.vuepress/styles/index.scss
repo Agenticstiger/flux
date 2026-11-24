@@ -271,6 +271,66 @@ body {
 }
 
 // ---------------------------------------------------------------------
+// Prose measure. Running text is capped so a line stays readable on a wide
+// screen; tables and code blocks keep the full content width.
+//
+// The aim is about 75 characters a line. In Geist a `ch` (the width of "0") is
+// 0.66em, wider than the average letter, so 75ch would still allow about 100
+// characters a line, more than the 740px content column holds. Measured on the
+// built pages at 1280px, 52ch gives a median of 74 and a longest line of 77.
+// ---------------------------------------------------------------------
+:root {
+  --ff-prose-width: 52ch;
+}
+
+[vp-content] {
+  p,
+  li,
+  blockquote {
+    max-width: var(--ff-prose-width);
+  }
+
+  // A list item that carries a code block, a diagram or a table must not
+  // narrow it; its own paragraphs are capped by the rule above.
+  li:has(> div[class*="language-"], > pre, > .table-wrapper, > .mermaid-content, > table) {
+    max-width: none;
+  }
+
+  table :is(p, li, blockquote) {
+    max-width: none;
+  }
+}
+
+// ---------------------------------------------------------------------
+// Skip link (layouts/Layout.vue): the first focusable element, visible only
+// while focused. The page's <main> takes focus when it is followed.
+// ---------------------------------------------------------------------
+.ff-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  background: var(--vp-c-accent);
+  color: var(--vp-c-accent-text);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-300%);
+
+  &:focus,
+  &:focus-visible {
+    transform: none;
+    outline: 2px solid var(--vp-c-text);
+    outline-offset: 2px;
+  }
+}
+
+main[tabindex="-1"]:focus {
+  outline: none;
+}
+
+// ---------------------------------------------------------------------
 // Callouts (.hint-container) — brand left border + soft radius.
 // ---------------------------------------------------------------------
 .hint-container {
@@ -342,21 +402,25 @@ div[class*="language-"] {
 }
 
 // ---------------------------------------------------------------------
-// Tables — full width, alternating rows.
+// Tables — full width, alternating rows. Every Markdown table sits in a
+// .table-wrapper (added in config.ts), a focusable, labelled region that does
+// the horizontal scrolling, so a wide table can be scrolled from the keyboard.
 // ---------------------------------------------------------------------
+.table-wrapper {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border-radius: 10px;
+
+  &:focus-visible {
+    outline-offset: 0;
+  }
+}
+
 [vp-content] table {
   display: table;
   width: 100%;
+  margin: 0;
   border-collapse: collapse;
-  border-radius: 10px;
-  overflow: hidden;
-
-  // On a phone, a table wider than the screen scrolls inside its own box
-  // instead of widening the whole page.
-  @media (max-width: 719px) {
-    display: block;
-    overflow-x: auto;
-  }
 
   th {
     background: var(--vp-c-bg-alt);

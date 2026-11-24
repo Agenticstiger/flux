@@ -1,3 +1,7 @@
+---
+description: "How FLUX reproduces a run byte for byte from a seed, and how consent, sovereignty and agent policy are schema surfaces rather than policy documents."
+---
+
 # Deterministic & Governed
 
 FLUX is built on three non-negotiable properties. *Declarative* is covered in

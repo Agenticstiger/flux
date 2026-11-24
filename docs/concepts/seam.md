@@ -1,3 +1,7 @@
+---
+description: "Why a Simulation references the FLUID contract it is proven under instead of embedding it, so the contract that ships is byte for byte the one that was proven."
+---
+
 # The FLUID Seam
 
 The single most important design decision in FLUX: **a Simulation emits

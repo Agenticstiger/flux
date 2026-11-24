@@ -1,3 +1,7 @@
+---
+description: "What FLUX is, why a business question should not need a bespoke data generator, and how FLUX and FLUID interlock at one seam."
+---
+
 # Introduction
 
 FLUX — the *Flow Language for Universe eXperimentation* — is an open, declarative

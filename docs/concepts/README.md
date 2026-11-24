@@ -1,3 +1,7 @@
+---
+description: "FLUX and FLUID are separate standards that meet at one seam: FLUID is the contract for delivery, and FLUX is the language for discovery."
+---
+
 # Two Specs, One Substrate
 
 FLUX and [FLUID](https://open-data-protocol.github.io/fluid/) are separate

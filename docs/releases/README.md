@@ -1,3 +1,7 @@
+---
+description: "Release notes for every FLUX version from 0.3.0 to 0.5.4, with dates and highlights."
+---
+
 # What's New
 
 | Version | Date | Highlights |
