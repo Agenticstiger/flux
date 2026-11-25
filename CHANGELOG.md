@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.5.5 - 2026-11-25
+
+Specification 0.5.5
+([schema-diffs/diff-0.5.4-to-0.5.5.md](schema-diffs/diff-0.5.4-to-0.5.5.md)).
+The FLUX schema only widens its window. The FLUID 0.7.7 preview is re-pinned
+from forge-cli commit `e88301f7` to `471c2602` (`vendor/fluid-preview/pins.json`,
+sha256 `649b9bc5`), forge-cli's main branch, whose 0.7.7 schema forge-cli #1099
+wrote. These forge-cli changes reach the vendored schema:
+
+- forge-cli #1099 (`18ae44af`): a versioned table's validity window. The
+  `isEnd` dimension's `validityParams` may carry `openEnd`, the end an open
+  version holds (`null` or a literal of the end column's type), and `chain`,
+  how a closed version's end meets the same entity's next start (`nextStart`,
+  `dayBefore` or `none`). The natural entity may carry a `lifecycle`
+  (`activation`, `endMarker`, `currentFlag`), and a relationship an `asOf`
+  column, to reach the version valid on it.
+- forge-cli #1056 (`ba7b0758`): `alerts`, the routes that hear about the
+  failures, retries, successes and missed SLAs of the DAGs forge-cli
+  generates.
+- forge-cli #1057 (`99e7b051`) and #1068 (`aa3422e4`): an Iceberg expose's
+  `maintenance`, with a `runtime` for a table no forge-cli build writes.
+- forge-cli #975 (`07ac9da0`), #1015 (`931274a3`) and #1036 (`10da216a`):
+  Spark's `runtime: local`, a stream's `deadLetter` and
+  `maxOffsetsPerTrigger`, and a build's prebuilt PySpark `package`.
+- forge-cli #984 (`2806623c`): EMR on EKS names an image of the release
+  (`emr-X.Y.Z-latest` or `emr-X.Y.Z-YYYYMMDD`); EMR Serverless and EMR on EC2
+  name the release (`emr-X.Y.Z`). A `releaseLabel` of the form `emr-X.Y.Z`
+  with `runtime: emr-eks` validated under the old pin and is refused under the
+  new one.
+- forge-cli #1059 (`44bd291f`), #1062 (`db2ddfa3`) and #1065 (`18674bf8`): an
+  Airflow DAG id and task id follow Airflow's own rule (ASCII letters of either
+  case, digits, `_`, `.` and `-`, 1 to 250 characters), `dagId` is optional,
+  and `poolPerOutputTable` is new. An id longer than 250 characters, or one
+  that ends with a line break, validated under the old pin and is refused under
+  the new one.
+- forge-cli #958 (`5233b179`): a column type is checked in linear time, and
+  accepts the same values.
+- **schema**: `schema/flux-schema-0.5.5.json`, with the `fluxVersion` window
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2", "0.5.3", "0.5.4", "0.5.5"]`;
+  `flux-schema-latest.json` aliases it, the UI hints regenerate as
+  `flux-ui-hints-0.5.5.json`, and `flux_spec.SCHEMA_VERSION` and the package
+  version are `0.5.5`.
+- **evidence packs**: `verify` checks a pack's 0.7.7 contracts against the
+  preview this release carries, so a pack that 0.5.4 made from a contract with
+  one of the refused forms no longer verifies. Verify it with flux-spec 0.5.4.
+- **tests**: the regression suite checks that a 0.7.7 contract, in a bundle
+  that pins `fluxVersion: "0.5.2"`, may carry an open end of a date or `null`,
+  each `chain`, a `lifecycle`, `asOf`, an Airflow id in Airflow's spelling or
+  none, a local Spark runtime and an EMR on EKS image label; that a DAG id of
+  251 characters or ending with a line break, an EMR on EKS label without an
+  image, an unknown `chain`, a numeric `openEnd` and an empty `lifecycle` are
+  refused; that a pack made while the preview admitted a long DAG id no longer
+  verifies; that a 0.5.4 pack of the example verifies; and that the immutable
+  0.5.4 file refuses `fluxVersion: "0.5.5"` and differs from 0.5.5 in its id,
+  its description's version and the window alone. Against the old pin's bytes,
+  all 14 of the new preview checks fail.
+
 ## 0.5.4 - 2026-11-19
 
 Specification 0.5.4

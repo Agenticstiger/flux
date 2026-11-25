@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SCHEMA = json.loads((REPO / "schema" / "flux-schema-0.5.4.json").read_text())
+SCHEMA = json.loads((REPO / "schema" / "flux-schema-0.5.5.json").read_text())
 OUT = REPO / "docs" / "schema" / "kinds.md"
 
 FAMILIES = {
@@ -113,7 +113,7 @@ def main():
         "# The Nineteen Kinds",
         "",
         "> Generated from",
-        "> [`flux-schema-0.5.4.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.4.json)",
+        "> [`flux-schema-0.5.5.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.5.json)",
         "> by `scripts/generate-kinds-doc.py` — do not edit by hand.",
         "",
         "Every kind shares the [common envelope](/flux/schema/anatomy#the-envelope);",

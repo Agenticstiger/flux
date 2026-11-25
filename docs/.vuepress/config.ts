@@ -132,8 +132,8 @@ export default defineUserConfig({
           { text: 'The Nineteen Kinds', link: '/schema/kinds' },
           { text: 'Versions', link: '/schema/versions' },
           { text: 'Changelog', link: '/schema/changelog' },
-          { text: 'JSON Schema 0.5.4', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.5.4.json', target: '_blank' },
-          { text: 'UI Hints 0.5.4', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.4.json', target: '_blank' },
+          { text: 'JSON Schema 0.5.5', link: 'https://agenticstiger.github.io/flux/schema/flux-schema-0.5.5.json', target: '_blank' },
+          { text: 'UI Hints 0.5.5', link: 'https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.5.json', target: '_blank' },
           { text: 'Enforcement Contract 0.5.0', link: 'https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json', target: '_blank' },
           { text: 'Bundle Manifest 0.5.0', link: 'https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json', target: '_blank' },
         ],
@@ -325,7 +325,7 @@ export default defineUserConfig({
       '/releases/': [
         {
           text: "What's New",
-          children: ['/releases/README.md', '/releases/0.5.4.md', '/releases/0.5.3.md', '/releases/0.5.2.md', '/releases/0.5.1.md', '/releases/0.5.0.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
+          children: ['/releases/README.md', '/releases/0.5.5.md', '/releases/0.5.4.md', '/releases/0.5.3.md', '/releases/0.5.2.md', '/releases/0.5.1.md', '/releases/0.5.0.md', '/releases/0.4.1.md', '/releases/0.4.0.md', '/releases/0.3.0.md'],
         },
       ],
       '/contributing/': [
