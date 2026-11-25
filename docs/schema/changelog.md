@@ -6,6 +6,37 @@ description: "A human-written diff for each released pair of FLUX schema version
 
 One human-written diff per released version pair. The regression suite pins every behavioral change.
 
+## 0.5.4 → 0.5.5
+
+**The FLUX schema only widens its window; the FLUID 0.7.7 preview moves to a
+newer pin.** Every FLUX document that validated under 0.5.4 validates under
+0.5.5 (regression-asserted). A bundle's FLUID 0.7.7 contracts are checked
+against the new pin, which accepts a versioned table's validity window and
+more, and refuses three forms the old pin accepted.
+
+- The 0.7.7 preview is re-pinned from forge-cli commit `e88301f7` to
+  `471c2602`, whose schema forge-cli #1099 wrote. A 0.7.7 contract may now
+  give the end of a validity window its `openEnd` (`null` or a literal of the
+  end column's type) and its `chain` (`nextStart`, `dayBefore` or `none`), the
+  natural entity a `lifecycle`, and a relationship an `asOf` column. It may
+  also declare `alerts`, an Iceberg table's `maintenance`, a Spark build on
+  `runtime: local` or from a prebuilt `package`, a stream's `deadLetter` and
+  `maxOffsetsPerTrigger`, and an Airflow DAG or task id in Airflow's own
+  spelling, capitals, dots and dashes included.
+- Refused now, accepted by 0.5.4: an Airflow `dagId` or `taskId` longer than
+  250 characters or ending with a line break, and `runtime: emr-eks` with a
+  `releaseLabel` of the form `emr-X.Y.Z`, where EMR on EKS names an image
+  (`emr-X.Y.Z-latest` or `emr-X.Y.Z-YYYYMMDD`).
+- A pack that 0.5.4 made from a contract with one of those forms no longer
+  verifies under 0.5.5: it reports `bundle no longer validates against
+  flux-schema-0.5.4.json` and names the path. Verify it with flux-spec 0.5.4.
+  The move does not reset the window (VERSIONING.md, FLUID previews).
+- `fluxVersion` enum widens to
+  `["0.3.0", "0.4.0", "0.4.1", "0.5.0", "0.5.1", "0.5.2", "0.5.3", "0.5.4", "0.5.5"]`.
+- `$id` → `flux-schema-0.5.5.json`; `flux-schema-latest.json` aliases 0.5.5;
+  UI hints regenerate as `flux-ui-hints-0.5.5.json`. The enforcement and
+  manifest contracts are unchanged and keep their 0.5.0 files.
+
 ## 0.5.3 → 0.5.4
 
 **The FLUX schema only widens its window; the validator's input bounds

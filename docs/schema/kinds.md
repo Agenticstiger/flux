@@ -5,7 +5,7 @@ description: "A field-by-field reference for each of the nineteen FLUX kinds, ge
 # The Nineteen Kinds
 
 > Generated from
-> [`flux-schema-0.5.4.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.4.json)
+> [`flux-schema-0.5.5.json`](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.5.json)
 > by `scripts/generate-kinds-doc.py` — do not edit by hand.
 
 Every kind shares the [common envelope](/flux/schema/anatomy#the-envelope);

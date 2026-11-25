@@ -29,7 +29,7 @@ FLUX discovers.  FLUID delivers.  The seam is where the risk goes to die.
 
 ## Status
 
-**FLUX 0.5.4 is the current release**, a working draft, on PyPI as
+**FLUX 0.5.5 is the current release**, a working draft, on PyPI as
 `flux-spec`. [docs/schema/versions.md](docs/schema/versions.md) lists every
 release. All nine [vNext RFCs](docs/roadmap/rfcs.md) have shipped additively on
 the 0.3.0 core: the spec carries a runtime enforcement contract with

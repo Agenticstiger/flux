@@ -168,6 +168,7 @@ sim_exact_077 = envelope_052(
 
 envelope_053 = functools.partial(envelope, flux_version="0.5.3")
 envelope_054 = functools.partial(envelope, flux_version="0.5.4")
+envelope_055 = functools.partial(envelope, flux_version="0.5.5")
 
 
 # 0.5.3: the window widens, and the FLUID 0.7.7 preview moves to a newer pin
@@ -177,6 +178,11 @@ sim_exact_077_053 = envelope_053(
 )
 # 0.5.4: the window widens, and no constraint of the schema changes
 sim_exact_077_054 = envelope_054(
+    "Simulation", worldRef="w",
+    emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
+)
+# 0.5.5: the window widens, and the FLUID 0.7.7 preview moves to forge-cli 471c2602
+sim_exact_077_055 = envelope_055(
     "Simulation", worldRef="w",
     emits=[{"productRef": "p", "exposeId": "x", "fluidVersion": "0.7.7"}],
 )
@@ -191,6 +197,7 @@ sim_bad_digest = envelope_041(
 )
 
 CASES_PASS = {
+    "0.5.5: a 0.5.5 document pins the FLUID 0.7.7 preview exactly": sim_exact_077_055,
     "0.5.4: a 0.5.4 document pins the FLUID 0.7.7 preview exactly": sim_exact_077_054,
     "0.5.3: a 0.5.3 document pins the FLUID 0.7.7 preview exactly": sim_exact_077_053,
     "0.5.2: exact FLUID 0.7.7 (preview) pin at the seam": sim_exact_077,
@@ -856,6 +863,30 @@ def check_the_window_widens_in_0_5_4() -> list[str]:
     return failures
 
 
+def check_the_window_widens_in_0_5_5() -> list[str]:
+    """0.5.5 only widens the window of the FLUX schema (schema-diffs/diff-0.5.4-to-0.5.5.md): the immutable 0.5.4
+    file refuses a 0.5.5 document, and the two files differ in their id, the version their description names and
+    the window. The FLUID 0.7.7 preview's pin move is not the FLUX schema's (check_preview_repin_471)."""
+    failures = []
+    schema_054 = json.loads((REPO / "schema" / "flux-schema-0.5.4.json").read_text(encoding="utf-8"))
+    schema_055 = json.loads((REPO / "schema" / "flux-schema-0.5.5.json").read_text(encoding="utf-8"))
+    if not list(Draft202012Validator(schema_054).iter_errors(sim_exact_077_055)):
+        failures.append("[schema] a 0.5.5 document should fail the immutable 0.5.4 schema (fluxVersion window)")
+    if schema_055["properties"]["fluxVersion"]["enum"] != schema_054["properties"]["fluxVersion"]["enum"] + ["0.5.5"]:
+        failures.append("[schema] the 0.5.5 window is not the 0.5.4 window and 0.5.5")
+
+    def without_the_version(schema, version):
+        stripped = copy.deepcopy(schema)
+        stripped.pop("$id")
+        stripped["description"] = stripped["description"].replace(f"FLUX v{version} ", "FLUX v<version> ")
+        stripped["properties"]["fluxVersion"].pop("enum")
+        return stripped
+
+    if without_the_version(schema_054, "0.5.4") != without_the_version(schema_055, "0.5.5"):
+        failures.append("[schema] 0.5.5 changes something besides its id, its description and the window")
+    return failures
+
+
 def check_pack_from_looser_preview(flux_validator) -> list[str]:
     """verify reads the preview the running release carries (VERSIONING.md,
     FLUID previews): a pack made while the 0.7.7 preview admitted
@@ -886,6 +917,143 @@ def check_pack_from_looser_preview(flux_validator) -> list[str]:
                     "fails FLUID 0.7.7 (preview): $.exposes[0].contract.schema[4].type")
         if rc == 0 or not all(fragment in said for fragment in expected):
             return [f"[bundle] a pack made under a looser 0.7.7 preview was not refused for its enum: {said.strip()}"]
+    return []
+
+
+# --- 0.5.5: the FLUID 0.7.7 preview re-pinned to forge-cli 471c2602 ----------
+
+def _versioned_risk(open_end="9999-12-31", chain="nextStart", lifecycle=None):
+    """Make the towers risk rows a versioned table: two DATE columns bound a
+    validity window whose end holds *open_end* on an open version (no openEnd
+    when it is ...), the tenant is the natural entity, and the relationship to
+    the tenant reaches the version valid at detected_at."""
+    def change(contract):
+        risk = contract["exposes"][0]
+        risk["contract"]["schema"] += [
+            {"name": "valid_from", "type": "DATE", "required": True},
+            {"name": "valid_to", "type": "DATE", "required": False},
+        ]
+        end = {"isEnd": True}
+        if open_end is not ...:
+            end["openEnd"] = open_end
+        if chain is not None:
+            end["chain"] = chain
+        entity = {"name": "tenant", "type": "natural", "expr": "tenant_id"}
+        if lifecycle is not None:
+            entity["lifecycle"] = lifecycle
+        risk["semantics"]["entities"] = [entity]
+        risk["semantics"]["dimensions"] = [
+            {"name": "valid_from", "type": "time", "typeParams": {"validityParams": {"isStart": True}}},
+            {"name": "valid_to", "type": "time", "typeParams": {"validityParams": end}},
+        ]
+        risk["semantics"]["relationships"][0]["asOf"] = "detected_at"
+    return change
+
+
+def _airflow(**airflow):
+    """Give the towers contract an Airflow orchestration block."""
+    def change(contract):
+        contract["orchestration"] = {"engine": "airflow", "airflow": airflow}
+    return change
+
+
+def _spark(runtime, **spark):
+    """Give the towers contract an embedded-logic Spark build on *runtime*."""
+    def change(contract):
+        contract["builds"] = [{
+            "id": "risk_build", "pattern": "embedded-logic", "engine": "spark",
+            "properties": {"sql": "SELECT 1", "parameters": {"spark": {"runtime": runtime, **spark}}},
+        }]
+    return change
+
+
+#: What the 471c2602 pin accepts in a 0.7.7 contract. The e88301f7 pin that
+#: flux-spec 0.5.4 carried refused each of them (schema-diffs/diff-0.5.4-to-0.5.5.md).
+REPIN_471_ACCEPTS = {
+    "an open end of 9999-12-31, each version ending where the next starts": _versioned_risk(),
+    "an open end of null, each version ending the day before the next starts":
+        _versioned_risk(open_end=None, chain="dayBefore"),
+    "a validity window with no open end and no chain between versions": _versioned_risk(open_end=..., chain="none"),
+    "an entity lifecycle with an activation, an end marker and a current flag": _versioned_risk(lifecycle={
+        "activation": "valid_from",
+        "endMarker": {"column": "lifecycle_stage", "value": "closed"},
+        "currentFlag": {"column": "lifecycle_stage", "value": "active"},
+    }),
+    "an Airflow DAG id with capitals, a dot and a dash": _airflow(dagId="Towers.Renewal-Risk"),
+    "an Airflow block without a DAG id": _airflow(poolPerOutputTable=True),
+    "a Spark build on this machine": _spark("local"),
+    "EMR on EKS with a release label that names an image":
+        _spark("emr-eks", virtualClusterId="vc1abc", releaseLabel="emr-7.12.0-latest"),
+}
+
+#: What it refuses, and where the preview says so. The first three validated
+#: under the e88301f7 pin.
+REPIN_471_REFUSES = {
+    "an Airflow DAG id of 251 characters": (_airflow(dagId="d" * 251), "$.orchestration.airflow.dagId"),
+    "an Airflow DAG id that ends with a line break": (_airflow(dagId="towers_renewal\n"), "$.orchestration.airflow.dagId"),
+    "EMR on EKS with a release label that names no image": (
+        _spark("emr-eks", virtualClusterId="vc1abc", releaseLabel="emr-7.12.0"),
+        "$.builds[0].properties.parameters.spark.releaseLabel"),
+    "a chain other than nextStart, dayBefore and none": (
+        _versioned_risk(chain="previousEnd"),
+        "$.exposes[0].semantics.dimensions[1].typeParams.validityParams.chain"),
+    "an open end that is a number": (
+        _versioned_risk(open_end=5),
+        "$.exposes[0].semantics.dimensions[1].typeParams.validityParams.openEnd"),
+    "an empty lifecycle": (_versioned_risk(lifecycle={}), "$.exposes[0].semantics.entities[0].lifecycle"),
+}
+
+
+def check_preview_repin_471(flux_validator) -> list[str]:
+    """0.5.5 re-pins the 0.7.7 preview to forge-cli 471c2602: a 0.7.7 contract,
+    in a bundle that pins fluxVersion 0.5.2, is checked against the new pin,
+    which accepts and refuses what REPIN_471_ACCEPTS and REPIN_471_REFUSES list."""
+    failures = []
+    for label, change in REPIN_471_ACCEPTS.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            _towers_on(bundle, "0.7.7", "0.7.7", change=change)
+            errors = Bundle(bundle, flux_validator).run()
+            if errors:
+                failures.append(f"[preview] the 0.7.7 preview refused {label}: {errors[:3]}")
+    for label, (change, where) in REPIN_471_REFUSES.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            _towers_on(bundle, "0.7.7", "0.7.7", change=change)
+            errors = Bundle(bundle, flux_validator).run()
+            if not any(f"fails FLUID 0.7.7 (preview): {where}" in e for e in errors):
+                failures.append(f"[preview] the 0.7.7 preview did not refuse {label} at {where}: {errors[:3]}")
+    return failures
+
+
+def check_pack_from_the_e88301f7_preview(flux_validator) -> list[str]:
+    """A pack made while the 0.7.7 preview admitted an Airflow DAG id of 251
+    characters, as flux-spec 0.5.4's e88301f7 pin did, no longer verifies, and
+    says why (VERSIONING.md, FLUID previews)."""
+    validate_impl = sys.modules[Bundle.__module__]
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        # a stand-in for the old pin: this preview with the DAG id left open
+        looser = json.loads((PREVIEW_DIR / "fluid-schema-0.7.7.json").read_text(encoding="utf-8"))
+        looser["$defs"]["airflowOrchestration"]["properties"]["dagId"] = {"type": "string"}
+        looser_dir = tmp / "looser-preview"
+        looser_dir.mkdir()
+        (looser_dir / "fluid-schema-0.7.7.json").write_text(json.dumps(looser), encoding="utf-8")
+        source = tmp / "source"
+        _towers_on(source, "0.7.7", "0.7.7", change=_airflow(dagId="d" * 251))
+        real = validate_impl.FLUID_PREVIEW_DIR
+        validate_impl.FLUID_PREVIEW_DIR = looser_dir
+        try:
+            rc, archive = _pack_as("0.5.4", source, tmp / "bundle", tmp / "dist")
+        finally:
+            validate_impl.FLUID_PREVIEW_DIR = real
+        if rc != 0:
+            return ["[bundle] could not pack a 251-character DAG id under a looser 0.7.7 preview, so its refusal is untested"]
+        rc, said = _verify_output(archive, flux_validator)
+        expected = ("bundle no longer validates against flux-schema-0.5.4.json",
+                    "fails FLUID 0.7.7 (preview): $.orchestration.airflow.dagId")
+        if rc == 0 or not all(fragment in said for fragment in expected):
+            return [f"[bundle] a pack made under the looser 0.7.7 preview was not refused for its DAG id: {said.strip()}"]
     return []
 
 
@@ -958,7 +1126,7 @@ def check_packs_across_releases(flux_validator) -> list[str]:
         failures.append(f"[bundle] the window {WINDOW} does not resolve to one shipped schema per version: {sorted(accepted)}")
 
     # the releases that shipped the bundler before this one: their packs are in the wild
-    for version in ("0.5.0", "0.5.1", "0.5.2", "0.5.3"):
+    for version in ("0.5.0", "0.5.1", "0.5.2", "0.5.3", "0.5.4"):
         with tempfile.TemporaryDirectory() as tmp:
             work, out = Path(tmp) / "bundle", Path(tmp) / "dist"
             rc, archive = _pack_as(version, EXAMPLES, work, out)
@@ -2740,6 +2908,11 @@ def main() -> int:
     # 0.5.4: the window widens and nothing else in the schema
     failures += check_the_window_widens_in_0_5_4()
 
+    # 0.5.5: the window widens, and the FLUID 0.7.7 preview moves to forge-cli 471c2602
+    failures += check_the_window_widens_in_0_5_5()
+    failures += check_preview_repin_471(flux_validator)
+    failures += check_pack_from_the_e88301f7_preview(flux_validator)
+
     # ref-like keys inside free-form payloads must not be flagged
     with tempfile.TemporaryDirectory() as tmp:
         bundle = Path(tmp) / "bundle"
@@ -3073,7 +3246,9 @@ def main() -> int:
         + 6   # RFC-09 prior-art hardening: .sig smuggling, in-toto statement x3, merkle x2
         + 11  # RFC-09 negative fixtures: 8 archive attacks + 2 malformed inputs + size cap
         + 1   # 0.5.4: the window widens and nothing else in the schema
-        + 9   # RFC-09 across releases: window resolves, 0.5.0, 0.5.1, 0.5.2 and 0.5.3 packs verify, named
+        + 16  # 0.5.5: the window widens and nothing else in the schema, 8 forms the 471c2602 pin accepts,
+              # 6 it refuses, a pack made under the e88301f7 preview refused
+        + 10  # RFC-09 across releases: window resolves, 0.5.0, 0.5.1, 0.5.2, 0.5.3 and 0.5.4 packs verify, named
               # schema applied, 0.2.0 and a newer release refused, a reset window refuses a 0.5.1 pack
         + 3   # RFC-09 pack refuses a linked file, a linked directory and a planted manifest link
         + 1   # RFC-09 the manifest write never follows a link that appears after that refusal

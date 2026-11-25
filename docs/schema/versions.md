@@ -10,7 +10,8 @@ window** — the document versions it accepts.
 
 | Version | Status | Window | Schema |
 |---|---|---|---|
-| **0.5.4** | current | `0.3.0` to `0.5.4` | [flux-schema-0.5.4.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.4.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.4.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) (both unchanged from 0.5.0) |
+| **0.5.5** | current | `0.3.0` to `0.5.5` | [flux-schema-0.5.5.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.5.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.5.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) (both unchanged from 0.5.0) |
+| 0.5.4 | superseded (additively for FLUX; the 0.7.7 preview moved) | `0.3.0` to `0.5.4` | [flux-schema-0.5.4.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.4.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.4.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) (both unchanged from 0.5.0) |
 | 0.5.3 | superseded (additively for FLUX; the validator's input bounds tightened) | `0.3.0` to `0.5.3` | [flux-schema-0.5.3.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.3.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.3.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) (both unchanged from 0.5.0) |
 | 0.5.2 | superseded (additively for FLUX; the 0.7.7 preview moved) | `0.3.0` to `0.5.2` | [flux-schema-0.5.2.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.2.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.2.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) |
 | 0.5.1 | superseded (additively) | `0.3.0` to `0.5.1` | [flux-schema-0.5.1.json](https://agenticstiger.github.io/flux/schema/flux-schema-0.5.1.json) + [UI hints](https://agenticstiger.github.io/flux/schema/flux-ui-hints-0.5.1.json) · [enforcement](https://agenticstiger.github.io/flux/schema/flux-enforcement-0.5.0.json) · [manifest](https://agenticstiger.github.io/flux/schema/flux-manifest-0.5.0.json) |
@@ -32,9 +33,9 @@ vendored by this release: the releases **0.7.3, 0.7.4, 0.7.5, 0.7.6**, and the
 exact pin `"0.7.7"` selects it: a range such as `^0.7.3` never does. Widening
 the window is additive; narrowing it is breaking.
 
-Since 0.5.3 the preview is pinned to forge-cli commit `e88301f7`, and 0.5.4
-does not move it. A preview can change when its pin moves, and the 0.5.3 move
-changed what it accepts: the
+Since 0.5.5 the preview is pinned to forge-cli commit `471c2602`; 0.5.3 and
+0.5.4 pinned it to `e88301f7`. A preview can change when its pin moves, and
+each move changed what it accepts: the
 [changelog](/flux/schema/changelog) lists what a 0.7.7 contract may now carry
 and what is refused.
 
