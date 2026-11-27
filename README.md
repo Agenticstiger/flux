@@ -84,7 +84,7 @@ spec:
   emits:
     - productRef: telco.gold.payment_recovery_moment   # a .fluid.yml in the bundle
       exposeId: payment_recovery_moment                # an expose of that product
-      fluidVersion: "0.7.5"                            # validated against the vendored FLUID schema
+      fluidVersion: "0.7.6"                            # validated against the vendored FLUID schema
 ```
 
 The offline validator resolves the reference, validates the `.fluid.yml`
