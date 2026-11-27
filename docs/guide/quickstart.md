@@ -81,7 +81,7 @@ A `Simulation` emits streams under a FLUID contract by **reference**. Add a
 FLUID DataProduct (`my-universe/hello.fluid.yml`):
 
 ```yaml
-fluidVersion: "0.7.5"
+fluidVersion: "0.7.6"
 kind: DataProduct
 id: demo.gold.hello_stream
 name: Hello Stream
@@ -118,7 +118,7 @@ spec:
   emits:
     - productRef: demo.gold.hello_stream
       exposeId: hello_stream
-      fluidVersion: "0.7.5"
+      fluidVersion: "0.7.6"
 ```
 
 ```bash
@@ -127,7 +127,7 @@ python3 -m flux_spec.validate my-universe
 ```
 
 The validator resolved `productRef`, validated `hello.fluid.yml` against the
-vendored FLUID 0.7.5 schema, and asserted the expose exists. If the FLUID
+vendored FLUID 0.7.6 schema, and asserted the expose exists. If the FLUID
 document were invalid — or the pinned version wrong, or the exposeId missing —
 the bundle fails. **What the twin proves is exactly what ships.**
 

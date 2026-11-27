@@ -326,7 +326,7 @@ is laid out by section 8.1:
 
 A conditional link (KERNEL-SPEC §8.2, the Simulation's `links` key) and a bridge table's pair layout (the `bridges` key,
 with `permute/2` and `flux-key/2` as above) are generated under `0.2.0` only; kernel `0.1.0` refuses either key with
-`FLX-3105`, naming the kernel.
+`FLX-3105`, naming the kernel. So is an association table (the `associations` key, section 8.7).
 
 ### 8.1 Children per parent: the counted layout
 
@@ -591,18 +591,30 @@ length another way there, given the version's state, without moving any position
 
 **The ended allocation.** With an `end`, the eligible entities are, under `closeLast`, every entity, or with a
 `column` every entity with at least two versions, and under `finalVersion` the entities with at least two versions.
-Let `E'` be their number and `share` the entry's decimal:
+Let `E'` be their number, `E` the number of all entities and `share` the entry's decimal. The share is a share
+of every entity, and the entities that end are chosen among the eligible ones:
 
 ```text
-n = LRM(E', [share, 1 - share])[0]       keyed "0" and "1"
+n = min(LRM(E, [share, 1 - share])[0], E')       keyed "0" and "1"
 entity of eligible rank r ends  <=>  permute/2(K_end, E', r) < n
 ```
 
-With no eligible entity, none ends. Under `closeLast` an ended entity's last
+With no eligible entity, none ends, and when fewer than the share's `n` are eligible every eligible entity ends. Under `closeLast` an ended entity's last
 version is closed, with its own drawn length inside the fit, at `s_last + d_last` under `nextStart` and at the day
 before, `s_last + d_last - 1` day, under `dayBefore`. Under `finalVersion` its last version
 is a final version that carries the entry's `value` in `column` and stays open. The ending change is forced and draws
 nothing.
+
+**Plans written before the share moved.** Engine 0.11.1 and earlier took `share` of the eligible entities alone,
+`n = LRM(E', [share, 1 - share])[0]`, with the same permutation. A plan states which count it was made with: `plan`
+writes `historyEndShare: "entities"` into `plan.json` when an emit declares a history with an `end` that leaves an
+entity ineligible (a `column`, or `finalVersion`), so the plan digest covers it. Every other plan has no key, since
+with every entity eligible `E' = E` and the two counts are one. A recorded plan without the key replays the earlier
+count, so a run id made before the change replays to the run digest it recorded; planning the same bundle again
+carries the key, and moves the plan digest, the run id and the bytes of the history and of every table that reads
+it. Any other value of the key is refused (`FLX-2102`). Kernel `0.2.0` did not change: the key is read only for a
+bundle that declares such an `end`, and an engine without this paragraph ignores it, so it replays a plan that
+carries the key to the earlier count and so to other bytes (section 12).
 
 **Change reasons.** The ordinary changes are every version after an entity's first except an ending version,
 numbered `t` in row order, `T` of them. With one tracked column it is the reason of every change. Otherwise the
@@ -621,6 +633,39 @@ version's key, the parent's key, a validity column, the activation, a tracked co
 rule sets takes, on every version, the value its own cell draws on the entity's first version row. The later rows'
 cells are never drawn, which moves no draw, since every cell has its own counter. A foreign key other than the
 parent's is picked on the first version row and carried too. Rules run on each version row after these values.
+
+**The parent bound.** An entry with `parent.lifetime: true` keeps each entity to the lifetime `[ps, pe]` of its parent
+row (ADR 0017, amendment of 2026-11-24). `ps` and `pe` are the parent's start and last-day cells in the chain's unit
+(a DATE end covers its whole day, so a millisecond chain reads it to the last millisecond of that day); `ps` is absent
+for a NULL start, and `pe` when there is no end, the end is NULL or it is before `ps`, and an absent bound cuts
+nothing. The parents' lifetimes are final cells read at plan time, so the entities per parent (above) are worked out
+first. Every array below is a plan-time array over the entities, which a slice, `--jobs`, `--shard`, the column path and
+the per-row path read alike. A bundle that does not declare the key keeps every byte.
+
+- *The limit.* The chain of entity `e` must end at `limit = min(until, pe)`, which is `until` when `pe` is absent.
+  With `z = 1` when an ended entity's last version is closed (`closeLast`, or no `end`, where only the forced
+  entities below end), and `z = 0` otherwise, the entity's chain holds `room - z - 1` versions at most, where
+  `room = limit - a` and `a` is its first start.
+- *The interval.* The first start is drawn as above, at position 0 of its `history` path, from the part of `start`
+  inside `[max(first, ps), limit - (c + z) - 1]` when that is not empty, with `first` the window's first unit,
+  so an entity whose parent cuts nothing draws what it draws without the key. Otherwise it is drawn inside
+  `[max(first, ps), limit - z - 2]`, the room for one version. When that too is empty for any entity, the plan is
+  `FLX-3403`, naming `history(<emit>).parent.lifetime`, the number of such entities and the ranges of their parents'
+  starts and last days. An empty `J` for the whole history is refused as it is without the key.
+- *The room.* `V` is worked out as above, with `expected` each entity's `limit - a`, so the rank coupling reads the
+  limit. Each count is then capped at `room - z - 1`, and the `L` versions above the caps go one at a time to the
+  entities under their cap, in rounds: a round gives one to each entity still under its cap, in order of
+  `room` descending and entity index ascending, until the `L` are placed or no entity is under its cap
+  (the allotment `counts._capped` makes for a `one_to_one` relationship, with a cap for each entity). The `L'` that
+  found none are the shortfall, and the layout holds `N - L'` rows: the emit is planned at them, so its plan, its
+  rows and its verification count the rows it has, and `V` is always worked out from the declared `N`.
+- *The forced entities.* An entity whose `pe` is at or before `until` is forced to end whatever its count: under
+  `finalVersion` its final version starts the day before `pe` at the latest and carries `value`, under `closeLast` or
+  with no `end` its last version closes the day before `pe` at the latest. With `f` forced entities and `n` as in
+  the ended allocation (`E'` counting the forced entities too), the others end by
+  `permute/2(K_end, E'', r) < n - f`, with `E''` the eligible entities that are not forced and `r` the rank among
+  them, and when `f` is at least `n` every forced entity ends and no other does. Without a forced entity this is the
+  ended allocation unchanged.
 
 **The paths.** The counter of the `history` path is `(entity, 0, draw, attempt)` and of the `change` path
 `(entity, version, draw, attempt)`, by section 2's ordinal parts.
@@ -802,6 +847,56 @@ could reorder a sum, and the same probes per row, so it equals the per-row path 
 or are infinite included. A row's values depend on its ordinal alone, so `--jobs 1` and `--jobs 4` give the same
 digests, the shards of `--shard I/N` concatenate to the whole run, and `--scale` changes only the number of rows.
 
+### 8.7 Association tables (ADR 0039)
+
+An emit that an `associations` entry names, `{emit, relationships: [a, b], distinct}`, puts both relationships on
+the counted layout and pairs them. All arithmetic is on exact integers; `E` is the emit's rows, `P_a` and `P_b` the
+two parents' rows.
+
+1. **Degrees.** `d_a` is section 8.1's layout of `E` child rows over `P_a` parents under the key of the `count` path of
+   `a` and the shape of `a`'s `counts` entry (none: every rank weighs 1), with its `minChildren`; `d_b` likewise. Both
+   sum to `E`.
+2. **Caps** (`distinct` only; `E > P_a * P_b` is `FLX-3403`). Each `d_a[p]` above `P_b` is cut to `P_b`; the excess
+   `X` goes, in rounds, to the parents under the cap: weights `w_p = d_a[p]` for a parent under it and `0` otherwise
+   (every parent under it weighs 1 when they all weigh 0), `floor(X * w_p / W)` each and the `X - sum` parents with the
+   largest remainders one more, a tie to the lower row, each gain cut to the parent's room, until none is left. Then
+   `d_b` against `P_a` the same way.
+3. **Gale-Ryser** (`distinct` only). With `b` the second side sorted in decreasing order, the gap is
+   `max(0, max_k (b_1 + ... + b_k - sum_p min(d_a[p], k)))` over `k = 1 .. P_b`. While the gap `g` is above 0, `g` moves
+   are made, each taking a row from the first parent of most rows of `d_b` (the lowest row among equals) to the first
+   parent of fewest, and the gap is taken again.
+4. **Pairs.** `o_a`, `o_b` are the offsets (the sum of the counts before each parent). Row `r`'s first-side parent is
+   the `p` with `o_a[p] <= r < o_a[p] + d_a[p]`, and its second-side parent the last `q` with `o_b[q] <= s`,
+   `s = permute/2(K, E, r)`, `K` the key of the path `("sim", sim_id, "gen", exposeId, "associate", a, b, "stubs")`:
+   `sha256("flux-seed/2" NUL root NUL key_label(path))`, as section 8.1 derives a count key.
+5. **Repair** (`distinct` only). A row is *repeated* when an earlier row holds its pair; the pairs held so at the start
+   are the *repeated pairs*. The switches run in rounds `t = 0 .. 63`: round `t` takes every repeated row `r` still
+   waiting, in row order, and its partner `s = permute/2(K', E, (64 r + t) mod E)` with `K'` the key of the path
+   ending `"switches"`. With `(a, b)` and `(a', b')` the two rows' pairs, the switch is made when `s` is not a
+   repeated row still waiting, `a != a'`, `b != b'`, `(a', b')` is no repeated pair, and neither `(a, b')` nor
+   `(a', b)` is held: the rows become `(a, b')` and `(a', b)`, and `r` stops waiting. The rows still waiting are then
+   placed: their second-side parents form a multiset of stubs; their first-side parents, most waiting rows first (the
+   lower row on a tie), each take, for their rows in row order, the parents of the stubs left that they do not pair
+   with, most stubs first (the lower row on a tie). When a parent finds fewer such stubs than rows, every row's
+   second-side parent is laid out again and no switch or placement is kept: first-side parents in decreasing order of
+   `d_a` (the lower row on a tie) each take the `d_a[p]` second-side parents with the most stubs left, a tie going to
+   the lower rank `(sigma(q) + tau(p)) mod P_b` with `sigma(q) = permute/2(K, P_b, q)` and
+   `tau(p) = permute/2(K, P_a, p)`, held by its rows in ascending order of that rank. The keyed ties give parents of
+   as many rows different second-side parents, so a dense table holds no block pattern.
+
+With `distinct: false` steps 2, 3 and 5 are skipped and a row's parents are a function of its index alone. The repair
+reads every row: the process that starts a run's worker pool works it out once and hands it to every worker, and a
+process that writes the emit without a pool works it out itself, so `--jobs`, chunking and `--shard` keep the bytes.
+The `associate` path is a key only, with no draw.
+
+**The distance.** A side's distance from its shape is the total variation distance between its parents counted into
+the shape's classes and the classes' weights. A count that no class holds (below the first, above the last, between
+two levels) is a mass of its own whose weight is 0, so it adds its whole share to the distance.
+
+**Section 12.** The `associate` path is additive: the literal `associate` stands after `exposeId` where no other shape
+has it, only a bundle that declares `associations` reads it, nothing that exists moves, and
+`tests/vectors/kernel2-association-vectors.json` holds its keys and five layouts.
+
 ## 9. What stays as KERNEL-SPEC states it
 
 Canonicalisation and digests (§2), the path table and `seedTreeDigest` (§3), the Largest Remainder Method (§5),
@@ -829,6 +924,7 @@ of a column a key of its own.
 | `tests/vectors/kernel2-counted-given-vectors.json` | Section 8.1's counted layouts given a class of a parent column: the path's key label and key, `e`, the classes of the column with each one's weights, the class of each eligible parent, `sigma`, the slot values, the expected counts as exact fractions, the counts per parent row and their offsets, with and without a hook. |
 | `tests/vectors/kernel2-binned-given-vectors.json` | A column drawn given a column drawn from bins (SEAM-FIDELITY-SPEC.md section 2): for chosen rows, the key, counters and blocks of each column's own cell path, the bin and class the parent drew, the place inside the bin and the value, the class named by the text of its lower edge. |
 | `tests/vectors/kernel2-dates-vectors.json` | The dates stream of EXPR-SPEC-2 section 7: its key label, key, counters and blocks at positions 0, 1 and 257 for a DATE column and for a TIMESTAMP column, and the cell path of a hidden column; the thinning positions 2, 3 and 256 and a thinning run over a fixed intensity. |
+| `tests/vectors/kernel2-association-vectors.json` | Section 8.7's pairing: for five layouts (sparse, repeats allowed, capped, moved by the Gale-Ryser step, and dense, laid out again whole), the `associate` path, its stubs and switches keys, each side's parent rows, shape and degrees, the rows, the moves, what the repair did and the second side's parent of every row. |
 
 Words, keys and binary64 values are written as hex digits. Integers that can exceed `2^53` (uniforms, bounds,
 domains, images, thresholds) are decimal strings; small ones (ordinals inside a path, draw indices, attempts, lengths,

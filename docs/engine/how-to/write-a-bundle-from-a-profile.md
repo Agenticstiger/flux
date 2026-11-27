@@ -185,7 +185,7 @@ unused (no number rests on these; the register lists them):
   - /tables/orders/columns/country/metrics/count (count/1): no rule of fluxsim init reads this statistic for this column
   - /tables/orders/columns/created_at/metrics/count (count/1): no rule of fluxsim init reads this statistic for this column
   - /tables/orders/columns/created_at/metrics/distinctCount (distinctCount/1): no rule of fluxsim init reads this statistic for this column
-a profile of the contract would replace assumptions (bundle.assumptions.profile-request.yml asks a profiler for them):
+a profile of the contract would replace assumptions (bundle/requests/assumptions.profile-request.yml asks a profiler for them):
   - /tables/orders/columns/amount/metrics/nullCount (nullCount/1): 1 assumed number
   - /tables/orders/columns/amount/statistics/0 (marginalHistogram/1): 8 assumed numbers
   - /tables/orders/columns/country/statistics/0 (levelHistogram/1): 1 assumed number
@@ -216,7 +216,12 @@ bundle rests on it, a rule read it, a property is scored against it, or the bund
 checked against it), unused, or withheld (the profile published no value). Each unused
 one is named with the reason no rule reads it, and the Simulation lists them under
 `unused` beside the register: `plan`, `verify` and `ship` count them, and `ship` names
-each one under "What Was Not Proven" in `EVIDENCE.md`.
+each one under "What Was Not Proven" in `EVIDENCE.md`. In `--json`, `ledger.statistics` names
+each statistic on its own, with its state, and `ledger.unused` is the Simulation's list: what an
+owner can leave out of the profile. Where the profile reader needs one of an entry's statistics
+(a calendar entry holds at least one of its three histograms), `ledger.unused` names the whole
+entry when none of it is read, so a profile with exactly those pointers dropped is one the reader
+accepts. Drop that list, not every statistic marked unused.
 
 `--strict` turns the ledger into a gate. It writes nothing, and exits 1, when a statistic
 is unused or an assumption stands in for something the profile
@@ -371,6 +376,18 @@ assumed time window is in the command's output and nowhere else. Here no time co
 publishes its range, because no single instant is held by ten orders, and `created_at`
 is drawn within the run's `timeBounds`.
 
+When some columns do publish a range, the run's `timeBounds` span all of them: the earliest start
+to the latest end of every date column's published range, of the date range its contract column
+declares (a `range` rule such as `between '2020-01-01' and '2026-12-31'` or `>= '2020-01-01' and
+<= '2026-12-31'`), and of the bins, levels and range the column itself is drawn from. No column's
+bins are cut. To choose the window yourself, pass `--window START END`, two dates
+(`YYYY-MM-DD`, midnight UTC) or RFC 3339 timestamps with START before END. The Simulation's
+`timeBounds` are exactly those, a date column's bins that leave them are cut at them (and the
+column says so), and the output notes the window under "time window". The end column of a
+validity window whose contract declares no `openEnd` gives the window nothing from the year
+9999 on, since that year spells an open end; the note names the column and says to declare the
+`openEnd` on it.
+
 The register is the `parameters` list in `simulation.flux.yml`. Each entry names a
 number by a JSON Pointer and gives its source: a pointer into the profile and the
 statistic it lands in, a pointer into the contract, or a reason:
@@ -402,13 +419,13 @@ Most assumptions are the answer to a question a profiler can measure: how many r
 levels, which histogram, how many nulls. Each assumed number of that kind says which statistic
 would replace it, in `replacedBy` on its register entry (a pointer and a definition into a
 profile of the contract), and the ledger lists the statistics with how many numbers each would
-replace. `init` also writes `bundle.assumptions.profile-request.yml` beside the bundle, a
+replace. `init` also writes `requests/assumptions.profile-request.yml` inside the bundle, a
 [profile request](../spec/PROFILE-REQUEST-SPEC.md) for exactly those statistics, which a
 profiler measures where the data lives. Run `init` again with the profile it writes, and each
 number a statistic answers is cited as the profile's. A tolerance, the bounds of a committed
 state and the other settings have no statistic that replaces them, so they name none. The
-request is never written over a file that exists, and when it is taken `init` writes nothing
-(see [PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md) section 1.3).
+request is part of the directory `init` writes, so it is created and removed with it, and the
+loader and `inputDigest` do not read it (see [PARAMETER-REGISTER-SPEC.md](../spec/PARAMETER-REGISTER-SPEC.md) section 1.3).
 
 ## 4a. A profile released under differential privacy
 
@@ -423,6 +440,21 @@ its row count from the larger estimate of the records its noisy statistics give.
 lists each noisy statistic with its mechanism, scale and the variance of each cell, and the
 ledger in `--json` carries the same, so you can see how much noise stands behind a number. A
 register citation of a noisy cell points at the profile's own `noisyCounts`.
+
+A date or timestamp column's noisy histogram is read only where its counts stand clear of the
+noise: above `sqrt(2v(5 + ceil(ln m)))` for Gaussian noise of variance `v` over `m` bins, or
+`b(5 + ceil(ln m))` for Laplace noise of scale `b`
+([ADR 0019](../adr/0019-one-privacy-budget-per-profile-release.md), the second amendment of
+2026-11-25). A bin below that floor carries no weight, so noise in a grid's empty years draws no
+dates there, and the run's window is the hull of the bins above it. When no bin is above it, which
+is common for a release of a few hundred records, the column is drawn evenly within the run's
+window, and the output says so. The column still declares the histogram's whole grid as its range,
+and its histogram property still compares the run with the release.
+
+A number column's noisy histogram is read the same way (the amendment of 2026-11-26): a bin below
+the floor carries no weight, a contract `derive` over the column is bounded by the hull of the bins above it, and
+a column with no bin above it is drawn evenly over its declared range, with its note. A column the
+contract makes a key keeps its bins as they stand, since its rows hold distinct values.
 
 A table whose profile carries noisy cliques (section 5a of the spec) is drawn through a
 junction tree: the cliques are arranged into a tree rooted at the one with the most columns
@@ -565,7 +597,12 @@ needs kernel 0.2.0.
 Nothing is written when:
 
 - the directory holds anything, or cannot be written;
-- `--contract` comes without `--profile`, or the reverse, or `--overlay` comes without both (exit 2);
+- `--contract` comes without `--profile`, or the reverse, or `--overlay` or `--window` comes without both (exit 2);
+- a `--window` value is not a date or an RFC 3339 timestamp in the years 1 to 9999, START is not before END, or END
+  is in the year 9999, which spells an open end rather than an instant (exit 2);
+- a `--history` file's `timeBounds` end, an entry's `until` or a `start` bin is in the year 9999;
+- a date range the contract declares would make the run's window longer than 300 years (write an open end in
+  the year 9999, which no window reads);
 - an overlay file is refused by the reader, two files name one overlay, an overlay names a table the profile does not hold, or an overlay gives a table with a history another `rowCount`;
 - the profile cannot be read ([FLX-3109](../reference/errors/FLX-3109.md)) or is not a
   profile ([FLX-5036](../reference/errors/FLX-5036.md));

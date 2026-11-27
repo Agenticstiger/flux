@@ -70,7 +70,7 @@ body {
   &::after {
     content: "";
     position: absolute;
-    inset: -3rem -8vw 0;
+    inset: -3rem 0 0;
     z-index: -1;
     background-image:
       linear-gradient(var(--ff-grid-line) 1px, transparent 1px),
@@ -248,6 +248,31 @@ body {
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   backdrop-filter: blur(16px) saturate(160%);
   border-bottom: 1px solid var(--ff-glass-border);
+
+  // Between the phone layout (719px) and a laptop, the row does not hold the theme's
+  // 1.5rem between items and a full search field: the search box and the colour
+  // toggle were pushed off the right edge. Here the gaps are narrower and the
+  // search field is an icon that opens over the row when it is focused, as it
+  // does on a phone. Every item stays on screen.
+  @media (min-width: 720px) and (max-width: 959px) {
+    .vp-navbar-item {
+      margin-inline-start: 0.75rem;
+    }
+
+    .search-box input {
+      width: 0;
+      border-color: transparent;
+      cursor: pointer;
+
+      &:focus {
+        position: absolute;
+        inset-inline-end: 0;
+        width: 12rem;
+        border-color: var(--search-c-accent);
+        cursor: text;
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------

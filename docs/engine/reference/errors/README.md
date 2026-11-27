@@ -27,7 +27,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | Code | What it means |
 |---|---|
 | [FLX-2101](./FLX-2101.md) | the bundle's inputDigest has moved since the plan was recorded |
-| [FLX-2102](./FLX-2102.md) | the recorded plan's own planDigest has moved |
+| [FLX-2102](./FLX-2102.md) | the recorded plan's planDigest has moved, it cannot be read, or it holds a marker or a shortfall this engine does not accept |
 | [FLX-2103](./FLX-2103.md) | trace op outside the flux-trace/1 vocabulary |
 | [FLX-2104](./FLX-2104.md) | trace op field set does not match flux-trace/1 |
 | [FLX-2105](./FLX-2105.md) | golden update without a reason and a changelog row |
@@ -88,6 +88,7 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-3122](./FLX-3122.md) | a plan that declares a generator plugin must stage its rows |
 | [FLX-3123](./FLX-3123.md) | a generator plugin's run is committed from its stage, never generated again |
 | [FLX-3124](./FLX-3124.md) | a generator plugin could not be loaded |
+| [FLX-3125](./FLX-3125.md) | a date or timestamp column publishes one value the engine cannot yet write on every row |
 | [FLX-3201](./FLX-3201.md) | row carries a column the expose does not declare |
 | [FLX-3202](./FLX-3202.md) | row is missing a required column |
 | [FLX-3203](./FLX-3203.md) | positional row does not match the declared column count |
@@ -112,6 +113,10 @@ A failure the engine can name carries an `FLX-nnnn` code. The thousands digit sa
 | [FLX-3509](./FLX-3509.md) | a sink target carries user information, a query or a fragment |
 | [FLX-3510](./FLX-3510.md) | an object store target does not name a usable bucket and prefix |
 | [FLX-3511](./FLX-3511.md) | a catalogue configuration file sits in the current directory |
+| [FLX-3512](./FLX-3512.md) | a Kafka target's audience needs a stronger privacy grade than the run has |
+| [FLX-3513](./FLX-3513.md) | a stream's declarations do not say how to write it to Kafka |
+| [FLX-3514](./FLX-3514.md) | a Kafka topic will not take the stream as it is |
+| [FLX-3515](./FLX-3515.md) | a registry subject cannot carry the stream |
 | [FLX-3601](./FLX-3601.md) | the consumers block is not a mapping of the keys it carries |
 | [FLX-3602](./FLX-3602.md) | a consumers dialect is not one the engine reads |
 | [FLX-3603](./FLX-3603.md) | a consumers asOf is not a date |

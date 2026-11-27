@@ -19,6 +19,20 @@ const SITE_DESCRIPTION =
   'The open, declarative standard for governed synthetic customer universes, and the discovery-side sibling of FLUID.'
 const HOME_TITLE = 'FLUX: Governed Synthetic Universes, Declared'
 
+const CONCEPTS_SIDEBAR = [
+  {
+    text: 'Concepts',
+    children: [
+      '/concepts/README.md',
+      '/concepts/families.md',
+      '/concepts/seam.md',
+      '/concepts/determinism-governance.md',
+      '/concepts/runtime.md',
+      '/reconciliation.md',
+    ],
+  },
+]
+
 // Wraps every Markdown table in a focusable, labelled scroll region, so a table
 // wider than the column can be scrolled from the keyboard. The label is the text
 // of the nearest heading above the table, or "Table" when there is none.
@@ -99,6 +113,12 @@ export default defineUserConfig({
     if (page.path.startsWith('/engine/')) {
       page.frontmatter.editLink = false
     }
+    // The 404 page has no title of its own and is not a page to index.
+    if (page.path === '/404.html') {
+      page.title = 'Page not found'
+      page.data.title = 'Page not found'
+      page.frontmatter.head = [['meta', { name: 'robots', content: 'noindex' }]]
+    }
   },
 
   theme: defaultTheme({
@@ -152,17 +172,22 @@ export default defineUserConfig({
         ],
       },
       {
-        text: 'Roadmap',
+        text: 'More',
         children: [
-          { text: 'The vNext Plan', link: '/roadmap/' },
-          { text: 'The Nine RFCs', link: '/roadmap/rfcs' },
-          { text: 'Playback Source (proposed)', link: '/roadmap/rfc-10-playback-source' },
-          { text: 'Conformance Profiles', link: '/roadmap/profiles' },
+          {
+            text: 'Roadmap',
+            children: [
+              { text: 'The vNext Plan', link: '/roadmap/' },
+              { text: 'The Nine RFCs', link: '/roadmap/rfcs' },
+              { text: 'Playback Source (proposed)', link: '/roadmap/rfc-10-playback-source' },
+              { text: 'Conformance Profiles', link: '/roadmap/profiles' },
+            ],
+          },
+          { text: 'Examples', link: '/examples/' },
+          { text: "What's New", link: '/releases/' },
+          { text: 'FLUID', link: 'https://open-data-protocol.github.io/fluid/' },
         ],
       },
-      { text: 'Examples', link: '/examples/' },
-      { text: "What's New", link: '/releases/' },
-      { text: 'FLUID', link: 'https://open-data-protocol.github.io/fluid/' },
     ],
 
     sidebar: {
@@ -172,18 +197,10 @@ export default defineUserConfig({
           children: ['/guide/README.md', '/guide/quickstart.md', '/guide/from-your-data.md'],
         },
       ],
-      '/concepts/': [
-        {
-          text: 'Concepts',
-          children: [
-            '/concepts/README.md',
-            '/concepts/families.md',
-            '/concepts/seam.md',
-            '/concepts/determinism-governance.md',
-            '/concepts/runtime.md',
-          ],
-        },
-      ],
+      '/concepts/': CONCEPTS_SIDEBAR,
+      // The paper-to-schema ledger sits at the top level, so it needs its own key to
+      // get the sidebar of the group it belongs to.
+      '/reconciliation': CONCEPTS_SIDEBAR,
       '/schema/': [
         {
           text: 'Schema Reference',
@@ -231,6 +248,7 @@ export default defineUserConfig({
             '/engine/how-to/project-a-history.md',
             '/engine/how-to/keep-dates-inside-their-parents-lifetime.md',
             '/engine/how-to/load-a-simulation-into-a-database.md',
+            '/engine/how-to/stream-a-simulation-into-kafka.md',
           ],
         },
         {
@@ -298,6 +316,7 @@ export default defineUserConfig({
             '/engine/explanation/the-seam.md',
             '/engine/explanation/the-evidence-pack.md',
             '/engine/explanation/offline.md',
+            '/engine/explanation/compared.md',
           ],
         },
         {
@@ -354,6 +373,9 @@ export default defineUserConfig({
     // Hostname is the origin only: the plugins add the base themselves.
     sitemapPlugin({
       hostname: ORIGIN,
+      // The pages change when they are edited, not on a schedule, so no change
+      // frequency is claimed; lastmod is each page's own last commit.
+      changefreq: '' as never,
     }),
     seoPlugin({
       hostname: ORIGIN,

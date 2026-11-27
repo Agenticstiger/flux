@@ -200,9 +200,8 @@ created bundle from billing.fluid.yaml and billing.profile.json (4 files):
 ...
 profile: 40 statistics -- 37 used, 3 unused, 0 withheld
 unused (no number rests on these; the register lists them):
-  - /tables/customer/calendar/0/dayOfWeek (levelHistogram/1): rates shape only a date a within entry or a duration sets, and none of the bundle's does for this column
-  - /tables/customer/datePairs/1/statistics/0 (marginalHistogram/1): its order holds on 55% of the rows where both dates are known, below the bar of 90%
-  - /tables/customer/datePairs/1/order (levelHistogram/1): its order holds on 55% of the rows where both dates are known, below the bar of 90%
+  - /tables/customer/calendar/0: rates shape only a date a within entry or a duration sets, and none of the bundle's does for this column
+  - /tables/customer/datePairs/1: its order holds on 55% of the rows where both dates are known, below the bar of 90%
 ...
 next:
   fluxsim run bundle --profile billing.profile.json
@@ -292,7 +291,7 @@ The first entry is a period: `lifetime: true` says the account's own lifetime, i
 
 The `target` is the percent of rows that may break the fact, and `init` takes it from the pair's `order`: 50 of the 2400 invoices are dated before their account opened, so 2.083% of the rows break the fact. An invoice on the same day as its account's start does not break it. The share of dates after the parent's end is added when the lifetime has an end. An entry with no `target`, as the account's, is enforced: one row that breaks it fails the run. An entry with a target is checked against it.
 
-When an entry is enforced, `init` also checks what `plan` checks, that no row can be left with an empty interval to draw its date in. If the child column's declared range starts after the earliest end its parent can have, `init` widens the range to the parent's lifetime, clipped to the run's time bounds, so that the bundle plans and the entry stays enforced. A later section shows it.
+When an entry is enforced, `init` also checks what `plan` checks, that no row can be left with an empty interval to draw its date in. If the child column's declared range starts after the earliest end its parent can have, `init` widens the range to the parent's lifetime, clipped to the run's time bounds, so that the bundle plans and the entry stays enforced. It never widens past a range the contract declares: it writes no entry for such a date instead. A later section shows both.
 
 Entries chain. The invoice is inside its account's lifetime, and the account is inside its customer's, so the invoice is inside the customer's lifetime too. `verify` scores that outer level on its own line.
 
@@ -378,6 +377,28 @@ for edit in edits:
         holder.append(json.loads(value))
     else:
         holder[last] = json.loads(value)
+
+
+def reaches(node, tokens):
+    for token in tokens:
+        token = token.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, list) and token.isdigit() and int(token) < len(node):
+            node = node[int(token)]
+        elif isinstance(node, dict) and token in node:
+            node = node[token]
+        else:
+            return False
+    return True
+
+
+# A register entry names its number by position, so an entry whose number the edits removed goes too.
+prefix = "/extensions/"
+block["parameters"] = [
+    entry
+    for entry in block["parameters"]
+    if not entry["pointer"].startswith(prefix)
+    or reaches(document, entry["pointer"][1:].split("/"))
+]
 with open(path, "w", encoding="utf-8") as handle:
     yaml.safe_dump(document, handle, sort_keys=False)
 """
@@ -434,6 +455,8 @@ plan written to ...
 ```
 
 The profile says the opening date starts on 1 March, and the bundle declares 1 January, the earliest day a parent can start: just enough range to meet the plan's check. The entry stays enforced, as the clean profile says.
+
+A range the contract declares is never widened, since a row outside it breaks the contract. Had the contract declared the opening date's range from 1 March, `init` would write no entry for the opening date: it is drawn inside its range from its own statistics, and the relationship's statistic is listed as unused, with the range the plan's check asked for.
 
 ## Change a fact
 
