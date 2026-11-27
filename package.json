@@ -11,7 +11,8 @@
     "sync:assets": "node scripts/sync-public-assets.mjs",
     "docs:dev": "npm run sync:assets && vuepress dev docs",
     "docs:build": "npm run sync:assets && vuepress build docs",
-    "docs:preview": "vuepress preview docs"
+    "docs:preview": "vuepress preview docs",
+    "postinstall": "patch-package"
   },
   "keywords": [
     "flux",
@@ -37,6 +38,7 @@
     "@vuepress/plugin-sitemap": "2.0.0-rc.137",
     "@vuepress/theme-default": "2.0.0-rc.137",
     "mermaid": "^12.3.0",
+    "patch-package": "8.0.1",
     "sass-embedded": "^1.99.0",
     "vuepress": "2.0.0-rc.31"
   },
