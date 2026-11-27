@@ -166,17 +166,22 @@ export default defineUserConfig({
         ],
       },
       {
-        text: 'Roadmap',
+        text: 'More',
         children: [
-          { text: 'The vNext Plan', link: '/roadmap/' },
-          { text: 'The Nine RFCs', link: '/roadmap/rfcs' },
-          { text: 'Playback Source (proposed)', link: '/roadmap/rfc-10-playback-source' },
-          { text: 'Conformance Profiles', link: '/roadmap/profiles' },
+          {
+            text: 'Roadmap',
+            children: [
+              { text: 'The vNext Plan', link: '/roadmap/' },
+              { text: 'The Nine RFCs', link: '/roadmap/rfcs' },
+              { text: 'Playback Source (proposed)', link: '/roadmap/rfc-10-playback-source' },
+              { text: 'Conformance Profiles', link: '/roadmap/profiles' },
+            ],
+          },
+          { text: 'Examples', link: '/examples/' },
+          { text: "What's New", link: '/releases/' },
+          { text: 'FLUID', link: 'https://open-data-protocol.github.io/fluid/' },
         ],
       },
-      { text: 'Examples', link: '/examples/' },
-      { text: "What's New", link: '/releases/' },
-      { text: 'FLUID', link: 'https://open-data-protocol.github.io/fluid/' },
     ],
 
     sidebar: {
