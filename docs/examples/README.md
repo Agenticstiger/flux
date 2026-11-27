@@ -1,5 +1,5 @@
 ---
-description: "Two CI-validated example bundles, a telco payment-recovery universe covering all nineteen kinds and a tower tenant renewal scenario, with the command to validate them."
+description: "Two CI-validated example bundles, a telco payment-recovery universe and a tower tenant renewal scenario, with the command to validate them."
 ---
 
 # FLUX by Example

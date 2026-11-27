@@ -70,7 +70,7 @@ body {
   &::after {
     content: "";
     position: absolute;
-    inset: -3rem -8vw 0;
+    inset: -3rem 0 0;
     z-index: -1;
     background-image:
       linear-gradient(var(--ff-grid-line) 1px, transparent 1px),

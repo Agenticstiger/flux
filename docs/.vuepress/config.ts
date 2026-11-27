@@ -113,6 +113,12 @@ export default defineUserConfig({
     if (page.path.startsWith('/engine/')) {
       page.frontmatter.editLink = false
     }
+    // The 404 page has no title of its own and is not a page to index.
+    if (page.path === '/404.html') {
+      page.title = 'Page not found'
+      page.data.title = 'Page not found'
+      page.frontmatter.head = [['meta', { name: 'robots', content: 'noindex' }]]
+    }
   },
 
   theme: defaultTheme({
@@ -367,6 +373,9 @@ export default defineUserConfig({
     // Hostname is the origin only: the plugins add the base themselves.
     sitemapPlugin({
       hostname: ORIGIN,
+      // The pages change when they are edited, not on a schedule, so no change
+      // frequency is claimed; lastmod is each page's own last commit.
+      changefreq: '' as never,
     }),
     seoPlugin({
       hostname: ORIGIN,
