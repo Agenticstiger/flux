@@ -456,8 +456,9 @@ fixed by [SCORECARD-SPEC.md](./SCORECARD-SPEC.md) section 3a. In outline:
   profile's (ADR 0020, rule 2).
 
 The pinned profile must not name a held-out query (`FLX-3701`), and the held-out profile must not name a
-calibration query, nor be given when the bundle declares no held-out query (`FLX-3702`). Either is refused
-before anything runs, naming the query. Without the `sql` extra the dimension is `not measured`, with the
+calibration query, nor be given to `verify` or `ship` when the bundle declares no held-out query (`FLX-3702`).
+Either is refused before anything runs, naming the query. `calibrate --fit` on a bundle that declares no
+held-out query runs without `--held-out` and does not read one (section 8). Without the `sql` extra the dimension is `not measured`, with the
 command that installs it, and a threshold declared on it then fails as any unmet threshold does. `ship`
 counts the queries with the same functions and flags. A `ship` that reads a held-out profile (`--held-out`)
 grades it as it grades the pinned one, states the weakest grade of every profile it read in the "Privacy
@@ -468,7 +469,9 @@ minimum grade to that weakest grade: a ship whose held-out profile is below a co
 ## 8. The calibration patch
 
 `fluxsim calibrate --fit BUNDLE --profile PROFILE --held-out FILE --out DIR` fits the numbers the
-`calibration` block names to the rates of the calibration queries. It needs the `calibrate` extra, which adds
+`calibration` block names to the rates of the calibration queries. On a bundle that declares no held-out
+query, `--held-out` is not needed and the file is not read: the fit runs, and its output says that no held-out
+check was made. It needs the `calibrate` extra, which adds
 `cma==4.6.0` to the `sql` extra (`FLX-3708`).
 
 **The block.** `calibration` holds at most 64 `parameters`, and `evaluations`, `scale`, `heldOutTolerance` and
@@ -496,7 +499,14 @@ into 1 to 2,147,483,647, since cma reads 0 as "from the clock"), for at most `ev
 evaluation writes the candidate values, each rounded to its `step`, into a copy of the bundle's files, plans
 and applies it at `scale` under the state directory, loads the run's tables into the one query process,
 counts the calibration queries, and removes the copy and its run. The objective is the sum of the squared
-gaps between each calibration query's rate and its target in the pinned profile, an exact fraction. The best
+gaps between each calibration query's rate and its target in the pinned profile, an exact fraction. A target
+a private release states with noise (profile format 1-5-0) is its point estimate. A query whose rate stands
+inside the noise has no target and is left out, with a note: its unit's records, the sum of its two cells, are
+at most twice `noise_floor` over every cell of its statistic, zero and below included, since a sum that noise
+alone made passes that only when one of its cells passes the floor. A profile whose rates all stand inside it
+gives `FLX-3707` naming them. Each noisy query's squared gaps weigh the inverse of its rate's variance (the
+delta method's `v (f^2 + t^2) / n^4`, the mean over its groups for a grouped one), scaled so the least noisy
+weighs 1, as an exact rate does. The best
 evaluation wins, and of equals the earlier one. A run that was refused stops the fit (`FLX-7101`). The fit
 needs a bundle with consumers, at least one parameter, and a pinned profile that states the rate of at least
 one calibration query (`FLX-3707`); a bundle compiled under another sqlglot version than the one installed
