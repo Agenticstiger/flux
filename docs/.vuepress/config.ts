@@ -236,6 +236,7 @@ export default defineUserConfig({
             '/engine/how-to/draw-number-columns-together.md',
             '/engine/how-to/ship-with-evidence.md',
             '/engine/how-to/write-a-bundle-from-a-profile.md',
+            '/engine/how-to/write-a-bundle-from-a-private-release.md',
             '/engine/how-to/score-a-run-against-a-profile.md',
             '/engine/how-to/seal-and-score-a-prediction.md',
             '/engine/how-to/forecast-the-next-state.md',
@@ -284,6 +285,8 @@ export default defineUserConfig({
             '/engine/reference/errors/README.md',
             '/engine/reference/python-api.md',
             '/engine/reference/schemas.md',
+            '/engine/reference/plan-and-run-directory.md',
+            '/engine/reference/how-init-reads-a-profile.md',
             {
               text: 'Specifications',
               link: '/engine/spec/',
